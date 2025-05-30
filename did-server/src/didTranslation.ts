@@ -92,7 +92,7 @@ export interface DIDDocument {
     >;
     keyAgreement: Array<
       | string
-      | VerificationMethodPublicKey58
+      | Ve  
       | VerificationMethodGpg
       | VerificationMethodJwk
     >;

@@ -1,5 +1,5 @@
-import { PrivateKey, KeyDeriver, WalletClient } from '@bsv/sdk'
-import { WalletStorageManager, Wallet, StorageClient, Services } from '@bsv/wallet-toolbox-client'
+import { PrivateKey, KeyDeriver, WalletClient } from '../../../../ts-sdk'
+import { WalletStorageManager, Wallet, StorageClient, Services } from '../../../../wallet-toolbox/src/index.client'
 
 const medicalKey = import.meta.env.VITE_MEDICAL_LICENSE_CERTIFIER!
 const doctorKey = import.meta.env.VITE_DOCTOR_KEY!

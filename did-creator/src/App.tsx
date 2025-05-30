@@ -27,14 +27,12 @@ function App() {
           licenseNumber: 'some license number',
         }
       })
+      // create an identity token within the identity-services overlay
+      console.log('Certificate acquired:', certificate)
+      setMedicalCertificate(certificate)
     } catch (error) {
       console.error('failed to acquire certificate', error)
     }
-    // create an identity token within the identity-services overlay
-    console.log('Certificate acquired:', certificate)
-    setMedicalCertificate(certificate)
-    
-
   }
 
   return (
