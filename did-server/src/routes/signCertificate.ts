@@ -3,22 +3,42 @@ import { Certificate, createNonce, MasterCertificate, Utils, verifyNonce, Wallet
 
 
 export interface CertifierServerOptions {
-    port: number
-    wallet: WalletInterface
-    monetize: boolean
-    calculateRequestPrice?: (req: Request) => number | Promise<number>
+  port: number
+  wallet: WalletInterface
+  monetize: boolean
+  calculateRequestPrice?: (req: Request) => number | Promise<number>
+}
+
+export interface CertifierRoute {
+  type: 'post' | 'get'
+  path: string
+  summary: string
+  parameters?: object
+  exampleBody?: object
+  exampleResponse: object
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  func: (req: Request, res: Response, server: any) => Promise<any>
+}
+
+/**
+ * Helper function which checks the arguments for the certificate signing request
+ * @param {object} args
+ * @throws {Error} if any of the required arguments are missing
+ */
+function certifierSignCheckArgs(args: { clientNonce: string, type: string, fields: Record<string, string>, masterKeyring: Record<string, string> }): void {
+  if (!args.clientNonce) {
+    throw new Error('Missing client nonce!')
   }
-  
-  export interface CertifierRoute {
-    type: 'post' | 'get'
-    path: string
-    summary: string
-    parameters?: object
-    exampleBody?: object
-    exampleResponse: object
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    func: (req: Request, res: Response, server: any) => Promise<any>
+  if (!args.type) {
+    throw new Error('Missing certificate type!')
   }
+  if (!args.fields) {
+    throw new Error('Missing certificate fields to sign!')
+  }
+  if (!args.masterKeyring) {
+    throw new Error('Missing masterKeyring to decrypt fields!')
+  }
+}
 
 /*
  * This route handles signCertificate for the acquireCertificate protocol.
@@ -60,9 +80,10 @@ export const signCertificate: CertifierRoute = {
   func: async (req, res, server) => {
     try {
       const { clientNonce, type, fields, masterKeyring } = req.body
+      console.log({ clientNonce })
       // Validate params
       try {
-        server.certifierSignCheckArgs(req.body)
+        certifierSignCheckArgs(req.body)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Invalid parameters'
         return res.status(400).json({
@@ -72,12 +93,12 @@ export const signCertificate: CertifierRoute = {
       }
 
       // Verify the client actually created the provided nonce
-      await verifyNonce(clientNonce, server.wallet, (req as any).auth.identityKey)
+      await verifyNonce(clientNonce, req.wallet, (req as any).auth.identityKey)
 
       // Server creates a random nonce that the client can verify
-      const serverNonce = await createNonce(server.wallet, (req as any).auth.identityKey)
+      const serverNonce = await createNonce(req.wallet, (req as any).auth.identityKey)
       // The server computes a serial number from the client and server nonces
-      const { hmac } = await server.wallet.createHmac({
+      const { hmac } = await req.wallet.createHmac({
         data: Utils.toArray(clientNonce + serverNonce, 'base64'),
         protocolID: [2, 'certificate issuance'],
         keyID: serverNonce + clientNonce,
@@ -87,33 +108,27 @@ export const signCertificate: CertifierRoute = {
 
       // Decrypt certificate fields and verify them before signing
       const decryptedFields = await MasterCertificate.decryptFields(
-        server.wallet,
+        req.wallet,
         masterKeyring,
         fields,
         (req as any).auth.identityKey
       )
 
-      // Refactored check: Ensure that the "cool" field is present and equals "true"
-      if (!decryptedFields.cool || decryptedFields.cool !== 'true') {
-        return res.status(400).json({
-          status: 'error',
-          description: 'Sorry, you are not cool enough!'
-        })
-      }
-
       // Create a revocation outpoint (logic omitted for simplicity)
-      const revocationTxid = 'not supported'
+      const revocationTxid = '0000000000000000000000000000000000000000000000000000000000000000'
 
       const signedCertificate = new Certificate(
         type,
         serialNumber,
         (req as any).auth.identityKey,
-        ((await server.wallet.getPublicKey({ identityKey: true })).publicKey),
+        ((await req.wallet.getPublicKey({ identityKey: true })).publicKey),
         `${revocationTxid}.0`,
         fields
       )
 
-      await signedCertificate.sign(server.wallet)
+      await signedCertificate.sign(req.wallet)
+
+      console.log({signedCertificate})
 
       // Returns signed cert to the requester
       return res.status(200).json({

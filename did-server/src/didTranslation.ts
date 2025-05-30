@@ -70,6 +70,47 @@ export interface DidDocument {
   service?: ServiceEndpoint[];
 }
 
+export interface DIDDocument {
+    "@context": string | string[] | undefined | null;
+    id: string;
+    verificationMethod: Array<
+      | VerificationMethodPublicKey58
+      | VerificationMethodGpg
+      | VerificationMethodJwk
+    >;
+    authentication: Array<
+      | string
+      | VerificationMethodPublicKey58
+      | VerificationMethodGpg
+      | VerificationMethodJwk
+    >;
+    assertionMethod: Array<
+      | string
+      | VerificationMethodPublicKey58
+      | VerificationMethodGpg
+      | VerificationMethodJwk
+    >;
+    keyAgreement: Array<
+      | string
+      | VerificationMethodPublicKey58
+      | VerificationMethodGpg
+      | VerificationMethodJwk
+    >;
+    capabilityDelegation: Array<
+      | string
+      | VerificationMethodPublicKey58
+      | VerificationMethodGpg
+      | VerificationMethodJwk
+    >;
+    capabilityInvocation: Array<
+      | string
+      | VerificationMethodPublicKey58
+      | VerificationMethodGpg
+      | VerificationMethodJwk
+    >;
+    service?: Array<Service>;
+  }
+
 /**
  * Represents a W3C Service Endpoint in a DID Document.
  * @see https://www.w3.org/TR/did-core/#services
@@ -90,7 +131,7 @@ export function transform(record: IdentityRecord) {
     const did = `did:key:${publicKeyMultibase}`
     const verificationMethodId = `${did}#${publicKeyMultibase}` // For Multikey, fragment is the multibase key itself
 
-    const document: DidDocument = {
+    const document: DIDDocument = {
         '@context': [
           'https://www.w3.org/ns/did/v1',
           'https://w3id.org/security/multikey/v1' // Context for Multikey

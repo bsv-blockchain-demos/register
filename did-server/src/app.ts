@@ -1,10 +1,15 @@
 import express from "express";
+import bodyParser from 'body-parser'
 import { MongoClient } from "mongodb";
 import { transform, IdentityRecord } from "./didTranslation";
 import { createAuthMiddleware } from '@bsv/auth-express-middleware'
 import { WalletClient, PrivateKey, KeyDeriver } from '@bsv/sdk'
 import { WalletStorageManager, Services, Wallet, StorageClient } from '@bsv/wallet-toolbox-client'
-import { signCertificate } from "./routes/signCertificate";
+import { signCertificate } from "./routes/signCertificate"
+import { config } from 'dotenv'
+import cors from 'cors'
+config()
+
 
 const medicalKey = process.env.MEDICAL_LICENSE_CERTIFIER!
 
@@ -30,14 +35,20 @@ export const createWalletClient = async (key: string): Promise<WalletClient> => 
 
 async function startServer() {
     const app = express();
+    app.use(bodyParser.json())
     
     const wallet = await createWalletClient(medicalKey)
-    app.use(createAuthMiddleware({ wallet }))
+    const auth = createAuthMiddleware({ wallet })
     
     const client = new MongoClient("mongodb://localhost:27017");
     client.connect();
+
+    app.use(cors({ origin: '*', methods: '*' }))
+
+
     app.use((req, res, next) => {
         req.db = client.db("LARS_lookup_services");
+        req.wallet = wallet
         next();
     })
 
@@ -50,7 +61,11 @@ async function startServer() {
         res.json(did);
     });
 
-    app.post("/signCertificate", signCertificate.func)
+    app.use(auth).post("/signCertificate", signCertificate.func)
+    app.use(auth).post("/.well-known/auth", (req, res, next) => {
+        console.log({req, res, next})
+        next()
+    })
 
     app.listen(3000, () => {
         console.log("Server started on port 3000");
