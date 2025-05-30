@@ -97,7 +97,7 @@ export function transform(record: IdentityRecord) {
     const document: DIDDocument = {
         '@context': [
           'https://www.w3.org/ns/did/v1',
-          'https://w3id.org/security/multikey/v1' // Context for Multikey
+          'https://w3id.org/security#secp256k1'
         ],
         id: did,
         verificationMethod: [
