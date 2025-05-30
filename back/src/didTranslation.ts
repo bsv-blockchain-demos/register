@@ -1,5 +1,6 @@
 import { Utils, PublicKey, Base64String, PubKeyHex } from '@bsv/sdk'
 import { ObjectId } from 'mongodb';
+import { VerificationMethodTypes, type DIDDocument } from '@quarkid/did-core'
 
 export interface UTXOReference {
   txid: string
@@ -70,47 +71,6 @@ export interface DidDocument {
   service?: ServiceEndpoint[];
 }
 
-export interface DIDDocument {
-    "@context": string | string[] | undefined | null;
-    id: string;
-    verificationMethod: Array<
-      | VerificationMethodPublicKey58
-      | VerificationMethodGpg
-      | VerificationMethodJwk
-    >;
-    authentication: Array<
-      | string
-      | VerificationMethodPublicKey58
-      | VerificationMethodGpg
-      | VerificationMethodJwk
-    >;
-    assertionMethod: Array<
-      | string
-      | VerificationMethodPublicKey58
-      | VerificationMethodGpg
-      | VerificationMethodJwk
-    >;
-    keyAgreement: Array<
-      | string
-      | Ve  
-      | VerificationMethodGpg
-      | VerificationMethodJwk
-    >;
-    capabilityDelegation: Array<
-      | string
-      | VerificationMethodPublicKey58
-      | VerificationMethodGpg
-      | VerificationMethodJwk
-    >;
-    capabilityInvocation: Array<
-      | string
-      | VerificationMethodPublicKey58
-      | VerificationMethodGpg
-      | VerificationMethodJwk
-    >;
-    service?: Array<Service>;
-  }
-
 /**
  * Represents a W3C Service Endpoint in a DID Document.
  * @see https://www.w3.org/TR/did-core/#services
@@ -126,10 +86,13 @@ export interface ServiceEndpoint {
 export function transform(record: IdentityRecord) {
     const subjectKey = PublicKey.fromString(record.certificate.subject);
     // Ensure the public key is compressed (did:key typically uses compressed keys)
-    const compressedPublicKeyBytes = subjectKey.encode(true) as number[]
-    const publicKeyMultibase = `z${Utils.toBase58([35, 231, 1, ...compressedPublicKeyBytes])}`
-    const did = `did:key:${publicKeyMultibase}`
-    const verificationMethodId = `${did}#${publicKeyMultibase}` // For Multikey, fragment is the multibase key itself
+    const x = Utils.toBase64(subjectKey.getX().toArray())
+    const y = Utils.toBase64(subjectKey.getY().toArray())
+
+    const xUrlEncoded = encodeURIComponent(x)
+    const yUrlEncoded = encodeURIComponent(y)
+
+    const did = `did:key:${subjectKey.toString()}`
 
     const document: DIDDocument = {
         '@context': [
@@ -139,19 +102,25 @@ export function transform(record: IdentityRecord) {
         id: did,
         verificationMethod: [
           {
-            id: verificationMethodId,
-            type: 'Multikey', // Use Multikey type
+            id: `${did}#key-1`,
+            type: VerificationMethodTypes.EcdsaSecp256k1VerificationKey2019,
             controller: did,
-            publicKeyMultibase: publicKeyMultibase
+            publicKeyJwk: {
+              crv: 'secp256k1',
+              kty: 'EC',
+              x: xUrlEncoded,
+              y: yUrlEncoded
+            }
           },
         ],
-        authentication: [verificationMethodId],
-        assertionMethod: [verificationMethodId],
-        capabilityInvocation: [verificationMethodId],
-        capabilityDelegation: [verificationMethodId],
+        authentication: [`${did}#key-1`],
+        assertionMethod: [`${did}#key-1`],
+        capabilityInvocation: [`${did}#key-1`],
+        capabilityDelegation: [`${did}#key-1`],
+        keyAgreement: [`${did}#key-1`],
         service: [{
-          id: `${did}#cool`,
-          type: 'Multikey',
+          id: `${did}`,
+          type: VerificationMethodTypes.EcdsaSecp256k1VerificationKey2019,
           serviceEndpoint: "http://localhost:3000/v1/"
         }]
       };
