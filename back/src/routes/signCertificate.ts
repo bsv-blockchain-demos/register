@@ -114,6 +114,8 @@ export const signCertificate: CertifierRoute = {
         (req as any).auth.identityKey
       )
 
+      console.log({ decryptedFields })
+
       // Create a revocation outpoint (logic omitted for simplicity)
       const revocationTxid = '0000000000000000000000000000000000000000000000000000000000000000'
 
@@ -127,9 +129,7 @@ export const signCertificate: CertifierRoute = {
       )
 
       await signedCertificate.sign(req.wallet)
-
-      console.log({signedCertificate})
-
+      
       // Returns signed cert to the requester
       return res.status(200).json({
         certificate: signedCertificate,
