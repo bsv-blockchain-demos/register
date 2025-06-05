@@ -5,10 +5,18 @@ import { transform, IdentityRecord } from "./didTranslation";
 import { createAuthMiddleware } from '@bsv/auth-express-middleware'
 import { WalletClient, PrivateKey, KeyDeriver } from '@bsv/sdk'
 import { WalletStorageManager, Services, Wallet, StorageClient } from '@bsv/wallet-toolbox-client'
-import { signCertificate } from "./routes/signCertificate"
+import { signCertificate } from "./routes/signCertificate";
+import { createDidRoutes } from "./routes/didRoutes";
+import { BsvDidService } from "./services/bsvDidService";
 import { config } from 'dotenv'
 import cors from 'cors'
-config()
+config();
+
+// Environment variables for BsvDidService
+const DID_TOPIC = process.env.DID_TOPIC;
+const OVERLAY_PROVIDER_URL = process.env.OVERLAY_PROVIDER_URL;
+const DEFAULT_FUNDING_PUBLIC_KEY_HEX = process.env.DEFAULT_FUNDING_PUBLIC_KEY_HEX; // Optional
+const FEE_PER_KB = process.env.FEE_PER_KB ? parseInt(process.env.FEE_PER_KB, 10) : undefined; // Optional
 
 
 const medicalKey = process.env.MEDICAL_LICENSE_CERTIFIER!
@@ -37,7 +45,7 @@ async function startServer() {
     const app = express();
     app.use(bodyParser.json())
     
-    const wallet = await createWalletClient(medicalKey)
+    const wallet: Wallet = await createWalletClient(medicalKey) // Explicitly type wallet
     const auth = createAuthMiddleware({ wallet })
     
     const client = new MongoClient("mongodb://localhost:27017");
@@ -74,6 +82,23 @@ async function startServer() {
     });
 
     app.use(auth).post("/signCertificate", signCertificate.func)
+    // Instantiate BsvDidService
+    if (!DID_TOPIC || !OVERLAY_PROVIDER_URL) {
+      console.error('Missing DID_TOPIC or OVERLAY_PROVIDER_URL in environment variables. BSV DID routes will not be available.');
+    } else {
+      const bsvDidService = new BsvDidService({
+        walletClient: wallet, // The existing WalletClient from createWalletClient
+        topic: DID_TOPIC,
+        overlayProviderUrl: OVERLAY_PROVIDER_URL,
+        feePerKb: FEE_PER_KB,
+        defaultFundingPublicKeyHex: DEFAULT_FUNDING_PUBLIC_KEY_HEX,
+      });
+
+      // Register DID routes
+      const didRouter = createDidRoutes(bsvDidService);
+      app.use('/v1/dids', auth, didRouter); // Prefixing with /v1 for consistency, and applying auth
+    }
+
     app.use(auth).post("/.well-known/auth", (req, res, next) => {
         console.log({req, res, next})
         next()
