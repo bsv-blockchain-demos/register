@@ -1,88 +1,98 @@
 // src/services/walletService.ts
-// src/services/walletService.ts
-import { CWIStyleWalletManager } from '@bsv/wallet-toolbox-client';
-import { P2PKH, PublicKey } from '@bsv/sdk';
-import { hash160 } from '@bsv/sdk/primitives/Hash';
-
-const MIN_SATOSHIS = 1; // Minimum satoshis for the state UTXO
+import {
+  PushDrop,
+  WalletClient,
+  type CreateActionArgs,
+  type CreateActionResult,
+  type SignActionArgs,
+  type SignActionResult,
+} from '@bsv/sdk';
+import { Buffer } from 'buffer'; // Corrected import path
 
 class WalletService {
-  private client: CWIStyleWalletManager;
-  private initializationPromise: Promise<void>;
+  private walletClient: WalletClient;
 
-  constructor() {
-    this.client = new CWIStyleWalletManager();
-    console.log('CWIStyleWalletManager attempting to initialize and authenticate...');
-    this.initializationPromise = this._initializeClient();
+  constructor(walletClient: WalletClient) {
+    this.walletClient = walletClient;
+    console.log('WalletService initialized with WalletClient.');
   }
 
-  private async _initializeClient(): Promise<void> {
-    try {
-      // The empty object {} is passed as per the type definition for waitForAuthentication's first argument.
-      const authResult = await this.client.waitForAuthentication({}, "quarkid-frontend");
-      console.log('CWIStyleWalletManager authentication successful:', authResult);
-      // Potentially check authResult.authenticated if needed, though waitForAuthentication should throw on failure.
-    } catch (error) {
-      console.error('CWIStyleWalletManager authentication failed:', error);
-      // Rethrow or handle as appropriate for the application's error strategy
-      throw new Error('Wallet client authentication failed.');
-    }
-  }
-
-  // ... (rest of the class remains the same for now)
   async getP2PKHControllerPublicKey(): Promise<string> {
-    await this.initializationPromise;
     try {
-      const { publicKey } = await this.client.getPublicKey({ protocolID: [1, 'P2PKH'] /* SecurityLevel.ONE is 1 */ });
-      if (!publicKey) {
-        throw new Error('No public key received from Wallet Toolbox.');
-      }
-      return publicKey;
-    } catch (error) {
-      console.error('Error getting public key from Wallet Toolbox:', error);
-      throw new Error('Failed to get public key. Is Wallet Toolbox running and configured?');
-    }
-  }
-
-  async createAndSignDidCreationTransaction(controllerPublicKeyHex: string): Promise<string> {
-    await this.initializationPromise;
-    try {
-      const controllerPubKey = PublicKey.fromString(controllerPublicKeyHex);
-      const pubKeyBytes = controllerPubKey.encode(true); // Get compressed pubkey bytes
-      const pubKeyHash = hash160(pubKeyBytes); // Hash the pubkey bytes
-
-      const p2pkhTemplate = new P2PKH(); // Instantiate P2PKH template
-      const p2pkhLockingScript = p2pkhTemplate.lock(pubKeyHash); // Create locking script
-      const p2pkhScriptHex = p2pkhLockingScript.toHex(); // Get hex of locking script
-      
-      const createResult = await this.client.createAction({
-        description: 'Create DID registration transaction',
-        outputs: [{
-          script: p2pkhScriptHex, 
-          amount: MIN_SATOSHIS // Changed from satoshis to amount
-        }]
+      // Get the identity public key (root key from KeyDeriver).
+      const pubKeyResult = await this.walletClient.getPublicKey({
+        identityKey: true 
       });
 
-      if (!createResult || !createResult.action) {
-        console.error('Failed to create action:', createResult);
-        throw new Error('Transaction creation failed: Could not create action.');
+      if (!pubKeyResult || !pubKeyResult.publicKey) {
+        console.error('Failed to get public key from WalletClient:', pubKeyResult);
+        throw new Error('Could not get public key from WalletClient.');
       }
-
-      // console.log('Action created:', createResult);
-      // console.log('Unsigned rawTx from createAction (if available):', createResult.rawTx);
-
-      const signResult = await this.client.signAction({ action: createResult.action });
-
-      if (!signResult || !signResult.rawTx) {
-        console.error('Failed to sign action:', signResult);
-        throw new Error('Transaction signing failed.');
-      }
-      return signResult.rawTx;
+      return pubKeyResult.publicKey; // This is typically a hex string
     } catch (error) {
-      console.error('Error creating/signing transaction with Wallet Toolbox:', error);
-      throw new Error('Failed to create/sign transaction.');
+      console.error('Error getting public key from WalletClient:', error);
+      const e = error as Error;
+      throw new Error(`Failed to get public key: ${e.message}`);
+    }
+  }
+
+  async createAndSignDidCreationTransaction(
+    didDocumentUri: string // e.g., "did:bsv-overlay:02xxxxxxxx..."
+  ): Promise<string> {
+    try {
+      // 1. Create OP_RETURN script with DID URI using PushDrop
+      const didDataBuffer = Buffer.from(didDocumentUri, 'utf8');
+      const opReturnLockingScript = await new PushDrop().lock([didDataBuffer]);
+
+      // 2. Define the transaction outputs for createAction
+      const outputsForAction = [
+        {
+          lockingScript: opReturnLockingScript.toHex(), // Corrected: script -> lockingScript
+          satoshis: 0, // Corrected: amount -> satoshis. OP_RETURN outputs carry 0 satoshis
+          // outputDescription: 'DID URI' // Optional description
+        },
+      ];
+
+      // 3. Create the action (unsigned transaction structure)
+      const createActionArgs: CreateActionArgs = {
+        description: 'Create DID transaction with bsv-overlay URI',
+        outputs: outputsForAction,
+        // feePerByte: 0.05, // Optional: configure fee rate, or let wallet use its default.
+        // autoProcess: false, // Set to false if you explicitly want to call signAction
+      };
+      const createResult: CreateActionResult = await this.walletClient.createAction(createActionArgs);
+
+      // Tentatively using 'actionIdentifier' based on lint feedback pattern
+      if (!createResult || !createResult.actionIdentifier) {
+        console.error('Failed to create action with WalletClient:', createResult);
+        throw new Error('Transaction creation (action) failed: Could not get action identifier.');
+      }
+
+      // If createAction returns rawTx and it's already signed (e.g. if autoProcess was true or default),
+      // you might be able to use it directly. However, the standard flow is to sign explicitly.
+      // Forcing signAction for clarity and control here.
+
+      // 4. Sign the action
+      const signActionArgs: SignActionArgs = {
+        actionIdentifier: createResult.actionIdentifier, // Tentatively using 'actionIdentifier'
+      };
+      const signResult: SignActionResult = await this.walletClient.signAction(signActionArgs);
+
+      // Tentatively using 'transactionHex' based on lint feedback pattern
+      if (!signResult || !signResult.transactionHex) {
+        console.error('Failed to sign action with WalletClient:', signResult);
+        throw new Error('Transaction signing failed: Could not get rawTx.');
+      }
+
+      console.log('Transaction created and signed with WalletClient. TXID:', signResult.txid);
+      return signResult.transactionHex; // Tentatively using 'transactionHex'
+
+    } catch (error) {
+      console.error('Error creating/signing DID transaction with WalletClient:', error);
+      const e = error as Error;
+      throw new Error(`Transaction operation failed: ${e.message}`);
     }
   }
 }
 
-export const walletService = new WalletService();
+export default WalletService;
