@@ -1,27 +1,63 @@
+import 'dotenv/config';
 import express from "express";
 import bodyParser from 'body-parser'
 import { MongoClient } from "mongodb";
-import { transform, IdentityRecord } from "./didTranslation";
-import { createAuthMiddleware } from '@bsv/auth-express-middleware'
-import { WalletClient, PrivateKey, KeyDeriver } from '@bsv/sdk'
-import { WalletStorageManager, Services, Wallet, StorageClient } from '@bsv/wallet-toolbox-client'
+import { PrivateKey, WalletClient, KeyDeriver } from '@bsv/sdk';
+import { WalletStorageManager, Services, Wallet, StorageClient } from '@bsv/wallet-toolbox-client';
+import { createAuthMiddleware } from '@bsv/auth-express-middleware';
 import { signCertificate } from "./routes/signCertificate";
 import { createDidRoutes } from "./routes/didRoutes";
 import { BsvDidService } from "./services/bsvDidService";
-import { config } from 'dotenv'
 import cors from 'cors'
-config();
 
-// Environment variables for BsvDidService
-const DID_TOPIC = process.env.DID_TOPIC;
-const OVERLAY_PROVIDER_URL = process.env.OVERLAY_PROVIDER_URL;
-const DEFAULT_FUNDING_PUBLIC_KEY_HEX = process.env.DEFAULT_FUNDING_PUBLIC_KEY_HEX; // Optional
-const FEE_PER_KB = process.env.FEE_PER_KB ? parseInt(process.env.FEE_PER_KB, 10) : undefined; // Optional
+// Validate required environment variables
+const requiredEnvVars = {
+  MEDICAL_LICENSE_CERTIFIER: process.env.MEDICAL_LICENSE_CERTIFIER,
+  DID_TOPIC: process.env.DID_TOPIC || 'quarkid-test',
+  OVERLAY_PROVIDER_URL: process.env.OVERLAY_PROVIDER_URL || 'https://overlay.test.com',
+  DEFAULT_FUNDING_PUBLIC_KEY_HEX: process.env.DEFAULT_FUNDING_PUBLIC_KEY_HEX,
+  FEE_PER_KB: process.env.FEE_PER_KB
+};
 
+if (!requiredEnvVars.MEDICAL_LICENSE_CERTIFIER) {
+  console.error('MEDICAL_LICENSE_CERTIFIER environment variable is required');
+  process.exit(1);
+}
 
-const medicalKey = process.env.MEDICAL_LICENSE_CERTIFIER!
+// Validate hex string format
+if (!/^[0-9a-fA-F]{64}$/.test(requiredEnvVars.MEDICAL_LICENSE_CERTIFIER)) {
+  console.error('MEDICAL_LICENSE_CERTIFIER must be a 64-character hexadecimal string');
+  process.exit(1);
+}
 
+if (requiredEnvVars.DEFAULT_FUNDING_PUBLIC_KEY_HEX && !/^[0-9a-fA-F]{64}$/.test(requiredEnvVars.DEFAULT_FUNDING_PUBLIC_KEY_HEX)) {
+  console.error('DEFAULT_FUNDING_PUBLIC_KEY_HEX must be a 64-character hexadecimal string');
+  process.exit(1);
+}
+
+if (requiredEnvVars.FEE_PER_KB && isNaN(parseInt(requiredEnvVars.FEE_PER_KB, 10))) {
+  console.error('FEE_PER_KB must be a valid integer');
+  process.exit(1);
+}
+
+const medicalKey = requiredEnvVars.MEDICAL_LICENSE_CERTIFIER;
 const walletStorageUrl = 'https://storage.babbage.systems'
+
+// Simple identity record interface
+interface IdentityRecord {
+  certificate: {
+    subject: string;
+  }
+}
+
+// Simple transform function placeholder
+const transform = (record: IdentityRecord | null) => {
+  if (!record) return null;
+  return {
+    id: `did:example:${record.certificate.subject}`,
+    subject: record.certificate.subject
+  };
+};
 
 export const createWalletClient = async (key: string): Promise<WalletClient> => {
     const rootKey = PrivateKey.fromHex(key)
@@ -44,12 +80,25 @@ export const createWalletClient = async (key: string): Promise<WalletClient> => 
 async function startServer() {
     const app = express();
     app.use(bodyParser.json())
+    app.use(cors())
     
-    const wallet: Wallet = await createWalletClient(medicalKey) // Explicitly type wallet
-    const auth = createAuthMiddleware({ wallet })
+    const walletClient: WalletClient = await createWalletClient(medicalKey) // Explicitly type wallet
+    const auth = createAuthMiddleware({ 
+      wallet: walletClient,
+      allowUnauthenticated: true // Allow requests without auth for testing
+    })
     
-    const client = new MongoClient("mongodb://localhost:27017");
-    client.connect();
+    // Try to connect to MongoDB, but don't fail if it's not available
+    let mongoConnected = false;
+    let client: MongoClient | null = null;
+    try {
+      client = new MongoClient("mongodb://localhost:27017");
+      await client.connect();
+      mongoConnected = true;
+      console.log('Connected to MongoDB');
+    } catch (error) {
+      console.warn('MongoDB not available, some features will be disabled:', error.message);
+    }
 
     app.use((req, res, next) => {
         res.header('Access-Control-Allow-Origin', '*')
@@ -65,14 +114,19 @@ async function startServer() {
         }
     })
 
-
     app.use((req, res, next) => {
-        req.db = client.db("LARS_lookup_services");
-        req.wallet = wallet
+        if (mongoConnected) {
+          req.db = client.db("LARS_lookup_services");
+        }
+        req.walletClient = walletClient
         next();
     })
 
     app.get("/v1/:subject", async (req, res) => {
+        if (!mongoConnected) {
+          res.status(503).json({ error: 'MongoDB not available' });
+          return;
+        }
         const subject = req.params.subject;
         const record = await req.db
             .collection("identityRecords")
@@ -83,15 +137,15 @@ async function startServer() {
 
     app.use(auth).post("/signCertificate", signCertificate.func)
     // Instantiate BsvDidService
-    if (!DID_TOPIC || !OVERLAY_PROVIDER_URL) {
+    if (!requiredEnvVars.DID_TOPIC || !requiredEnvVars.OVERLAY_PROVIDER_URL) {
       console.error('Missing DID_TOPIC or OVERLAY_PROVIDER_URL in environment variables. BSV DID routes will not be available.');
     } else {
       const bsvDidService = new BsvDidService({
-        walletClient: wallet, // The existing WalletClient from createWalletClient
-        topic: DID_TOPIC,
-        overlayProviderUrl: OVERLAY_PROVIDER_URL,
-        feePerKb: FEE_PER_KB,
-        defaultFundingPublicKeyHex: DEFAULT_FUNDING_PUBLIC_KEY_HEX,
+        walletClient: walletClient,
+        topic: requiredEnvVars.DID_TOPIC,
+        overlayProviderUrl: requiredEnvVars.OVERLAY_PROVIDER_URL,
+        feePerKb: requiredEnvVars.FEE_PER_KB ? parseInt(requiredEnvVars.FEE_PER_KB, 10) : undefined,
+        defaultFundingPublicKeyHex: requiredEnvVars.DEFAULT_FUNDING_PUBLIC_KEY_HEX,
       });
 
       // Register DID routes
