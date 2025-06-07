@@ -1,10 +1,13 @@
 // src/components/DidCreator.tsx
 import React, { useState } from 'react';
-import { walletService } from '../services/walletService';
-import { didService } from '../services/didService';
-import { CreateDidPayload, BackendSubmitPayload, CreateDidResponse } from '../types';
+import WalletService from '../services/walletService';
+import type { CreateDidPayload, BackendSubmitPayload, CreateDidResponse } from '../types';
+import { WalletClient } from '@bsv/sdk';
 
 const DID_TOPIC_NAME = 'tm_qdid'; // From didService.ts, used for constructing DID
+
+// Create a mock wallet service instance for demo purposes
+const walletService = new WalletService({} as WalletClient);
 
 const DidCreator: React.FC = () => {
   const [controllerPublicKey, setControllerPublicKey] = useState<string | null>(null);
@@ -20,8 +23,8 @@ const DidCreator: React.FC = () => {
     try {
       const pubKey = await walletService.getP2PKHControllerPublicKey();
       setControllerPublicKey(pubKey);
-    } catch (err: any) {
-      setError(err.message || 'Failed to get public key.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to get public key.');
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -52,12 +55,23 @@ const DidCreator: React.FC = () => {
         payload: didPayload,
       };
 
-      const response = await didService.createDid(submitPayload);
-      setCreationResponse(response);
+      const response = await fetch('http://localhost:5000/api/did/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(submitPayload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result: CreateDidResponse = await response.json();
+
+      setCreationResponse(result);
 
       // Construct the DID identifier from the first accepted output
-      if (response.outputsAccepted && response.outputsAccepted.length > 0) {
-        const { txid, vout } = response.outputsAccepted[0];
+      if (result.outputsAccepted && result.outputsAccepted.length > 0) {
+        const { txid, vout } = result.outputsAccepted[0];
         // Ensure DID_TOPIC_NAME is correctly used as defined in your backend
         const didIdentifier = `did:bsv-overlay:${DID_TOPIC_NAME}:${txid}:${vout}`;
         setCreatedDid(didIdentifier);
@@ -65,8 +79,8 @@ const DidCreator: React.FC = () => {
         setError('DID creation seemed to succeed, but no output was accepted or returned by the backend.');
       }
 
-    } catch (err: any) {
-      setError(err.message || 'Failed to create DID.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create DID.');
       console.error(err);
     } finally {
       setIsLoading(false);

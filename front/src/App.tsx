@@ -1,124 +1,194 @@
 // src/App.tsx
-// src/App.tsx
-import React, { useState } from 'react';
-import './App.css'; // Assuming this file exists and might have relevant styles
-import { walletService } from './services/walletService';
-import { didService } from './services/didService';
-// Corrected: Use 'import type' for type-only imports
-import type { CreateDidPayload, BackendSubmitPayload, CreateDidResponse } from './types';
+import React from 'react';
+import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { useApp } from './context/AppContext';
+import ActorManagement from './components/ActorManagement';
+import PrescriptionWorkflow from './components/PrescriptionWorkflow';
+import QRScanner from './components/QRScanner';
+import TokenManager from './components/TokenManager';
+import DIDResolver from './components/DIDResolver';
+import './App.css';
 
 function App() {
-  const [controllerPublicKey, setControllerPublicKey] = useState<string | null>(null);
-  const [createdDoctorDid, setCreatedDoctorDid] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [creationResponse, setCreationResponse] = useState<CreateDidResponse | null>(null);
-
-  const handleGetPublicKey = async () => {
-    setIsLoading(true);
-    setError(null);
-    setControllerPublicKey(null);
-    setCreatedDoctorDid(null);
-    setCreationResponse(null);
-    try {
-      const pubKey = await walletService.getP2PKHControllerPublicKey();
-      setControllerPublicKey(pubKey);
-    } catch (err: unknown) { // Corrected: Use 'unknown'
-      if (err instanceof Error) {
-        setError(err.message || 'Failed to get public key from Wallet Toolbox.');
-      } else {
-        setError('An unknown error occurred while getting public key.');
-      }
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleCreateDoctorDid = async () => {
-    if (!controllerPublicKey) {
-      setError('Please get a public key first.');
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    setCreatedDoctorDid(null);
-    setCreationResponse(null);
-
-    try {
-      const rawTx = await walletService.createAndSignDidCreationTransaction(controllerPublicKey);
-
-      const didPayload: CreateDidPayload = {
-        operation: 'CREATE_DID',
-        controllerPublicKeyHex: controllerPublicKey,
-      };
-
-      const submitPayload: BackendSubmitPayload = {
-        transaction: rawTx,
-        payload: didPayload,
-      };
-
-      const response = await didService.createDid(submitPayload);
-      setCreationResponse(response);
-
-      if (response.outputsAccepted && response.outputsAccepted.length > 0) {
-        const { txid, vout } = response.outputsAccepted[0];
-        const didIdentifier = `did:bsv-overlay:tm_qdid:${txid}:${vout}`;
-        setCreatedDoctorDid(didIdentifier);
-      } else {
-        setError('DID creation seemed to succeed, but no output was accepted or returned by the backend.');
-      }
-
-    } catch (err: unknown) { // Corrected: Use 'unknown'
-      if (err instanceof Error) {
-        setError(err.message || 'Failed to create Doctor\'s DID.');
-      } else {
-        setError('An unknown error occurred while creating Doctor\'s DID.');
-      }
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { state } = useApp();
+  const location = useLocation();
 
   return (
-    <>
-      <h1>Register Doctor's DID (using QuarkID & Wallet Toolbox)</h1>
-      
-      <div style={{ marginBottom: '20px', padding: '20px', border: '1px solid #eee' }}>
-        <h3>Step 1: Get Public Key for Doctor's DID</h3>
-        <button onClick={handleGetPublicKey} disabled={isLoading}>
-          {isLoading && !controllerPublicKey ? 'Getting Key...' : 'Get P2PKH Controller Public Key'}
-        </button>
-        {controllerPublicKey && <p>Controller Public Key: <code>{controllerPublicKey}</code></p>}
+    <div className="app">
+      <header className="app-header">
+        <div className="header-content">
+          <div className="logo">
+            <h1>🏥 BSV Medical Demo</h1>
+            <p>Decentralized Identity & Verifiable Credentials on Bitcoin SV</p>
+          </div>
+          
+          {state.currentActor && (
+            <div className="current-actor">
+              <span className="actor-badge actor-{state.currentActor.type}">
+                {state.currentActor.type.toUpperCase()}
+              </span>
+              <span className="actor-name">{state.currentActor.name}</span>
+            </div>
+          )}
+        </div>
+      </header>
+
+      <nav className="app-nav">
+        <div className="nav-content">
+          <Link 
+            to="/actors" 
+            className={`nav-link ${location.pathname === '/actors' ? 'active' : ''}`}
+          >
+            👤 Actor Management
+          </Link>
+          <Link 
+            to="/prescription" 
+            className={`nav-link ${location.pathname === '/prescription' ? 'active' : ''}`}
+          >
+            💊 Prescription Workflow
+          </Link>
+          <Link 
+            to="/qr-scanner" 
+            className={`nav-link ${location.pathname === '/qr-scanner' ? 'active' : ''}`}
+          >
+            📱 QR Scanner
+          </Link>
+          <Link 
+            to="/tokens" 
+            className={`nav-link ${location.pathname === '/tokens' ? 'active' : ''}`}
+          >
+            🪙 Token Manager
+          </Link>
+          <Link 
+            to="/did-resolver" 
+            className={`nav-link ${location.pathname === '/did-resolver' ? 'active' : ''}`}
+          >
+            🔍 DID Resolver
+          </Link>
+        </div>
+      </nav>
+
+      <main className="app-main">
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/actors" element={<ActorManagement />} />
+          <Route path="/prescription" element={<PrescriptionWorkflow />} />
+          <Route path="/qr-scanner" element={<QRScanner />} />
+          <Route path="/tokens" element={<TokenManager />} />
+          <Route path="/did-resolver" element={<DIDResolver />} />
+        </Routes>
+      </main>
+
+      <footer className="app-footer">
+        <div className="footer-content">
+          <p>
+            Demo of BSV DIDs and Verifiable Credentials for Medical Prescriptions
+          </p>
+          <p className="tech-stack">
+            Built with React • Bitcoin SV • QuarkID • TypeScript
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function Home() {
+  const { state } = useApp();
+  const flows = state.prescriptions.length;
+  const actors = state.actors.length;
+  const tokens = state.tokens.length;
+
+  return (
+    <div className="home">
+      <div className="hero">
+        <h2>🌟 Welcome to the BSV Medical Demo</h2>
+        <p className="hero-subtitle">
+          Experience the complete lifecycle of medical prescriptions using 
+          Decentralized Identifiers (DIDs) and Verifiable Credentials (VCs) on Bitcoin SV
+        </p>
       </div>
 
-      {controllerPublicKey && (
-        <div style={{ marginBottom: '20px', padding: '20px', border: '1px solid #eee' }}>
-          <h3>Step 2: Create Doctor's DID</h3>
-          <button onClick={handleCreateDoctorDid} disabled={isLoading || !controllerPublicKey}>
-            {isLoading && createdDoctorDid === null ? 'Creating DID...' : 'Create Doctor\'s DID'}
-          </button>
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon">👥</div>
+          <div className="stat-value">{actors}</div>
+          <div className="stat-label">Active Actors</div>
         </div>
-      )}
+        <div className="stat-card">
+          <div className="stat-icon">💊</div>
+          <div className="stat-value">{flows}</div>
+          <div className="stat-label">Prescription Flows</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">🪙</div>
+          <div className="stat-value">{tokens}</div>
+          <div className="stat-label">BSV Tokens</div>
+        </div>
+      </div>
 
-      {isLoading && <p>Loading...</p>}
-      {error && <p style={{ color: 'red' }}>Error: {error}</p>}
-      
-      {createdDoctorDid && (
-        <div style={{ marginTop: '20px', padding: '10px', border: '1px solid green', background: '#e6ffe6' }}>
-          <h4>Doctor's DID Created Successfully:</h4>
-          <p><code>{createdDoctorDid}</code></p>
+      <div className="workflow-overview">
+        <h3>📋 Medical Prescription Workflow</h3>
+        <div className="workflow-steps">
+          <div className="workflow-step">
+            <div className="step-number">1</div>
+            <div className="step-content">
+              <h4>👩‍⚕️ Doctor Creates Prescription</h4>
+              <p>Doctor issues a verifiable prescription credential for the patient</p>
+            </div>
+          </div>
+          <div className="workflow-step">
+            <div className="step-number">2</div>
+            <div className="step-content">
+              <h4>🪙 BSV Token Creation</h4>
+              <p>Prescription is tokenized on the Bitcoin SV blockchain</p>
+            </div>
+          </div>
+          <div className="workflow-step">
+            <div className="step-number">3</div>
+            <div className="step-content">
+              <h4>🏥 Pharmacy Dispensation</h4>
+              <p>Pharmacy verifies prescription and creates dispensation credential</p>
+            </div>
+          </div>
+          <div className="workflow-step">
+            <div className="step-number">4</div>
+            <div className="step-content">
+              <h4>✅ Confirmation & Settlement</h4>
+              <p>Final confirmation credential and blockchain settlement</p>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
 
-      {creationResponse && (
-        <div style={{ marginTop: '10px', border: '1px solid #ccc', padding: '10px', background: '#f9f9f9' }}>
-          <h4>Backend Response:</h4>
-          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{JSON.stringify(creationResponse, null, 2)}</pre>
+      <div className="getting-started">
+        <h3>🚀 Getting Started</h3>
+        <div className="getting-started-content">
+          <p>
+            To begin exploring the medical prescription workflow:
+          </p>
+          <ol>
+            <li>Create actors (Patient, Doctor, Pharmacy) in <Link to="/actors">Actor Management</Link></li>
+            <li>Start a prescription flow in <Link to="/prescription">Prescription Workflow</Link></li>
+            <li>Scan QR codes to exchange credentials using the <Link to="/qr-scanner">QR Scanner</Link></li>
+            <li>Monitor BSV tokens and transfers in <Link to="/tokens">Token Manager</Link></li>
+            <li>Resolve DIDs and view credentials in <Link to="/did-resolver">DID Resolver</Link></li>
+          </ol>
+        </div>
+      </div>
+
+      {!state.currentActor && (
+        <div className="call-to-action">
+          <div className="cta-content">
+            <h3>👤 No Actor Selected</h3>
+            <p>Select or create an actor to begin the medical prescription demo</p>
+            <Link to="/actors" className="cta-button">
+              Manage Actors
+            </Link>
+          </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
