@@ -1,6 +1,7 @@
 // src/components/PrescriptionWorkflow.tsx
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { apiService } from '../services/apiService';
 
 const PrescriptionWorkflow: React.FC = () => {
   const { state, dispatch, getPrescriptionFlows } = useApp();
@@ -36,45 +37,42 @@ const PrescriptionWorkflow: React.FC = () => {
 
     setIsProcessing(true);
     try {
-      // Create prescription VC
-      const prescriptionVC = {
-        id: `prescription-${Date.now()}`,
+      // Use API service to create prescription
+      const prescriptionData = {
+        doctorDid: state.currentActor.did || '',
+        patientDid: prescriptionForm.patientDid,
+        diagnosis: 'General medication prescription', // Could be added to form
         medication: prescriptionForm.medication,
         dosage: prescriptionForm.dosage,
-        instructions: prescriptionForm.instructions,
-        quantity: prescriptionForm.quantity,
-        prescribedDate: new Date().toISOString(),
-        doctorId: state.currentActor.did
+        instructions: prescriptionForm.instructions, 
+        duration: '30 days', // Could be added to form
+        urgent: false
       };
 
-      dispatch({ type: 'ADD_PRESCRIPTION', payload: prescriptionVC });
+      console.log('Creating prescription with data:', prescriptionData);
+      const response = await apiService.createPrescription(prescriptionData);
+      
+      if (response.success) {
+        // Update local state with the created prescription
+        dispatch({ type: 'ADD_PRESCRIPTION', payload: response.data });
+        
+        // Reset form
+        setPrescriptionForm({
+          patientDid: '',
+          medication: '',
+          dosage: '',
+          instructions: '',
+          quantity: 1
+        });
 
-      // Create BSV token for the prescription
-      const token = {
-        metadata: {
-          prescriptionId: prescriptionVC.id
-        }
-      };
-
-      dispatch({ type: 'ADD_TOKEN', payload: token });
-
-      // Generate QR code for the prescription
-      const qrCode = '';
-      setQrCodes(prev => ({ ...prev, [prescriptionVC.id]: qrCode }));
-
-      // Reset form
-      setPrescriptionForm({
-        patientDid: '',
-        medication: '',
-        dosage: '',
-        instructions: '',
-        quantity: 1
-      });
-
-      alert('Prescription created successfully and tokenized on BSV blockchain');
+        alert('Prescription created successfully and stored on blockchain');
+      } else {
+        console.error('Prescription creation failed:', response.error);
+        alert(`Failed to create prescription: ${response.error || 'Unknown error'}`);
+      }
     } catch (error) {
       console.error('Prescription creation failed:', error);
-      alert('Failed to create prescription');
+      alert(`Failed to create prescription: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsProcessing(false);
     }
