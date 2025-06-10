@@ -50,7 +50,7 @@ class WalletService {
       const protocolID = [SecurityLevels.Silent, 'quarkid_did'] as WalletProtocol
       const keyID = Utils.toBase64(Random(21))
       const counterparty = 'self'
-      const script = await template.lock([data], protocolID, keyID, counterparty, false, true, 'after')
+      const script = await template.lock([data], protocolID, keyID, counterparty, true, true, 'after')
       
       // 2. Define the transaction outputs for createAction
       const outputsForAction = [
