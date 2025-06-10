@@ -45,9 +45,9 @@ const DidCreator: React.FC = () => {
     try {
       const beef = await walletService.createAndSignDidCreationTransaction(controllerPublicKey);
 
+      // Use an Overlay to distribute the did registration transaction
       const overlay = new TopicBroadcaster(['tm_quarkid_did'])
-      const tx = Transaction.fromBEEF(beef)
-      
+      const tx = Transaction.fromBEEF(beef)      
       const result = await tx.broadcast(overlay)
 
       setCreationResponse(result);
