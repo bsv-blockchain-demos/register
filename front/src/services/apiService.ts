@@ -1,0 +1,372 @@
+/**
+ * API Service for QuarkID Prescription Management System
+ * Handles all HTTP requests to the backend API
+ */
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+  details?: string;
+}
+
+class ApiService {
+  private baseUrl: string;
+  private defaultHeaders: HeadersInit;
+
+  constructor() {
+    this.baseUrl = API_BASE_URL;
+    this.defaultHeaders = {
+      'Content-Type': 'application/json',
+    };
+  }
+
+  /**
+   * Generic HTTP request method
+   */
+  private async request<T = any>(
+    method: string,
+    endpoint: string,
+    data?: any,
+    headers?: HeadersInit
+  ): Promise<ApiResponse<T>> {
+    try {
+      const url = `${this.baseUrl}${endpoint}`;
+      const config: RequestInit = {
+        method,
+        headers: {
+          ...this.defaultHeaders,
+          ...headers,
+        },
+      };
+
+      if (data && (method === 'POST' || method === 'PUT')) {
+        config.body = JSON.stringify(data);
+      }
+
+      console.log(`[ApiService] ${method} ${url}`, data);
+
+      const response = await fetch(url, config);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error(`[ApiService] Error in ${method} ${endpoint}:`, error);
+      return {
+        success: false,
+        error: error.message || 'Network error occurred'
+      };
+    }
+  }
+
+  // Actor Management API
+
+  /**
+   * Create a new actor (patient, doctor, pharmacy, insurance)
+   */
+  async createActor(actorData: {
+    name: string;
+    type: 'patient' | 'doctor' | 'pharmacy' | 'insurance';
+    email?: string;
+    phone?: string;
+    address?: string;
+    licenseNumber?: string;
+    specialization?: string;
+    insuranceProvider?: string;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/actors', actorData);
+  }
+
+  /**
+   * Get all actors with optional filtering
+   */
+  async getActors(filters?: {
+    type?: string;
+    active?: boolean;
+  }): Promise<ApiResponse> {
+    const params = new URLSearchParams();
+    if (filters?.type) params.append('type', filters.type);
+    if (filters?.active !== undefined) params.append('active', filters.active.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/v1/actors?${queryString}` : '/v1/actors';
+    
+    return this.request('GET', endpoint);
+  }
+
+  /**
+   * Get specific actor by ID
+   */
+  async getActor(id: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/actors/${id}`);
+  }
+
+  /**
+   * Get actor by DID
+   */
+  async getActorByDid(did: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/actors/did/${encodeURIComponent(did)}`);
+  }
+
+  /**
+   * Update actor information
+   */
+  async updateActor(id: string, updateData: any): Promise<ApiResponse> {
+    return this.request('PUT', `/v1/actors/${id}`, updateData);
+  }
+
+  /**
+   * Get actor statistics
+   */
+  async getActorStats(): Promise<ApiResponse> {
+    return this.request('GET', '/v1/actors/stats/summary');
+  }
+
+  // Prescription Workflow API
+
+  /**
+   * Create a new prescription
+   */
+  async createPrescription(prescriptionData: {
+    patientDid: string;
+    doctorDid: string;
+    diagnosis: string;
+    medication: string;
+    dosage: string;
+    instructions: string;
+    duration: string;
+    urgent?: boolean;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/prescriptions', prescriptionData);
+  }
+
+  /**
+   * Get prescription by ID
+   */
+  async getPrescription(id: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/prescriptions/${id}`);
+  }
+
+  /**
+   * Create dispensation record
+   */
+  async createDispensation(prescriptionId: string, dispensationData: {
+    pharmacyDid: string;
+    medicationProvided: string;
+    batchNumber?: string;
+    expiryDate?: string;
+    pharmacistNotes?: string;
+  }): Promise<ApiResponse> {
+    return this.request('POST', `/v1/prescriptions/${prescriptionId}/dispense`, dispensationData);
+  }
+
+  /**
+   * Create confirmation record
+   */
+  async createConfirmation(prescriptionId: string, confirmationData: {
+    patientDid: string;
+    confirmed: boolean;
+    patientNotes?: string;
+  }): Promise<ApiResponse> {
+    return this.request('POST', `/v1/prescriptions/${prescriptionId}/confirm`, confirmationData);
+  }
+
+  /**
+   * Get prescriptions by actor DID
+   */
+  async getPrescriptionsByActor(actorDid: string, role: 'patient' | 'doctor' | 'pharmacy'): Promise<ApiResponse> {
+    return this.request('GET', `/v1/prescriptions/actor/${encodeURIComponent(actorDid)}?role=${role}`);
+  }
+
+  /**
+   * Get prescriptions by status
+   */
+  async getPrescriptionsByStatus(status: 'pending' | 'dispensed' | 'confirmed'): Promise<ApiResponse> {
+    return this.request('GET', `/v1/prescriptions/status/${status}`);
+  }
+
+  // Token Management API
+
+  /**
+   * Create a new BSV token for prescription
+   */
+  async createToken(tokenData: {
+    prescriptionId: string;
+    ownerDid: string;
+    tokenType: 'prescription';
+    metadata?: any;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/tokens', tokenData);
+  }
+
+  /**
+   * Get token by transaction ID
+   */
+  async getToken(txid: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/tokens/${txid}`);
+  }
+
+  /**
+   * Get token status
+   */
+  async getTokenStatus(txid: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/tokens/${txid}/status`);
+  }
+
+  /**
+   * Transfer token ownership
+   */
+  async transferToken(txid: string, transferData: {
+    fromDid: string;
+    toDid: string;
+    transferType: 'dispense' | 'confirm';
+  }): Promise<ApiResponse> {
+    return this.request('PUT', `/v1/tokens/${txid}/transfer`, transferData);
+  }
+
+  /**
+   * Finalize token as dispensed
+   */
+  async finalizeToken(txid: string, finalizeData: {
+    actorDid: string;
+    finalStatus: 'dispensed';
+  }): Promise<ApiResponse> {
+    return this.request('PUT', `/v1/tokens/${txid}/finalize`, finalizeData);
+  }
+
+  /**
+   * Get tokens by prescription ID
+   */
+  async getTokensByPrescription(prescriptionId: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/tokens/prescription/${prescriptionId}`);
+  }
+
+  /**
+   * Get tokens by actor DID
+   */
+  async getTokensByActor(actorDid: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/tokens/actor/${encodeURIComponent(actorDid)}`);
+  }
+
+  /**
+   * Get token statistics
+   */
+  async getTokenStats(): Promise<ApiResponse> {
+    return this.request('GET', '/v1/tokens/stats');
+  }
+
+  // DWN Messaging API
+
+  /**
+   * Send encrypted VC via DWN
+   */
+  async sendDWNMessage(messageData: {
+    from: string;
+    to: string;
+    subject: string;
+    vcData: any;
+    type: 'prescription' | 'dispensation' | 'confirmation';
+    prescriptionId?: string;
+    threadId?: string;
+    urgent?: boolean;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/dwn/send', messageData);
+  }
+
+  /**
+   * Get DWN messages for a DID
+   */
+  async getDWNMessages(filters: {
+    did: string;
+    type?: string;
+    threadId?: string;
+    unreadOnly?: boolean;
+    limit?: number;
+  }): Promise<ApiResponse> {
+    const params = new URLSearchParams();
+    params.append('did', filters.did);
+    if (filters.type) params.append('type', filters.type);
+    if (filters.threadId) params.append('threadId', filters.threadId);
+    if (filters.unreadOnly) params.append('unreadOnly', filters.unreadOnly.toString());
+    if (filters.limit) params.append('limit', filters.limit.toString());
+
+    return this.request('GET', `/v1/dwn/messages?${params.toString()}`);
+  }
+
+  /**
+   * Get specific DWN message and decrypt
+   */
+  async getDWNMessage(messageId: string, recipientDid: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/dwn/messages/${messageId}?recipientDid=${encodeURIComponent(recipientDid)}`);
+  }
+
+  /**
+   * Mark DWN message as read
+   */
+  async markDWNMessageRead(messageId: string, recipientDid: string): Promise<ApiResponse> {
+    return this.request('PUT', `/v1/dwn/messages/${messageId}/read`, { recipientDid });
+  }
+
+  /**
+   * Get DWN thread messages
+   */
+  async getDWNThread(threadId: string, participantDid: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/dwn/threads/${threadId}?participantDid=${encodeURIComponent(participantDid)}`);
+  }
+
+  /**
+   * Get DWN messaging statistics
+   */
+  async getDWNStats(did: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/dwn/stats/${encodeURIComponent(did)}`);
+  }
+
+  // DID Management API
+
+  /**
+   * Create a new DID
+   */
+  async createDid(didData: {
+    topic?: string;
+    document?: any;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/dids', didData);
+  }
+
+  /**
+   * Get DID document
+   */
+  async getDid(did: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/dids/${encodeURIComponent(did)}`);
+  }
+
+  /**
+   * Update DID document
+   */
+  async updateDid(did: string, updateData: {
+    document: any;
+    signature?: string;
+  }): Promise<ApiResponse> {
+    return this.request('PUT', `/v1/dids/${encodeURIComponent(did)}`, updateData);
+  }
+
+  // Health Check
+
+  /**
+   * Check API health
+   */
+  async healthCheck(): Promise<ApiResponse> {
+    return this.request('GET', '/health');
+  }
+}
+
+// Export singleton instance
+export const apiService = new ApiService();
+export default apiService;

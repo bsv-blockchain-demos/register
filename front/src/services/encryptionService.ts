@@ -1,5 +1,5 @@
 // src/services/encryptionService.ts
-import CryptoJS from 'crypto-js';
+import * as CryptoJS from 'crypto-js';
 import type { EncryptedData } from '../types';
 
 /**

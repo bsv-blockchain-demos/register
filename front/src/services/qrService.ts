@@ -1,5 +1,5 @@
 // src/services/qrService.ts
-import QRCode from 'qrcode';
+import * as QRCode from 'qrcode';
 import type { QRCodeData, Actor, VerifiableCredential, BSVToken, EncryptedData } from '../types';
 import { encryptionService } from './encryptionService';
 

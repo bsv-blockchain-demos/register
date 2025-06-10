@@ -1,12 +1,12 @@
 // src/App.tsx
-import React from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { useApp } from './context/AppContext';
 import ActorManagement from './components/ActorManagement';
 import PrescriptionWorkflow from './components/PrescriptionWorkflow';
+import PrescriptionDashboard from './components/PrescriptionDashboard';
 import QRScanner from './components/QRScanner';
 import TokenManager from './components/TokenManager';
-import DIDResolver from './components/DIDResolver';
+import DIDResolver from './components/DidResolver';
 import './App.css';
 
 function App() {
@@ -16,63 +16,79 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <div className="header-content">
-          <div className="logo">
-            <h1>🏥 BSV Medical Demo</h1>
-            <p>Decentralized Identity & Verifiable Credentials on Bitcoin SV</p>
-          </div>
-          
-          {state.currentActor && (
-            <div className="current-actor">
-              <span className="actor-badge actor-{state.currentActor.type}">
-                {state.currentActor.type.toUpperCase()}
-              </span>
-              <span className="actor-name">{state.currentActor.name}</span>
-            </div>
-          )}
+        <div className="app-title">
+          <div className="app-logo">🏥</div>
+          <span>BSV Medical Demo</span>
         </div>
+        {state.currentActor && (
+          <div className="current-actor">
+            <span className="actor-badge actor-{state.currentActor.type}">
+              {state.currentActor.type.toUpperCase()}
+            </span>
+            <span className="actor-name">{state.currentActor.name}</span>
+          </div>
+        )}
       </header>
 
       <nav className="app-nav">
-        <div className="nav-content">
-          <Link 
-            to="/actors" 
-            className={`nav-link ${location.pathname === '/actors' ? 'active' : ''}`}
-          >
-            👤 Actor Management
-          </Link>
-          <Link 
-            to="/prescription" 
-            className={`nav-link ${location.pathname === '/prescription' ? 'active' : ''}`}
-          >
-            💊 Prescription Workflow
-          </Link>
-          <Link 
-            to="/qr-scanner" 
-            className={`nav-link ${location.pathname === '/qr-scanner' ? 'active' : ''}`}
-          >
-            📱 QR Scanner
-          </Link>
-          <Link 
-            to="/tokens" 
-            className={`nav-link ${location.pathname === '/tokens' ? 'active' : ''}`}
-          >
-            🪙 Token Manager
-          </Link>
-          <Link 
-            to="/did-resolver" 
-            className={`nav-link ${location.pathname === '/did-resolver' ? 'active' : ''}`}
-          >
-            🔍 DID Resolver
-          </Link>
-        </div>
+        <ul className="nav-links">
+          <li>
+            <Link 
+              to="/actors" 
+              className={`nav-link ${location.pathname === '/actors' ? 'active' : ''}`}
+            >
+              👤 Actor Management
+            </Link>
+          </li>
+          <li>
+            <Link 
+              to="/prescription" 
+              className={`nav-link ${location.pathname === '/prescription' ? 'active' : ''}`}
+            >
+              💊 Prescription Workflow
+            </Link>
+          </li>
+          <li>
+            <Link 
+              to="/prescription-dashboard" 
+              className={`nav-link ${location.pathname === '/prescription-dashboard' ? 'active' : ''}`}
+            >
+              📊 Prescription Dashboard
+            </Link>
+          </li>
+          <li>
+            <Link 
+              to="/qr-scanner" 
+              className={`nav-link ${location.pathname === '/qr-scanner' ? 'active' : ''}`}
+            >
+              📱 QR Scanner
+            </Link>
+          </li>
+          <li>
+            <Link 
+              to="/tokens" 
+              className={`nav-link ${location.pathname === '/tokens' ? 'active' : ''}`}
+            >
+              🪙 Token Manager
+            </Link>
+          </li>
+          <li>
+            <Link 
+              to="/did-resolver" 
+              className={`nav-link ${location.pathname === '/did-resolver' ? 'active' : ''}`}
+            >
+              🔍 DID Resolver
+            </Link>
+          </li>
+        </ul>
       </nav>
 
-      <main className="app-main">
+      <main className="app-content">
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/actors" element={<ActorManagement />} />
           <Route path="/prescription" element={<PrescriptionWorkflow />} />
+          <Route path="/prescription-dashboard" element={<PrescriptionDashboard />} />
           <Route path="/qr-scanner" element={<QRScanner />} />
           <Route path="/tokens" element={<TokenManager />} />
           <Route path="/did-resolver" element={<DIDResolver />} />
