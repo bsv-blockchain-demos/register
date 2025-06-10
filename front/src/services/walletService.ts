@@ -1,13 +1,14 @@
 // src/services/walletService.ts
 import {
-  Script,
-  OP,
+  Random,
+  Utils,
   WalletClient,
   PublicKey,
   type CreateActionArgs,
   type CreateActionResult,
   PushDrop,
   SecurityLevels,
+  type WalletProtocol,
 } from '@bsv/sdk';
 
 class WalletService {
@@ -46,14 +47,22 @@ class WalletService {
       
       // Create OP_RETURN script directly using Script class
       const template = new PushDrop(this.walletClient, 'quarkid_did')
-      const script = await template.lock([data], [SecurityLevels.Silent, 'quarkid_did'], '1', 'anyone', false, true, 'after')
+      const protocolID = [SecurityLevels.Silent, 'quarkid_did'] as WalletProtocol
+      const keyID = Utils.toBase64(Random(21))
+      const counterparty = 'self'
+      const script = await template.lock([data], protocolID, keyID, counterparty, false, true, 'after')
       
       // 2. Define the transaction outputs for createAction
       const outputsForAction = [
         {
           lockingScript: script.toHex(),
           satoshis: 1,
-          outputDescription: 'DID Document URI'
+          outputDescription: 'DID Document URI',
+          customInstructions: JSON.stringify({
+            protocolID,
+            counterparty,
+            keyID
+          })
         },
       ];
 
