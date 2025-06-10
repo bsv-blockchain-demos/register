@@ -115,7 +115,7 @@ function Home() {
   const tokens = state.tokens.length;
 
   return (
-    <div className="space-y-6 p-4 bg-red-500 text-white">
+    <div className="space-y-6 p-4 text-white">
       <div className="bg-blue-500 p-4 rounded-lg">
         <h1 className="text-2xl font-bold">🌟 Welcome to the BSV Medical Demo</h1>
         <p className="text-base mt-2">
