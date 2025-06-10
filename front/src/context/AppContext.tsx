@@ -182,7 +182,7 @@ export function AppProvider({ children }: AppProviderProps) {
     const flows: PrescriptionFlow[] = [];
     
     state.prescriptions.forEach(prescription => {
-      const patientDid = prescription.credentialSubject.id;
+      const patientDid = prescription.credentialSubject.id; // TODO we got an error on this line.
       const doctorDid = prescription.credentialSubject.prescription.doctorId;
       
       // Find related dispensation

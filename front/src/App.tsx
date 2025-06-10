@@ -8,11 +8,11 @@ import QRScanner from './components/QRScanner';
 import TokenManager from './components/TokenManager';
 import DIDResolver from './components/DidResolver';
 import { Button } from '@/components/ui/button';
-import './App.css';
 
 function App() {
   const location = useLocation();
 
+  // Test div to verify Tailwind classes are working
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       <nav className="w-64 bg-gray-800 border-r border-gray-700 p-4 fixed h-full overflow-y-auto">
