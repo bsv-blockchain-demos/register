@@ -141,6 +141,13 @@ async function startServer() {
       feePerKb
     });
 
+    // Logging middleware to print request path and body
+    app.use((req, res, next) => {
+        console.log(`[${req.method}] ${req.path} ${JSON.stringify(req?.body || '')}`);
+        next();
+    });
+
+
     app.use((req, res, next) => {
         res.header('Access-Control-Allow-Origin', '*')
         res.header('Access-Control-Allow-Headers', '*')

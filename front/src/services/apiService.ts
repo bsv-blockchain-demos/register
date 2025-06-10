@@ -61,7 +61,7 @@ class ApiService {
       console.error(`[ApiService] Error in ${method} ${endpoint}:`, error);
       return {
         success: false,
-        error: error.message || 'Network error occurred'
+        error: 'Network error occurred'
       };
     }
   }
