@@ -11,7 +11,7 @@ export interface CreateDidPayload {
 }
 
 export interface BackendSubmitPayload {
-  transaction: string; // Raw transaction hex
+  transaction: number[];
   payload: CreateDidPayload;
 }
 

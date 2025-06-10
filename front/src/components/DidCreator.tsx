@@ -2,7 +2,8 @@
 import React, { useState } from 'react';
 import WalletService from '../services/walletService';
 import type { CreateDidPayload, BackendSubmitPayload, CreateDidResponse } from '../types';
-import { WalletClient } from '@bsv/sdk';
+import { TopicBroadcaster, WalletClient, Transaction } from '@bsv/sdk';
+import type { BroadcastResponse, BroadcastFailure } from '@bsv/sdk';
 
 const DID_TOPIC_NAME = 'tm_qdid'; // From didService.ts, used for constructing DID
 
@@ -14,7 +15,7 @@ const DidCreator: React.FC = () => {
   const [createdDid, setCreatedDid] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [creationResponse, setCreationResponse] = useState<CreateDidResponse | null>(null);
+  const [creationResponse, setCreationResponse] = useState<BroadcastResponse | BroadcastFailure | null>(null);
 
   const handleGetPublicKey = async () => {
     setIsLoading(true);
@@ -42,38 +43,20 @@ const DidCreator: React.FC = () => {
     setCreationResponse(null);
 
     try {
-      const rawTx = await walletService.createAndSignDidCreationTransaction(controllerPublicKey);
+      const beef = await walletService.createAndSignDidCreationTransaction(controllerPublicKey);
 
-      const didPayload: CreateDidPayload = {
-        operation: 'CREATE_DID',
-        controllerPublicKeyHex: controllerPublicKey,
-        // didDocument: { /* Optional: add minimal DID document fields if needed */ }
-      };
-
-      const submitPayload: BackendSubmitPayload = {
-        transaction: rawTx,
-        payload: didPayload,
-      };
-
-      const response = await fetch('http://localhost:5000/api/did/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(submitPayload),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result: CreateDidResponse = await response.json();
+      const overlay = new TopicBroadcaster(['tm_quarkid_did'])
+      const tx = Transaction.fromBEEF(beef)
+      
+      const result = await tx.broadcast(overlay)
 
       setCreationResponse(result);
 
       // Construct the DID identifier from the first accepted output
-      if (result.outputsAccepted && result.outputsAccepted.length > 0) {
-        const { txid, vout } = result.outputsAccepted[0];
+      if (result.status === 'success') {
+        const txid = tx.id('hex')
         // Ensure DID_TOPIC_NAME is correctly used as defined in your backend
-        const didIdentifier = `did:bsv-overlay:${DID_TOPIC_NAME}:${txid}:${vout}`;
+        const didIdentifier = `did:bsv-overlay:${DID_TOPIC_NAME}:${txid}:0`;
         setCreatedDid(didIdentifier);
       } else {
         setError('DID creation seemed to succeed, but no output was accepted or returned by the backend.');

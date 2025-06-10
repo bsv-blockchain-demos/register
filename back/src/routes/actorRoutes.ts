@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { WalletClient } from '@bsv/sdk';
+import { PrivateKey, WalletClient } from '@bsv/sdk';
 import { Db } from 'mongodb';
 import { BsvDidService } from '../services/bsvDidService';
 import crypto from 'crypto';
@@ -86,8 +86,9 @@ export function createActorRoutes(): Router {
       }
 
       // Generate key pair for the actor (simplified implementation)
-      const privateKey = crypto.randomBytes(32).toString('hex');
-      const publicKey = crypto.randomBytes(33).toString('hex'); // Mock public key
+      const key = PrivateKey.fromRandom()
+      const privateKey = key.toString()
+      const publicKey = key.toPublicKey().toString()
 
       // Create DID document for the actor
       const didDocument = {
@@ -124,7 +125,7 @@ export function createActorRoutes(): Router {
         phone,
         address,
         publicKey,
-        privateKey, // Only for demo - in production, store securely
+        privateKey, // Only for demo - in production, stays on client side
         licenseNumber,
         specialization,
         insuranceProvider,
