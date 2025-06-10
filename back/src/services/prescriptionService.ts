@@ -379,7 +379,9 @@ export class PrescriptionService {
         proof: undefined
       });
       
-      const signature = privateKey.sign(Array.from(Hash.sha256(Buffer.from(vcString, 'utf8'))));
+      const messageBuffer = Buffer.from(vcString, 'utf8');
+      const hashBuffer = crypto.createHash('sha256').update(messageBuffer).digest();
+      const signature = privateKey.sign(Array.from(hashBuffer));
       
       return {
         type: 'EcdsaSecp256k1Signature2019',

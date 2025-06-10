@@ -37,24 +37,30 @@ const PrescriptionWorkflow: React.FC = () => {
 
     setIsProcessing(true);
     try {
-      // Use API service to create prescription
-      const prescriptionData = {
+      // Structure data to match backend API expectations
+      const requestData = {
         doctorDid: state.currentActor.did || '',
         patientDid: prescriptionForm.patientDid,
-        diagnosis: 'General medication prescription', // Could be added to form
-        medication: prescriptionForm.medication,
-        dosage: prescriptionForm.dosage,
-        instructions: prescriptionForm.instructions, 
-        duration: '30 days', // Could be added to form
-        urgent: false
+        doctorPrivateKey: state.currentActor.privateKey || 'mock-private-key', // In demo mode
+        prescriptionData: {
+          patientName: patient.name,
+          patientId: patient.id,
+          patientAge: 30, // Mock age - could be added to patient data
+          insuranceProvider: 'Demo Insurance', // Mock insurance
+          diagnosis: 'General medication prescription',
+          medicationName: prescriptionForm.medication,
+          dosage: prescriptionForm.dosage,
+          frequency: 'As prescribed', // Could be added to form
+          duration: prescriptionForm.instructions || '30 days'
+        }
       };
 
-      console.log('Creating prescription with data:', prescriptionData);
-      const response = await apiService.createPrescription(prescriptionData);
+      console.log('Creating prescription with data:', requestData);
+      const response = await apiService.createPrescription(requestData);
       
       if (response.success) {
         // Update local state with the created prescription
-        dispatch({ type: 'ADD_PRESCRIPTION', payload: response.data });
+        dispatch({ type: 'ADD_PRESCRIPTION', payload: response.data.prescriptionVC });
         
         // Reset form
         setPrescriptionForm({
