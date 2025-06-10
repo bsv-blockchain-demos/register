@@ -46,6 +46,9 @@ export interface Actor {
   privateKey?: string; // Stored locally only
   qrCode?: string;
   createdAt: Date;
+  // Doctor-specific properties
+  licenseNumber?: string;
+  specialization?: string;
 }
 
 // ==== Verifiable Credential Types ====
