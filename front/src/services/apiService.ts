@@ -134,17 +134,23 @@ class ApiService {
   /**
    * Create a new prescription
    */
-  async createPrescription(prescriptionData: {
-    patientDid: string;
+  async createPrescription(requestData: {
     doctorDid: string;
-    diagnosis: string;
-    medication: string;
-    dosage: string;
-    instructions: string;
-    duration: string;
-    urgent?: boolean;
+    patientDid: string;
+    doctorPrivateKey: string;
+    prescriptionData: {
+      patientName: string;
+      patientId: string;
+      patientAge: number;
+      insuranceProvider?: string;
+      diagnosis: string;
+      medicationName: string;
+      dosage: string;
+      frequency: string;
+      duration: string;
+    };
   }): Promise<ApiResponse> {
-    return this.request('POST', '/v1/prescriptions', prescriptionData);
+    return this.request('POST', '/v1/prescriptions', requestData);
   }
 
   /**

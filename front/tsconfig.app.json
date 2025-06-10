@@ -3,6 +3,7 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "baseUrl": ".",
     "paths": {
+      "@/*": ["./src/*"],
       "@quarkid/did-core": ["../../packages/did/core/dist/index"],
       "@quarkid/did-core/*": ["../../packages/did/core/dist/*"],
       "@quarkid/did-registry": ["../../packages/did/registry/dist/index"],
