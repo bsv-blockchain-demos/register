@@ -47,10 +47,10 @@ class WalletService {
       
       // Create OP_RETURN script directly using Script class
       const template = new PushDrop(this.walletClient, 'quarkid_did')
-      const protocolID = [SecurityLevels.Silent, 'quarkid_did'] as WalletProtocol
+      const protocolID = [SecurityLevels.Silent, 'quark did'] as WalletProtocol
       const keyID = Utils.toBase64(Random(21))
       const counterparty = 'self'
-      const script = await template.lock([data], protocolID, keyID, counterparty, true, true, 'after')
+      const script = await template.lock([data], protocolID, keyID, counterparty, true, true, 'before')
       
       // 2. Define the transaction outputs for createAction
       const outputsForAction = [
@@ -58,7 +58,7 @@ class WalletService {
           lockingScript: script.toHex(),
           satoshis: 1,
           outputDescription: 'DID Document URI',
-          customInstructions: JSON.stringify({
+          customInstructions: JSON.stringify({ // we must store this info so the user can unlock it again in future.
             protocolID,
             counterparty,
             keyID
@@ -70,6 +70,9 @@ class WalletService {
       const createActionArgs: CreateActionArgs = {
         description: 'Create DID transaction with BSV overlay',
         outputs: outputsForAction,
+        options: {
+          randomizeOutputs: false
+        }
       };
       
       const createResult: CreateActionResult = await this.walletClient.createAction(createActionArgs);
@@ -82,9 +85,8 @@ class WalletService {
 
       console.log('Transaction created and signed with WalletClient. TXID:', createResult.txid);
       
-      // Return the transaction ID - the wallet handles signing automatically
-      return createResult.tx;
-
+      // Return the transaction atomicBEEF - the wallet handles signing automatically
+      return createResult.tx!;
     } catch (error) {
       console.error('Error creating DID transaction with WalletClient:', error);
       throw new Error(`Transaction creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);

@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { ActorType, Actor } from '../types';
 import { useApp } from '../context/AppContext';
-import { encryptionService } from '../services/encryptionService';
 import { qrService } from '../services/qrService';
 import { apiService } from '../services/apiService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +9,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { createWalletClient } from '@/context/wallets';
+import { PrivateKey, ProtoWallet, TopicBroadcaster, Transaction } from '@bsv/sdk';
+import WalletService from '@/services/walletService';
+
+const VITE_PLATFORM_FUNDING_KEY = import.meta.env.VITE_PLATFORM_FUNDING_KEY!
+
+
+const DID_TOPIC_NAME = 'tm_qdid';
 
 const ActorManagement: React.FC = () => {
   const { state, dispatch } = useApp();
@@ -54,12 +61,18 @@ const ActorManagement: React.FC = () => {
 
     setIsCreating(true);
     try {
+
+      // generate local Keys and create a wallet client from them.
+      const privateKey = PrivateKey.fromRandom()
+      const wallet = new ProtoWallet(privateKey)
+
       // Create actor using backend API
       const actorData = {
         name: newActor.name,
         type: newActor.type,
         licenseNumber: newActor.licenseNumber || undefined,
         specialization: newActor.specialization || undefined,
+        identityKey: privateKey.toPublicKey().toString()
       };
 
       const response = await apiService.createActor(actorData);
@@ -67,19 +80,15 @@ const ActorManagement: React.FC = () => {
       if (response.success && response.data) {
         const createdActor = response.data;
         
-        // Generate cryptographic keys for frontend use
-        const keyPair = encryptionService.generateKeyPair();
-        
         // Add keys to the actor object for frontend operations
         const actorWithKeys: Actor = {
           ...createdActor,
-          publicKey: keyPair.publicKey,
-          privateKey: keyPair.privateKey,
+          wallet,
           createdAt: new Date(createdActor.createdAt)
         };
-
+        
         dispatch({ type: 'ADD_ACTOR', payload: actorWithKeys });
-
+        
         // Generate QR code for the actor
         const qrCode = await qrService.generateActorQR(actorWithKeys);
         setQrCodes(prev => ({ ...prev, [actorWithKeys.id]: qrCode }));

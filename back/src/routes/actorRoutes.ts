@@ -50,7 +50,8 @@ export function createActorRoutes(): Router {
    *   address?: string,
    *   licenseNumber?: string,
    *   specialization?: string,
-   *   insuranceProvider?: string
+   *   insuranceProvider?: string,
+   *   identityKey?: string
    * }
    */
   router.post('/', async (req: CustomRequest, res: Response) => {
@@ -63,7 +64,8 @@ export function createActorRoutes(): Router {
         address,
         licenseNumber,
         specialization,
-        insuranceProvider
+        insuranceProvider,
+        identityKey
       } = req.body;
 
       // Validate required fields
@@ -85,11 +87,6 @@ export function createActorRoutes(): Router {
         });
       }
 
-      // Generate key pair for the actor (simplified implementation)
-      const key = PrivateKey.fromRandom()
-      const privateKey = key.toString()
-      const publicKey = key.toPublicKey().toString()
-
       // Create DID document for the actor
       const didDocument = {
         '@context': ['https://www.w3.org/ns/did/v1'],
@@ -98,7 +95,7 @@ export function createActorRoutes(): Router {
           id: '#key-1',
           type: 'EcdsaSecp256k1VerificationKey2019',
           controller: '',
-          publicKeyHex: publicKey
+          publicKeyHex: identityKey
         }],
         authentication: ['#key-1'],
         assertionMethod: ['#key-1']
@@ -108,7 +105,7 @@ export function createActorRoutes(): Router {
       let did = '';
       try {
         // Mock DID creation - in production, would use BsvDidService
-        did = `did:bsv:quarkid-prescription:${crypto.randomBytes(16).toString('hex')}:1`;
+        did = `did:bsv:quarkid-prescription:${identityKey}:1`;
         didDocument.id = did;
         didDocument.verificationMethod[0].controller = did;
       } catch (error) {
@@ -124,8 +121,7 @@ export function createActorRoutes(): Router {
         email,
         phone,
         address,
-        publicKey,
-        privateKey, // Only for demo - in production, stays on client side
+        publicKey: identityKey,
         licenseNumber,
         specialization,
         insuranceProvider,
@@ -151,7 +147,6 @@ export function createActorRoutes(): Router {
 
       // Remove private key from response
       const responseActor = { ...actor };
-      delete responseActor.privateKey;
 
       res.status(201).json({
         success: true,
