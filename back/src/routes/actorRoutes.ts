@@ -101,9 +101,27 @@ export function createActorRoutes(): Router {
         assertionMethod: ['#key-1']
       };
 
-      // Create BSV DID (in production, would use actual BSV DID service)
+      // Create BSV DID
       let did = '';
       try {
+
+        const createRequest = {
+          didDocument,
+          controllerPublicKeyHex: identityKey,
+          feePerKb: 1
+        };
+
+        const didService = new BsvDidService({
+          walletClient: req.walletClient,
+          topic: 'tm_qdid',
+          overlayProviderUrl: 'https://overlay.example.com',
+          feePerKb: 1
+        });
+        const result = await didService.createDID(createRequest);
+        did = result.did;
+        didDocument.id = did;
+        didDocument.verificationMethod[0].controller = did;
+
         // Mock DID creation - in production, would use BsvDidService
         did = `did:bsv:quarkid-prescription:${identityKey}:1`;
         didDocument.id = did;

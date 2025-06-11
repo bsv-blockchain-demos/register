@@ -8,7 +8,15 @@ import {
   LockingScript,
   UnlockingScript,
   TransactionInput,
-  SatoshisPerKilobyte
+  SatoshisPerKilobyte,
+  WalletClient,
+  PushDrop,
+  SecurityLevels,
+  WalletProtocol,
+  Utils,
+  Random,
+  CreateActionArgs,
+  CreateActionResult
 } from '@bsv/sdk';
 
 // Types and interfaces
@@ -53,6 +61,7 @@ export interface ResolveDidSuccessResponse {
 }
 
 export interface BsvOverlayDidRegistryConfig {
+  walletClient: WalletClient;
   signer: BsvSignerFunction;
   utxoProvider: UtxoProviderFunction;
   changeAddressProvider: ChangeAddressProviderFunction;
@@ -125,100 +134,50 @@ export class BsvOverlayDidRegistryService {
     
     // Generate a new key pair for the DID identifier
     const identityKey = request.didDocument.identityKey;
-    
-    // Create transaction
-    const tx = new Transaction();
-    
-    // Create OP_RETURN output with DID document
-    const didDocumentString = JSON.stringify(request.didDocument);
-    
-    // Create OP_RETURN script using BSV SDK methods
-    const opReturnScript = new LockingScript();
-    opReturnScript.writeOpCode(0); // OP_FALSE
-    opReturnScript.writeOpCode(106); // OP_RETURN
-    opReturnScript.writeBin(Array.from(Buffer.from(QKDID_PROTOCOL_MARKER, 'utf8')));
-    opReturnScript.writeBin(Array.from(Buffer.from(OP_CREATE, 'utf8')));
-    opReturnScript.writeBin(Array.from(Buffer.from(this.config.topic, 'utf8')));
-    opReturnScript.writeBin(Array.from(Buffer.from(didDocumentString, 'utf8')));
-    
-    tx.addOutput({
-      lockingScript: opReturnScript,
-      satoshis: 0
-    });
-    
-    // Create BRC-48 identifier output
-    const identifierScript = new P2PKH().lock(identifierPublicKey.toAddress().toString());
-    const brc48OutputIndex = tx.outputs.length; // Get index before adding
-    tx.addOutput({
-      lockingScript: identifierScript,
-      satoshis: 1000 // Minimum dust amount
-    });
-    
-    // Add funding inputs
-    const totalOutputSatoshis = 1000; // Just the BRC-48 output
-    const estimatedFee = 200; // Basic fee estimation
-    const totalNeeded = totalOutputSatoshis + estimatedFee;
-    
-    const utxos = await this.config.utxoProvider(totalNeeded);
-    if (utxos.length === 0) {
-      throw new Error('No UTXOs available for funding the transaction');
-    }
-    
-    let totalInputSatoshis = 0;
-    const inputsToSign: Array<{
-      inputIndex: number;
-      publicKeyHex: string;
-      sighashType?: number;
-    }> = [];
-    
-    for (const utxo of utxos) {
-      const inputTx = Transaction.fromHex(utxo.sourceTransactionHex);
-      tx.addInput({
-        sourceTransaction: inputTx,
-        sourceOutputIndex: utxo.vout
-      });
+
+    const template = new PushDrop(this.config.walletClient, 'quarkid_did')
+      const protocolID = [SecurityLevels.Silent, 'quark did'] as WalletProtocol
+      const keyID = Utils.toBase64(Random(21))
+      const counterparty = 'self'
+      const didAsNumberArr = Utils.toArray(JSON.stringify(request.didDocument), 'utf8')
+      const script = await template.lock([didAsNumberArr], protocolID, keyID, counterparty, true, true)
       
-      totalInputSatoshis += utxo.satoshis;
+      // 2. Define the transaction outputs for createAction
+      const outputsForAction = [
+        {
+          lockingScript: script.toHex(),
+          satoshis: 1,
+          outputDescription: 'DID Document',
+          customInstructions: JSON.stringify({ // we must store this info so the user can unlock it again in future.
+            protocolID,
+            counterparty,
+            keyID
+          })
+        },
+      ];
+
+      // 3. Create the action (unsigned transaction structure)
+      const createActionArgs: CreateActionArgs = {
+        description: 'Create DID transaction with BSV overlay',
+        outputs: outputsForAction,
+        options: {
+          randomizeOutputs: false
+        }
+      };
       
-      if (utxo.publicKeyHex) {
-        inputsToSign.push({
-          inputIndex: tx.inputs.length - 1,
-          publicKeyHex: utxo.publicKeyHex
-        });
-      }
-      
-      if (totalInputSatoshis >= totalNeeded) {
-        break;
-      }
-    }
-    
-    // Add change output if needed
-    const change = totalInputSatoshis - totalNeeded;
-    if (change > 546) { // Dust threshold
-      const changeScript = await this.config.changeAddressProvider();
-      tx.addOutput({
-        lockingScript: LockingScript.fromHex(changeScript),
-        satoshis: change
-      });
-    }
-    
-    // Sign the transaction
-    const signedTx = await this.config.signer(tx, inputsToSign);
-    
-    // Broadcast transaction (simplified - in real implementation would use overlay node)
-    console.log('Transaction created successfully');
+      const createResult: CreateActionResult = await this.config.walletClient.createAction(createActionArgs);
     
     // Generate DID
-    const txid = signedTx.id('hex');
-    const did = `did:bsv:${this.config.topic}:${txid}:${brc48OutputIndex}`;
+    const txid = createResult.txid;
+    const did = `did:bsv:${this.config.topic}:${txid}:0`;
     
     return {
       did,
       didDocument: request.didDocument,
-      transaction: signedTx,
+      transaction: Transaction.fromAtomicBEEF(createResult.tx),
       metadata: {
         txid,
-        vout: brc48OutputIndex,
+        vout: 0,
         protocol: QKDID_PROTOCOL_MARKER,
         operation: OP_CREATE
       }
