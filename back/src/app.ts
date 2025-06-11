@@ -19,13 +19,14 @@ import { createDWNRoutes } from './routes/dwnRoutes';
 const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017"
 const medicalKey = process.env.MEDICAL_LICENSE_CERTIFIER
 const PORT = process.env.PORT || 3000
+const PLATFORM_FUNDING_KEY = process.env.PLATFORM_FUNDING_KEY
 const requiredEnvVars = {
   MEDICAL_LICENSE_CERTIFIER: process.env.MEDICAL_LICENSE_CERTIFIER,
   DID_TOPIC: process.env.DID_TOPIC || 'quarkid-test',
   VC_TOPIC: process.env.VC_TOPIC || 'quarkid-test',
   OVERLAY_PROVIDER_URL: process.env.OVERLAY_PROVIDER_URL || 'https://overlay.test.com',
   DEFAULT_FUNDING_PUBLIC_KEY_HEX: process.env.DEFAULT_FUNDING_PUBLIC_KEY_HEX,
-  FEE_PER_KB: process.env.FEE_PER_KB
+  FEE_PER_KB: process.env.FEE_PER_KB,
 };
 
 if (!medicalKey) {
@@ -100,7 +101,7 @@ async function startServer() {
     app.use(bodyParser.json())
     app.use(cors())
     
-    const walletClient: WalletClient = await createWalletClient(medicalKey) // Explicitly type wallet
+    const walletClient: WalletClient = await createWalletClient(PLATFORM_FUNDING_KEY) // Explicitly type wallet
     const auth = createAuthMiddleware({ 
       wallet: walletClient,
       allowUnauthenticated: true // Allow requests without auth for testing
