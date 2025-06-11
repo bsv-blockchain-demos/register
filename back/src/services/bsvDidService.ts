@@ -20,14 +20,12 @@ import { PrivateKey, PublicKey, Transaction, LockingScript, UnlockingScript, P2P
  * @property topic - Overlay topic identifier for DID operations
  * @property overlayProviderUrl - URL of the BSV overlay node for DID resolution
  * @property feePerKb - Optional transaction fee rate in satoshis per kilobyte
- * @property defaultFundingPublicKeyHex - Optional default funding public key hex
  */
 export interface BsvDidServiceConfig {
   walletClient: WalletClient;
   topic: string;
   overlayProviderUrl: string;
   feePerKb?: number;
-  defaultFundingPublicKeyHex?: string;
 }
 
 /**
@@ -69,7 +67,6 @@ export class BsvDidService {
    * @param config.topic - Overlay topic identifier for DID operations
    * @param config.overlayProviderUrl - URL of the BSV overlay node for DID resolution
    * @param config.feePerKb - Optional transaction fee rate in satoshis per kilobyte
-   * @param config.defaultFundingPublicKeyHex - Optional default funding public key hex
    * 
    * @throws {Error} When wallet client is not provided or invalid
    */
@@ -103,7 +100,7 @@ export class BsvDidService {
    * @private
    */
   private initializeBsvOverlayService(config: BsvDidServiceConfig): void {
-    const feeModel = new SatoshisPerKilobyte(config.feePerKb || 50);
+    const feeModel = new SatoshisPerKilobyte(config.feePerKb || 1);
 
     const signer: BsvSignerFunction = async (
       tx: Transaction,
@@ -220,6 +217,7 @@ export class BsvDidService {
     };
 
     this.bsvOverlayService = new BsvOverlayDidRegistryService({
+      walletClient: config.walletClient,
       topic: config.topic,
       fetchImplementation: fetch as any,
       signer,
