@@ -29,11 +29,9 @@ class EncryptionService {
    * In production, would use proper ECDH key exchange
    */
   encryptWithPublicKey(data: string, publicKey: string): EncryptedData {
-    // Generate a random symmetric key
     const symmetricKey = CryptoJS.lib.WordArray.random(32);
     const iv = CryptoJS.lib.WordArray.random(16);
     
-    // Encrypt the data with AES
     const encrypted = CryptoJS.AES.encrypt(data, symmetricKey, {
       iv: iv,
       mode: CryptoJS.mode.CBC,

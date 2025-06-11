@@ -124,8 +124,7 @@ export class BsvOverlayDidRegistryService {
     console.log('Creating DID with BSV Overlay method...');
     
     // Generate a new key pair for the DID identifier
-    const identifierPrivateKey = PrivateKey.fromRandom();
-    const identifierPublicKey = identifierPrivateKey.toPublicKey();
+    const identityKey = request.didDocument.identityKey;
     
     // Create transaction
     const tx = new Transaction();

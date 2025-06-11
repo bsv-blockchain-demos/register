@@ -1,7 +1,6 @@
 // src/components/DidCreator.tsx
 import React, { useState } from 'react';
 import WalletService from '../services/walletService';
-import type { CreateDidPayload, BackendSubmitPayload, CreateDidResponse } from '../types';
 import { TopicBroadcaster, WalletClient, Transaction } from '@bsv/sdk';
 import type { BroadcastResponse, BroadcastFailure } from '@bsv/sdk';
 

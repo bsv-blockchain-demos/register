@@ -80,6 +80,7 @@ class ApiService {
     licenseNumber?: string;
     specialization?: string;
     insuranceProvider?: string;
+    identityKey?: string;
   }): Promise<ApiResponse> {
     return this.request('POST', '/v1/actors', actorData);
   }
