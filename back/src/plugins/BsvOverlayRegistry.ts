@@ -28,6 +28,12 @@ export class BsvOverlayRegistry {
     this.walletClient = walletClient;
     this.topic = topic;
     this.overlayProvider = overlayProvider;
+    console.log('[BsvOverlayRegistry] Initialized with:', {
+      hasWalletClient: !!walletClient,
+      walletClientType: typeof walletClient,
+      topic,
+      overlayProvider
+    });
   }
 
   /**
@@ -36,6 +42,10 @@ export class BsvOverlayRegistry {
    */
   async createDID(didDocument: DIDDocument): Promise<{ did: string; txid: string }> {
     console.log('[BsvOverlayRegistry] createDID called with document:', JSON.stringify(didDocument, null, 2));
+    
+    if (!this.walletClient) {
+      throw new Error('WalletClient not initialized');
+    }
     
     // Prepare the DID document data for storage
     const didData = {

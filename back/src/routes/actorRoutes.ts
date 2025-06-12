@@ -55,6 +55,9 @@ export function createActorRoutes(): Router {
    * }
    */
   router.post('/', async (req: CustomRequest, res: Response) => {
+    console.log('[ActorRoutes] POST /actors called');
+    console.log('[ActorRoutes] Request body:', JSON.stringify(req.body, null, 2));
+    
     try {
       const {
         name,
@@ -138,6 +141,9 @@ export function createActorRoutes(): Router {
         // Create DID using QuarkID Agent
         try {
           console.log('[ActorRoutes] Calling quarkIdAgentService.createDID()...');
+          console.log('[ActorRoutes] quarkIdAgentService type:', typeof quarkIdAgentService);
+          console.log('[ActorRoutes] quarkIdAgentService.createDID type:', typeof quarkIdAgentService.createDID);
+          
           did = await quarkIdAgentService.createDID();
           console.log(`[ActorRoutes] Created BSV DID for ${name}: ${did}`);
           
@@ -150,12 +156,11 @@ export function createActorRoutes(): Router {
           didDocument.id = did;
           didDocument.verificationMethod[0].controller = did;
           didDocument.verificationMethod[0].id = `${did}#key-1`;
-        } catch (error) {
-          console.error(`[ActorRoutes] Error creating DID for actor:`, error);
-          return res.status(500).json({
-            error: 'Failed to create DID for actor',
-            details: error.message
-          });
+        } catch (didError) {
+          console.error('[ActorRoutes] Error creating DID:', didError);
+          console.error('[ActorRoutes] Stack trace:', (didError as Error).stack);
+          // Continue without DID for now to see what's happening
+          console.warn('[ActorRoutes] Continuing without DID due to error');
         }
       } else {
         // For other actors, use key-based DID

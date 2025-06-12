@@ -135,6 +135,12 @@ export class QuarkIdAgentService {
     
     try {
       console.log('[QuarkIdAgentService] Creating DID through QuarkID Agent...');
+      console.log('[QuarkIdAgentService] Agent initialized:', !!this.agent);
+      console.log('[QuarkIdAgentService] Agent registry available:', !!this.agent?.registry);
+      
+      if (!this.agent || !this.agent.registry) {
+        throw new Error('Agent or registry not properly initialized');
+      }
       
       // Use the agent's registry to create a DID
       // This will internally use our BsvOverlayRegistryAdapter
@@ -157,8 +163,12 @@ export class QuarkIdAgentService {
       return didResponse.did;
       
     } catch (error) {
-      console.error('[QuarkIdAgentService] Error creating DID:', error);
-      throw error;
+      console.error('[QuarkIdAgentService] Error in createDID:', error);
+      console.error('[QuarkIdAgentService] Error stack:', (error as Error).stack);
+      console.error('[QuarkIdAgentService] Error details:', JSON.stringify(error, null, 2));
+      
+      // Re-throw with more context
+      throw new Error(`Failed to create DID: ${(error as Error).message}`);
     }
   }
 
