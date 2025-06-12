@@ -287,20 +287,45 @@ export class EnhancedQuarkIdActorService {
   // These would be replaced with real BSV overlay DID service calls
 
   private async createDidOnBlockchain(didDocument: any): Promise<CreateDidResponse> {
-    // In real implementation, this would use BsvOverlayDidRegistryService
-    // For now, we simulate the response
-    const simulatedTxid = crypto.randomBytes(32).toString('hex');
-    const simulatedVout = 0;
-    const simulatedDid = `did:bsv:${this.overlayConfig.topic}:${simulatedTxid}:${simulatedVout}`;
-
-    console.log(`Simulated DID creation on blockchain: ${simulatedDid}`);
-    
-    return {
-      did: simulatedDid,
-      didDocument: { ...didDocument, id: simulatedDid },
-      txid: simulatedTxid,
-      vout: simulatedVout
-    };
+    // Use QuarkID Agent service for DID creation
+    try {
+      // Create DID using QuarkID Agent (which uses our BsvOverlayRegistryAdapter internally)
+      const agentService = this.getQuarkIdAgentService();
+      const did = await agentService.createDID();
+      
+      console.log(`DID created on blockchain: ${did}`);
+      
+      // Parse the DID to extract txid and vout
+      const didParts = did.split(':');
+      const txid = didParts[3];
+      const vout = parseInt(didParts[4]);
+      
+      return {
+        did,
+        didDocument: { ...didDocument, id: did },
+        txid,
+        vout
+      };
+    } catch (error) {
+      console.error('Error creating DID on blockchain:', error);
+      throw new Error(`Failed to create DID on blockchain: ${error.message}`);
+    }
+  }
+  
+  private getQuarkIdAgentService() {
+    // Get or create QuarkID Agent service instance
+    // This should be injected via constructor in production
+    const { QuarkIdAgentService } = require('./quarkIdAgentService');
+    return new QuarkIdAgentService({
+      mongodb: {
+        uri: process.env.MONGODB_URI || 'mongodb://localhost:27017',
+        dbName: this.db.databaseName
+      },
+      walletClient: this.walletClient,
+      db: this.db,
+      overlayConfig: this.overlayConfig,
+      overlayProvider: this.overlayConfig.endpoint
+    });
   }
 
   private async updateDidOnBlockchain(did: string, didDocument: any): Promise<{

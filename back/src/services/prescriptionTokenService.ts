@@ -60,7 +60,7 @@ export interface PrescriptionToken {
  * Enhanced prescription token service with real BSV overlay integration
  */
 export class PrescriptionTokenService {
-  private bsvDidService: any;
+  private quarkIdAgentService: any;
   private vcService: any;
   private tokensCollection: any;
 
@@ -75,17 +75,18 @@ export class PrescriptionTokenService {
     this.tokensCollection = db.collection('prescription_tokens');
     this.vcService = {};
     
-    // Initialize BSV overlay DID service with real configuration
-    const bsvConfig: any = {
-      signer: this.createBsvSigner(),
-      utxoProvider: this.createUtxoProvider(),
-      changeAddressProvider: this.createChangeAddressProvider(),
-      overlayNodeEndpoint: overlayConfig.endpoint,
-      topic: overlayConfig.topic,
-      feeModel: undefined // Will use default
-    };
-    
-    this.bsvDidService = {};
+    // Initialize QuarkID Agent service for DID operations
+    const { QuarkIdAgentService } = require('./quarkIdAgentService');
+    this.quarkIdAgentService = new QuarkIdAgentService({
+      mongodb: {
+        uri: process.env.MONGODB_URI || 'mongodb://localhost:27017',
+        dbName: this.db.databaseName
+      },
+      walletClient: this.walletClient,
+      db: this.db,
+      overlayConfig: this.overlayConfig,
+      overlayProvider: this.overlayConfig.endpoint
+    });
   }
 
   /**
@@ -311,7 +312,7 @@ export class PrescriptionTokenService {
   }
 
   private async createPrescriptionDid(prescriptionVC: VerifiableCredential): Promise<any> {
-    return { did: crypto.randomUUID() };
+    return await this.quarkIdAgentService.createDid(prescriptionVC);
   }
 
   private async createTokenTransaction(prescriptionData: any, prescriptionDid: string): Promise<any> {
@@ -412,26 +413,6 @@ export class PrescriptionTokenService {
     // to prevent double-spending and mark the prescription as completed
     console.log(`Finalizing token: ${token.txid}:${token.vout}`);
   }
-
-  // BSV SDK integration helpers
-  private createBsvSigner(): any {
-    return async (transaction: any, inputsToSign: Array<any>) => {
-      // Implementation would use wallet client to sign inputs
-      return transaction;
-    };
-  }
-
-  private createUtxoProvider(): any {
-    return async (amountNeeded: number, specificOutpoint?: any) => {
-      // Implementation would fetch UTXOs from wallet client
-      return [];
-    };
-  }
-
-  private createChangeAddressProvider(): any {
-    return async () => {
-      // Implementation would get change address from wallet client
-      return '';
-    };
-  }
+  
+  // BSV SDK integration helpers have been removed - now handled by QuarkIdAgentService
 }
