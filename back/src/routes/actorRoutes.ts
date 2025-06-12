@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrivateKey, WalletClient } from '@bsv/sdk';
 import { Db } from 'mongodb';
-import { BsvDidService } from '../services/bsvDidService';
 import crypto from 'crypto';
 
 // Extend Request interface to include our custom properties
@@ -11,6 +10,7 @@ interface CustomRequest extends Request {
   body: any;
   params: any;
   query: any;
+  quarkIdAgentService?: any;
 }
 
 /**
@@ -87,6 +87,26 @@ export function createActorRoutes(): Router {
         });
       }
 
+      // Generate identityKey if not provided - ensures valid controllerPublicKeyHex for BSV DID creation
+      let finalIdentityKey = identityKey;
+      if (!finalIdentityKey) {
+        try {
+          // Generate a new public key using the wallet client for this actor
+          const publicKeyResult = await req.walletClient.getPublicKey({
+            protocolID: [1, 'BSV DID Actor'], // Security level 1, protocol for actor DID
+            counterparty: 'self', // For self (actor identity)
+            keyID: `actor-${name}-${Date.now()}` // Unique key ID for this actor
+          });
+          finalIdentityKey = publicKeyResult.publicKey;
+          console.log(`[ActorRoutes] Generated new identityKey for actor ${name}: ${finalIdentityKey}`);
+        } catch (error) {
+          console.error(`[ActorRoutes] Error generating identityKey for actor:`, error);
+          return res.status(500).json({
+            error: 'Failed to generate identity key for actor'
+          });
+        }
+      }
+
       // Create DID document for the actor
       const didDocument = {
         '@context': ['https://www.w3.org/ns/did/v1'],
@@ -95,39 +115,54 @@ export function createActorRoutes(): Router {
           id: '#key-1',
           type: 'EcdsaSecp256k1VerificationKey2019',
           controller: '',
-          publicKeyHex: identityKey
+          publicKeyHex: finalIdentityKey
         }],
         authentication: ['#key-1'],
         assertionMethod: ['#key-1']
       };
 
-      // Create BSV DID
+      console.log(`[ActorRoutes] Creating actor: ${name} (${type})`);
+      
       let did = '';
-      try {
+      
+      if (type === 'patient' || type === 'doctor' || type === 'pharmacy' || type === 'insurance') {
+        // For medical actors, generate a BSV DID using QuarkIdAgentService
+        const quarkIdAgentService = req.quarkIdAgentService;
+        console.log('[ActorRoutes] QuarkIdAgentService available:', !!quarkIdAgentService);
+        
+        if (!quarkIdAgentService) {
+          console.error('[ActorRoutes] QuarkIdAgentService not found in request');
+          return res.status(500).json({ error: 'QuarkIdAgentService not available' });
+        }
 
-        const createRequest = {
-          didDocument,
-          controllerPublicKeyHex: identityKey,
-          feePerKb: 1
-        };
-
-        const didService = new BsvDidService({
-          walletClient: req.walletClient,
-          topic: 'tm_qdid',
-          overlayProviderUrl: 'https://overlay.example.com',
-          feePerKb: 1
-        });
-        const result = await didService.createDID(createRequest);
-        did = result.did;
+        // Create DID using QuarkID Agent
+        try {
+          console.log('[ActorRoutes] Calling quarkIdAgentService.createDID()...');
+          did = await quarkIdAgentService.createDID();
+          console.log(`[ActorRoutes] Created BSV DID for ${name}: ${did}`);
+          
+          if (!did) {
+            console.error('[ActorRoutes] DID creation returned empty result');
+            throw new Error('DID creation returned empty result');
+          }
+          
+          // Update the DID document with the generated DID
+          didDocument.id = did;
+          didDocument.verificationMethod[0].controller = did;
+          didDocument.verificationMethod[0].id = `${did}#key-1`;
+        } catch (error) {
+          console.error(`[ActorRoutes] Error creating DID for actor:`, error);
+          return res.status(500).json({
+            error: 'Failed to create DID for actor',
+            details: error.message
+          });
+        }
+      } else {
+        // For other actors, use key-based DID
+        did = `did:key:${finalIdentityKey}`;
         didDocument.id = did;
         didDocument.verificationMethod[0].controller = did;
-
-        // Mock DID creation - in production, would use BsvDidService
-        did = `did:bsv:quarkid-prescription:${identityKey}:1`;
-        didDocument.id = did;
-        didDocument.verificationMethod[0].controller = did;
-      } catch (error) {
-        console.warn('[ActorRoutes] DID creation failed, proceeding without DID:', error.message);
+        didDocument.verificationMethod[0].id = `${did}#key-1`;
       }
 
       // Create actor
@@ -139,7 +174,7 @@ export function createActorRoutes(): Router {
         email,
         phone,
         address,
-        publicKey: identityKey,
+        publicKey: finalIdentityKey,
         licenseNumber,
         specialization,
         insuranceProvider,

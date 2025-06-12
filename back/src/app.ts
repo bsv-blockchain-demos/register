@@ -6,12 +6,15 @@ import { PrivateKey, WalletClient, KeyDeriver } from '@bsv/sdk';
 import { WalletStorageManager, Services, Wallet, StorageClient } from '@bsv/wallet-toolbox-client';
 import { createAuthMiddleware } from '@bsv/auth-express-middleware';
 import { QuarkIdActorService } from './services/quarkIdActorService';
+import { QuarkIdAgentService } from './services/quarkIdAgentService';
+import { PrescriptionTokenService } from './services/prescriptionTokenService';
 import cors from 'cors'
-import { BsvDidService } from './services/bsvDidService';
-import { BsvVcService } from './services/bsvVcService';
-import vcRoutes from './routes/vcs';
+import { createDidRoutes } from './routes/didRoutes';
+import { createVcRoutes } from './routes/vcRoutes';
 import { createActorRoutes } from './routes/actorRoutes';
+import { createStatusRoutes } from './routes/statusRoutes';
 import { createPrescriptionRoutes } from './routes/prescriptionRoutes';
+import { createRegisterRoutes } from './routes/registerRoutes';
 import { createTokenRoutes } from './routes/tokenRoutes';
 import { createDWNRoutes } from './routes/dwnRoutes';
 
@@ -76,7 +79,7 @@ export const createWalletClient = async (key: string): Promise<WalletClient> => 
     const rootKey = PrivateKey.fromHex(key)
     const keyDeriver = new KeyDeriver(rootKey)
     const storage = new WalletStorageManager(keyDeriver.identityKey)
-    const chain = 'main'
+    const chain = 'main' // Reverted back to 'main' to resolve build issues first
     const services = new Services(chain)
     const wallet = new Wallet({
         chain,
@@ -92,8 +95,8 @@ export const createWalletClient = async (key: string): Promise<WalletClient> => 
 
 let db: Db
 let quarkIdActorService: QuarkIdActorService
-let bsvDidService: BsvDidService
-let bsvVcService: BsvVcService
+let quarkIdAgentService: QuarkIdAgentService
+let prescriptionTokenService: PrescriptionTokenService
 
 async function startServer() {
     const app = express();
@@ -121,26 +124,26 @@ async function startServer() {
       // Agent and DidRegistry will be added later when properly configured
     );
 
-    // Initialize BSV DID Service
-    const didTopic = process.env.DID_TOPIC || 'quarkid-test';
-    const vcTopic = process.env.VC_TOPIC || 'quarkid-test';
-    const overlayProviderUrl = process.env.OVERLAY_PROVIDER_URL || 'https://overlay.test.com';
-    const feePerKb = parseInt(process.env.FEE_PER_KB || '50');
-
-    bsvDidService = new BsvDidService({
-      walletClient,
-      topic: didTopic,
-      overlayProviderUrl,
-      feePerKb
+    // Initialize QuarkIdAgentService
+    quarkIdAgentService = new QuarkIdAgentService({
+      mongodb: {
+        uri: process.env.MONGODB_URI || 'mongodb://localhost:27017',
+        dbName: 'quarkid'
+      },
+      walletClient: walletClient,
+      overlayProvider: process.env.OVERLAY_PROVIDER_URL || 'https://overlay.test.com',
+      dwnUrl: process.env.DWN_URL
     });
 
-    // Initialize BSV VC Service
-    bsvVcService = new BsvVcService({
+    // Initialize Prescription Token Service
+    prescriptionTokenService = new PrescriptionTokenService(
+      db,
       walletClient,
-      topic: vcTopic,
-      overlayProviderUrl,
-      feePerKb
-    });
+      {
+        endpoint: process.env.OVERLAY_PROVIDER_URL || 'https://overlay.test.com',
+        topic: process.env.PRESCRIPTION_TOPIC || 'prescriptions'
+      }
+    );
 
     // Logging middleware to print request path and body
     app.use((req, res, next) => {
@@ -167,8 +170,8 @@ async function startServer() {
         req.db = db;
         req.walletClient = walletClient
         req.quarkIdActorService = quarkIdActorService
-        req.bsvDidService = bsvDidService
-        req.bsvVcService = bsvVcService
+        req.quarkIdAgentService = quarkIdAgentService
+        req.prescriptionTokenService = prescriptionTokenService
         next();
     })
 
@@ -179,8 +182,8 @@ async function startServer() {
         version: '1.0.0',
         status: 'running',
         mongodb: !!db ? 'connected' : 'not connected',
-        bsvDidService: !!bsvDidService ? 'connected' : 'not connected',
-        bsvVcService: !!bsvVcService ? 'connected' : 'not connected',
+        quarkIdAgentService: !!quarkIdAgentService ? 'connected' : 'not connected',
+        prescriptionTokenService: !!prescriptionTokenService ? 'connected' : 'not connected',
         endpoints: {
           actors: '/v1/actors (GET, POST)',
           prescriptions: '/v1/prescriptions (GET, POST)',
@@ -221,49 +224,24 @@ async function startServer() {
         res.json(did);
     });
 
-    app.get("/v1/dids", async (req, res) => {
-        if (!req.bsvDidService) {
-          res.status(503).json({ error: 'BSV DID Service not available' });
-          return;
-        }
-        const dids = await req.bsvDidService.getDids();
-        res.json(dids);
-    });
-
-    app.post("/v1/dids", async (req, res) => {
-        if (!req.bsvDidService) {
-          res.status(503).json({ error: 'BSV DID Service not available' });
-          return;
-        }
-        const did = await req.bsvDidService.createDid(req.body);
-        res.json(did);
-    });
-
-    // Mount VC routes
-    app.use('/v1/vcs', vcRoutes);
-
-    app.get("/v1/vcs", async (req, res) => {
-        if (!req.bsvVcService) {
-          res.status(503).json({ error: 'BSV VC Service not available' });
-          return;
-        }
-        const vcs = await req.bsvVcService.getVcs();
-        res.json(vcs);
-    });
-
-    app.post("/v1/vcs", async (req, res) => {
-        if (!req.bsvVcService) {
-          res.status(503).json({ error: 'BSV VC Service not available' });
-          return;
-        }
-        const vc = await req.bsvVcService.createVc(req.body);
-        res.json(vc);
-    });
-
+    app.use('/v1/dids', createDidRoutes(quarkIdAgentService));
+    app.use('/v1/vcs', createVcRoutes(quarkIdAgentService));
     app.use('/v1/actors', createActorRoutes());
     app.use('/v1/prescriptions', createPrescriptionRoutes());
     app.use('/v1/tokens', createTokenRoutes());
     app.use('/v1/dwn', createDWNRoutes());
+    app.use('/v1/status', createStatusRoutes(db));
+    app.use('/register', createRegisterRoutes(db));
+
+    app.get('/health', (req, res) => {
+      res.json({
+        status: 'ok',
+        mongodb: !!db ? 'connected' : 'not connected',
+        walletClient: !!walletClient ? 'connected' : 'not connected',
+        quarkIdAgentService: !!quarkIdAgentService ? 'connected' : 'not connected',
+        prescriptionTokenService: !!prescriptionTokenService ? 'connected' : 'not connected'
+      });
+    });
 
     app.listen(port, () => {
         console.log(`Server started on port ${port}`);
