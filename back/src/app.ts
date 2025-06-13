@@ -211,6 +211,17 @@ async function startServer() {
       });
     });
 
+    app.use('/v1/dids', createDidRoutes(quarkIdAgentService));
+    app.use('/v1/vcs', createVcRoutes(quarkIdAgentService));
+    app.use('/v1/actors', createActorRoutes());
+    app.use('/v1/prescriptions', createPrescriptionRoutes());
+    app.use('/v1/tokens', createTokenRoutes());
+    app.use('/v1/dwn', createDWNRoutes());
+    app.use('/v1/status', createStatusRoutes(db));
+    app.use('/register', createRegisterRoutes(db));
+
+    // This catch-all route MUST come after all other /v1/* routes
+    // Otherwise it will intercept requests meant for specific routes
     app.get("/v1/:subject", async (req, res) => {
         if (!db) {
           res.status(503).json({ error: 'MongoDB not available' });
@@ -223,15 +234,6 @@ async function startServer() {
         const did = transform(record as IdentityRecord);
         res.json(did);
     });
-
-    app.use('/v1/dids', createDidRoutes(quarkIdAgentService));
-    app.use('/v1/vcs', createVcRoutes(quarkIdAgentService));
-    app.use('/v1/actors', createActorRoutes());
-    app.use('/v1/prescriptions', createPrescriptionRoutes());
-    app.use('/v1/tokens', createTokenRoutes());
-    app.use('/v1/dwn', createDWNRoutes());
-    app.use('/v1/status', createStatusRoutes(db));
-    app.use('/register', createRegisterRoutes(db));
 
     app.get('/health', (req, res) => {
       res.json({
