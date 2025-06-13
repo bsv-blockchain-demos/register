@@ -31,9 +31,8 @@ export const ActorManagement = () => {
       const response = await apiService.getActors();
       if (response.success && response.data) {
         const actors = response.data.filter((actor: Actor) => actor.did);
-        actors.forEach((actor: Actor) => {
-          dispatch({ type: 'ADD_ACTOR', payload: actor });
-        });
+        // Use SET_ACTORS to replace the entire actors array
+        dispatch({ type: 'SET_ACTORS', payload: actors });
       }
     } catch (error) {
       console.error('Failed to load actors:', error);

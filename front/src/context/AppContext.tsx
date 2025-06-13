@@ -14,6 +14,7 @@ import type {
 // Actions
 type AppAction =
   | { type: 'SET_CURRENT_ACTOR'; payload: Actor | null }
+  | { type: 'SET_ACTORS'; payload: Actor[] }
   | { type: 'ADD_ACTOR'; payload: Actor }
   | { type: 'UPDATE_ACTOR'; payload: Actor }
   | { type: 'REMOVE_ACTOR'; payload: string } // payload is actor id
@@ -44,13 +45,25 @@ function appReducer(state: AppState, action: AppAction): AppState {
         currentActor: action.payload
       };
 
-    case 'ADD_ACTOR':
+    case 'SET_ACTORS':
+      return {
+        ...state,
+        actors: action.payload
+      };
+
+    case 'ADD_ACTOR': {
+      // Check if actor already exists to prevent duplicates
+      const exists = state.actors.some(actor => actor.id === action.payload.id);
+      if (exists) {
+        return state;
+      }
       return {
         ...state,
         actors: [...state.actors, action.payload]
       };
+    }
 
-    case 'UPDATE_ACTOR':
+    case 'UPDATE_ACTOR': {
       return {
         ...state,
         actors: state.actors.map(actor => 
@@ -60,8 +73,9 @@ function appReducer(state: AppState, action: AppAction): AppState {
           ? action.payload 
           : state.currentActor
       };
+    }
 
-    case 'REMOVE_ACTOR':
+    case 'REMOVE_ACTOR': {
       return {
         ...state,
         actors: state.actors.filter(actor => actor.id !== action.payload),
@@ -70,40 +84,46 @@ function appReducer(state: AppState, action: AppAction): AppState {
           ? null 
           : state.currentActor
       };
+    }
 
-    case 'ADD_PRESCRIPTION':
+    case 'ADD_PRESCRIPTION': {
       return {
         ...state,
         prescriptions: [...state.prescriptions, action.payload]
       };
+    }
 
-    case 'UPDATE_PRESCRIPTION':
+    case 'UPDATE_PRESCRIPTION': {
       return {
         ...state,
         prescriptions: state.prescriptions.map(prescription =>
           prescription.id === action.payload.id ? action.payload : prescription
         )
       };
+    }
 
-    case 'ADD_DISPENSATION':
+    case 'ADD_DISPENSATION': {
       return {
         ...state,
         dispensations: [...state.dispensations, action.payload]
       };
+    }
 
-    case 'ADD_CONFIRMATION':
+    case 'ADD_CONFIRMATION': {
       return {
         ...state,
         confirmations: [...state.confirmations, action.payload]
       };
+    }
 
-    case 'ADD_TOKEN':
+    case 'ADD_TOKEN': {
       return {
         ...state,
         tokens: [...state.tokens, action.payload]
       };
+    }
 
-    case 'UPDATE_TOKEN':
+    case 'UPDATE_TOKEN': {
       return {
         ...state,
         tokens: state.tokens.map(token =>
@@ -112,12 +132,15 @@ function appReducer(state: AppState, action: AppAction): AppState {
             : token
         )
       };
+    }
 
-    case 'RESET_STATE':
+    case 'RESET_STATE': {
       return initialState;
+    }
 
-    default:
+    default: {
       return state;
+    }
   }
 }
 
