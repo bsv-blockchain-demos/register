@@ -1,25 +1,20 @@
 // src/components/ActorManagement.tsx
-import React, { useState, useEffect, useCallback } from 'react';
-import type { ActorType, Actor } from '../types';
-import { useApp } from '../context/AppContext';
-import { qrService } from '../services/qrService';
-import { apiService } from '../services/apiService';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { createWalletClient } from '@/context/wallets';
-import { PrivateKey, ProtoWallet, TopicBroadcaster, Transaction } from '@bsv/sdk';
-import WalletService from '@/services/walletService';
+import { PrivateKey, ProtoWallet } from '@bsv/sdk';
+import { apiService } from '../services/apiService';
+import { qrService } from '../services/qrService';
+import { useApp } from '../context/AppContext';
+import './ActorManagement.css';
+import type { Actor, ActorType } from '../types';
 
-const VITE_PLATFORM_FUNDING_KEY = import.meta.env.VITE_PLATFORM_FUNDING_KEY!
-
-
-const DID_TOPIC_NAME = 'tm_qdid';
-
-const ActorManagement: React.FC = () => {
+export const ActorManagement = () => {
   const { state, dispatch } = useApp();
+  const [qrCodes, setQrCodes] = useState<Record<string, string>>({});
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newActor, setNewActor] = useState({
     name: '',
@@ -27,12 +22,10 @@ const ActorManagement: React.FC = () => {
     licenseNumber: '',
     specialization: ''
   });
-  const [isCreating, setIsCreating] = useState(false);
-  const [qrCodes, setQrCodes] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   // Load actors from backend on component mount
-  const loadActors = useCallback(async () => {
+  const loadActors = async () => {
     setIsLoading(true);
     try {
       const response = await apiService.getActors();
@@ -47,11 +40,11 @@ const ActorManagement: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [dispatch]);
+  };
 
   useEffect(() => {
     loadActors();
-  }, [loadActors]);
+  }, []);
 
   const handleCreateActor = async () => {
     if (!newActor.name.trim()) {
@@ -59,7 +52,7 @@ const ActorManagement: React.FC = () => {
       return;
     }
 
-    setIsCreating(true);
+    setIsLoading(true);
     try {
 
       // generate local Keys and create a wallet client from them.
@@ -110,12 +103,43 @@ const ActorManagement: React.FC = () => {
       console.error('Actor creation failed:', error);
       alert(`Failed to create actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      setIsCreating(false);
+      setIsLoading(false);
     }
   };
 
   const handleSelectActor = (actor: Actor) => {
     dispatch({ type: 'SET_CURRENT_ACTOR', payload: actor });
+  };
+
+  const handleDeleteActor = async (actor: Actor) => {
+    if (!window.confirm(`Are you sure you want to delete ${actor.name} (${actor.type})?`)) {
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await apiService.deleteActor(actor.id);
+      
+      if (response.success) {
+        // Remove the deleted actor from the state
+        dispatch({ type: 'REMOVE_ACTOR', payload: actor.id });
+        // Clear current actor if it was deleted
+        if (state.currentActor?.id === actor.id) {
+          dispatch({ type: 'SET_CURRENT_ACTOR', payload: null });
+        }
+        
+        // Refresh the actor list to ensure consistency
+        await loadActors();
+      } else {
+        throw new Error(response.error || 'Failed to delete actor');
+      }
+    } catch (error) {
+      console.error('Error deleting actor:', error);
+      alert(`Failed to delete actor: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const generateQRCode = async (actor: Actor) => {
@@ -156,16 +180,15 @@ const ActorManagement: React.FC = () => {
                   <Label htmlFor="actor-name">Name</Label>
                   <Input
                     id="actor-name"
-                    type="text"
                     value={newActor.name}
-                    onChange={(e) => setNewActor(prev => ({ ...prev, name: e.target.value }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActor(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="Enter actor name"
                   />
                 </div>
 
                 <div className="form-group">
                   <Label htmlFor="actor-type">Type</Label>
-                  <Select value={newActor.type} onValueChange={(value) => setNewActor(prev => ({ ...prev, type: value as ActorType }))}>
+                  <Select value={newActor.type} onValueChange={(value: string) => setNewActor(prev => ({ ...prev, type: value as ActorType }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select actor type" />
                     </SelectTrigger>
@@ -183,9 +206,8 @@ const ActorManagement: React.FC = () => {
                     <Label htmlFor="license-number">License Number</Label>
                     <Input
                       id="license-number"
-                      type="text"
                       value={newActor.licenseNumber}
-                      onChange={(e) => setNewActor(prev => ({ ...prev, licenseNumber: e.target.value }))}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActor(prev => ({ ...prev, licenseNumber: e.target.value }))}
                       placeholder="Enter license number"
                     />
                   </div>
@@ -196,10 +218,9 @@ const ActorManagement: React.FC = () => {
                     <Label htmlFor="specialization">Specialization</Label>
                     <Input
                       id="specialization"
-                      type="text"
                       value={newActor.specialization}
-                      onChange={(e) => setNewActor(prev => ({ ...prev, specialization: e.target.value }))}
-                      placeholder="e.g., Cardiology, General Practice"
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActor(prev => ({ ...prev, specialization: e.target.value }))}
+                      placeholder="Enter specialization"
                     />
                   </div>
                 )}
@@ -209,9 +230,9 @@ const ActorManagement: React.FC = () => {
                 <Button
                   className="primary-button"
                   onClick={handleCreateActor}
-                  disabled={isCreating || !newActor.name.trim()}
+                  disabled={isLoading || !newActor.name.trim()}
                 >
-                  {isCreating ? '⏳ Creating...' : '✅ Create Actor'}
+                  {isLoading ? '⏳ Creating...' : '✅ Create Actor'}
                 </Button>
               </div>
             </CardContent>
@@ -270,6 +291,12 @@ const ActorManagement: React.FC = () => {
                   >
                     📱 QR Code
                   </Button>
+                  <Button
+                    className="delete-button"
+                    onClick={() => handleDeleteActor(actor)}
+                  >
+                    🗑️ Delete
+                  </Button>
                 </div>
 
                 {qrCodes[actor.id] && (
@@ -319,5 +346,3 @@ const ActorManagement: React.FC = () => {
     </div>
   );
 };
-
-export default ActorManagement;

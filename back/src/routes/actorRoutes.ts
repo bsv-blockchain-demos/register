@@ -228,15 +228,19 @@ export function createActorRoutes(): Router {
    *   - active?: boolean - Filter by active status
    */
   router.get('/', async (req: CustomRequest, res: Response) => {
+    console.log('[ActorRoutes] GET /actors - Start');
     try {
       const { type, active } = req.query;
+      console.log('[ActorRoutes] Query params:', { type, active });
 
       if (!req.db) {
+        console.log('[ActorRoutes] ERROR: Database not available on request object');
         return res.status(503).json({
           error: 'Database not available'
         });
       }
 
+      console.log('[ActorRoutes] Database connection available');
       let query: any = {};
 
       if (type) {
@@ -247,17 +251,24 @@ export function createActorRoutes(): Router {
         query.isActive = active === 'true';
       }
 
+      console.log('[ActorRoutes] MongoDB query:', query);
+      
       const actors = await req.db
         .collection('actors')
         .find(query, { projection: { privateKey: 0 } }) // Exclude private keys
         .sort({ createdAt: -1 })
         .toArray();
 
-      res.json({
+      console.log('[ActorRoutes] Found actors:', actors.length);
+      
+      const response = {
         success: true,
         data: actors,
         count: actors.length
-      });
+      };
+      
+      console.log('[ActorRoutes] Sending response:', JSON.stringify(response).substring(0, 200) + '...');
+      res.json(response);
 
     } catch (error) {
       console.error('[ActorRoutes] Error retrieving actors:', error);
@@ -412,6 +423,67 @@ export function createActorRoutes(): Router {
       console.error('[ActorRoutes] Error deactivating actor:', error);
       res.status(500).json({
         error: 'Failed to deactivate actor',
+        details: error.message
+      });
+    }
+  });
+
+  /**
+   * DELETE /actors/:id - Delete an actor by ID
+   */
+  router.delete('/:id', async (req: CustomRequest, res: Response) => {
+    console.log('[ActorRoutes] DELETE /actors/:id - Start');
+    try {
+      const { id } = req.params;
+      console.log('[ActorRoutes] Deleting actor with id:', id);
+
+      if (!req.db) {
+        console.log('[ActorRoutes] ERROR: Database not available');
+        return res.status(503).json({
+          error: 'Database not available'
+        });
+      }
+
+      // First check if the actor exists
+      const actor = await req.db
+        .collection('actors')
+        .findOne({ id });
+
+      if (!actor) {
+        console.log('[ActorRoutes] Actor not found:', id);
+        return res.status(404).json({
+          error: 'Actor not found'
+        });
+      }
+
+      // Delete the actor
+      const result = await req.db
+        .collection('actors')
+        .deleteOne({ id });
+
+      console.log('[ActorRoutes] Delete result:', result);
+
+      if (result.deletedCount === 0) {
+        return res.status(500).json({
+          error: 'Failed to delete actor'
+        });
+      }
+
+      res.json({
+        success: true,
+        message: `Actor ${actor.name} (${actor.type}) deleted successfully`,
+        deletedActor: {
+          id: actor.id,
+          name: actor.name,
+          type: actor.type,
+          did: actor.did
+        }
+      });
+
+    } catch (error) {
+      console.error('[ActorRoutes] Error deleting actor:', error);
+      res.status(500).json({
+        error: 'Failed to delete actor',
         details: error.message
       });
     }

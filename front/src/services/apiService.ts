@@ -50,10 +50,29 @@ class ApiService {
       console.log(`[ApiService] ${method} ${url}`, data);
 
       const response = await fetch(url, config);
-      const result = await response.json();
+      
+      // Check if response has content
+      const contentType = response.headers.get('content-type');
+      const hasJson = contentType && contentType.includes('application/json');
+      
+      let result: any = null;
+      
+      if (hasJson) {
+        try {
+          result = await response.json();
+        } catch (jsonError) {
+          console.error(`[ApiService] Failed to parse JSON response:`, jsonError);
+          throw new Error('Invalid JSON response from server');
+        }
+      }
 
       if (!response.ok) {
-        throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(result?.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // If no result was parsed, create a default success response
+      if (!result) {
+        result = { success: true };
       }
 
       return result;
@@ -61,7 +80,7 @@ class ApiService {
       console.error(`[ApiService] Error in ${method} ${endpoint}:`, error);
       return {
         success: false,
-        error: 'Network error occurred'
+        error: error instanceof Error ? error.message : 'Network error occurred'
       };
     }
   }
@@ -121,6 +140,13 @@ class ApiService {
    */
   async updateActor(id: string, updateData: any): Promise<ApiResponse> {
     return this.request('PUT', `/v1/actors/${id}`, updateData);
+  }
+
+  /**
+   * Delete an actor by ID
+   */
+  async deleteActor(id: string): Promise<ApiResponse> {
+    return this.request('DELETE', `/v1/actors/${id}`);
   }
 
   /**
