@@ -1,5 +1,5 @@
 import { DIDDocument } from '@quarkid/did-core';
-import { WalletClient, CreateActionArgs, CreateActionResult } from '@bsv/sdk';
+import { WalletClient, CreateActionArgs, CreateActionResult, Utils, PushDrop, SecurityLevels, WalletProtocol, Random } from '@bsv/sdk';
 
 /**
  * BSV Overlay Registry for QuarkID Agent
@@ -59,45 +59,41 @@ export class BsvOverlayRegistry {
     // Prepare the DID document for storage
     const didDocumentString = JSON.stringify(didData);
     
-    // Create the action for the wallet
-    // The wallet will handle all UTXO selection, key generation, and signing
+    const data = Utils.toArray(didDocumentString, 'utf8')
+    const template = new PushDrop(this.walletClient, 'quarkid_did')
+    const protocolID = [SecurityLevels.Silent, 'quark did'] as WalletProtocol
+    const keyID = Utils.toBase64(Random(21))
+    const counterparty = 'self'
+    const script = await template.lock([data], protocolID, keyID, counterparty, true, true, 'before')
+    
+    // 2. Define the transaction outputs for createAction
+    const outputsForAction = [
+      {
+        lockingScript: script.toHex(),
+        satoshis: 1,
+        outputDescription: 'DID Document URI',
+        basket: 'quarkid',
+        customInstructions: JSON.stringify({ // we must store this info so the user can unlock it again in future.
+          protocolID,
+          counterparty,
+          keyID
+        })
+      },
+    ];
+
+    // BRC-100 standard labels
+    const labels = ['quarkid', 'did', 'create'];
+
+    // 3. Create the action (unsigned transaction structure)
     const createActionArgs: CreateActionArgs = {
-      description: `Create DID on BSV overlay (topic: ${this.topic})`,
-      
-      // BRC-22 compliant overlay transaction outputs
-      outputs: [
-        {
-          // OP_RETURN output with DID document (BRC-22 format)
-          // Note: lockingScript should be hex-encoded
-          lockingScript: this.buildOpReturnScript(this.topic, didDocumentString),
-          satoshis: 0,
-          outputDescription: 'DID Document in overlay'
-        },
-        {
-          // P2PKH output as DID identifier (BRC-52 compatible)
-          // Wallet will replace placeholder with actual pubkey hash
-          lockingScript: '76a914' + '00'.repeat(20) + '88ac', // OP_DUP OP_HASH160 <20 bytes> OP_EQUALVERIFY OP_CHECKSIG
-          satoshis: 1000, // Dust limit
-          outputDescription: 'DID identifier',
-          // Custom instructions for wallet to generate new key
-          customInstructions: JSON.stringify({
-            keyDerivation: {
-              purpose: 'did-identifier',
-              counterparty: 'self'
-            }
-          })
-        }
-      ],
-      
-      // BRC-100 standard labels
-      labels: ['quarkid', 'did', 'create'],
-      
-      // Optional: specify which inputs to use (wallet decides if not specified)
-      // inputs: [],
-      
-      // Let wallet determine the fee
-      // feeModel: { satoshisPerKb: 1 }
+      description: 'Create DID transaction with BSV overlay',
+      outputs: outputsForAction,
+      options: {
+        randomizeOutputs: false
+      },
+      labels
     };
+      
 
     try {
       console.log('[BsvOverlayRegistry] Calling walletClient.createAction...');

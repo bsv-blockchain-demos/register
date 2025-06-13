@@ -44,8 +44,6 @@ class WalletService {
     try {
       // 1. Create PushDrop Script with the didDocumentUri
       const data = PublicKey.fromString(didDocumentUri).encode(true) as number[]
-      
-      // Create OP_RETURN script directly using Script class
       const template = new PushDrop(this.walletClient, 'quarkid_did')
       const protocolID = [SecurityLevels.Silent, 'quark did'] as WalletProtocol
       const keyID = Utils.toBase64(Random(21))
