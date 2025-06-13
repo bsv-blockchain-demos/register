@@ -1,7 +1,7 @@
 // src/App.tsx
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { useApp } from './context/AppContext';
-import ActorManagement from './components/ActorManagement';
+import { ActorManagement } from './components/ActorManagement';
 import PrescriptionWorkflow from './components/PrescriptionWorkflow';
 import PrescriptionDashboard from './components/PrescriptionDashboard';
 import QRScanner from './components/QRScanner';

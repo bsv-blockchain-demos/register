@@ -382,53 +382,6 @@ export function createActorRoutes(): Router {
   });
 
   /**
-   * DELETE /actors/:id - Deactivate actor (soft delete)
-   */
-  router.delete('/:id', async (req: CustomRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-
-      if (!req.db) {
-        return res.status(503).json({
-          error: 'Database not available'
-        });
-      }
-
-      const result = await req.db
-        .collection('actors')
-        .updateOne(
-          { id },
-          { 
-            $set: { 
-              isActive: false,
-              updatedAt: new Date()
-            } 
-          }
-        );
-
-      if (result.matchedCount === 0) {
-        return res.status(404).json({
-          error: 'Actor not found'
-        });
-      }
-
-      console.log(`[ActorRoutes] Actor deactivated: ${id}`);
-
-      res.json({
-        success: true,
-        message: 'Actor deactivated successfully'
-      });
-
-    } catch (error) {
-      console.error('[ActorRoutes] Error deactivating actor:', error);
-      res.status(500).json({
-        error: 'Failed to deactivate actor',
-        details: error.message
-      });
-    }
-  });
-
-  /**
    * DELETE /actors/:id - Delete an actor by ID
    */
   router.delete('/:id', async (req: CustomRequest, res: Response) => {
