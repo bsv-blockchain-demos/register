@@ -1,92 +1,46 @@
-// Mock DID service for demo purposes  
+// DID Resolution Service
 import type { DidResolutionResult } from '../types';
 
-class MockDidService {
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+
+class DIDService {
     async resolveDid(did: string): Promise<DidResolutionResult> {
-        const didParts = did.split(':');
-        if (didParts.length < 4) {
-            throw new Error('Invalid DID format');
+        try {
+            const response = await fetch(`${BACKEND_URL}/v1/dids/resolve/${encodeURIComponent(did)}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.description || `Failed to resolve DID: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            
+            // Backend returns {status, data: {didDocument}}
+            if (result.status === 'success' && result.data?.didDocument) {
+                return {
+                    didDocument: result.data.didDocument,
+                    didResolutionMetadata: {
+                        contentType: 'application/did+ld+json'
+                    },
+                    didDocumentMetadata: {
+                        // Add metadata if available from backend
+                        created: result.data.didDocument.created || new Date().toISOString(),
+                        updated: result.data.didDocument.updated || new Date().toISOString()
+                    }
+                };
+            }
+
+            throw new Error('Invalid response format from backend');
+        } catch (error) {
+            console.error('DID resolution error:', error);
+            throw error;
         }
-
-        const method = didParts[1];
-        const identifier = didParts.slice(2).join(':');
-
-        if (method === 'bsv') {
-            return {
-                didDocument: {
-                    '@context': ['https://www.w3.org/ns/did/v1'],
-                    id: did,
-                    verificationMethod: [{
-                        id: `${did}#key-1`,
-                        type: 'EcdsaSecp256k1VerificationKey2019',
-                        controller: did,
-                        publicKeyHex: '02' + '0'.repeat(64) 
-                    }],
-                    authentication: [`${did}#key-1`],
-                    assertionMethod: [`${did}#key-1`],
-                    service: [{
-                        id: `${did}#medical-service`,
-                        type: 'MedicalCredentialService',
-                        serviceEndpoint: 'https://example.com/medical'
-                    }]
-                },
-                didResolutionMetadata: {
-                    contentType: 'application/did+ld+json'
-                },
-                didDocumentMetadata: {
-                    created: new Date().toISOString(),
-                    updated: new Date().toISOString()
-                }
-            };
-        } else if (method === 'ion') {
-            return {
-                didDocument: {
-                    '@context': ['https://www.w3.org/ns/did/v1'],
-                    id: did,
-                    verificationMethod: [{
-                        id: `${did}#key-1`,
-                        type: 'JsonWebKey2020',
-                        controller: did,
-                        publicKeyJwk: {
-                            kty: 'EC',
-                            crv: 'secp256k1',
-                            x: 'mock-x-value',
-                            y: 'mock-y-value'
-                        }
-                    }],
-                    authentication: [`${did}#key-1`]
-                },
-                didResolutionMetadata: {
-                    contentType: 'application/did+ld+json'
-                },
-                didDocumentMetadata: {}
-            };
-        } else if (method === 'key') {
-            return {
-                didDocument: {
-                    '@context': ['https://www.w3.org/ns/did/v1'],
-                    id: did,
-                    verificationMethod: [{
-                        id: `${did}#${identifier}`,
-                        type: 'Ed25519VerificationKey2020',
-                        controller: did,
-                        publicKeyMultibase: identifier
-                    }],
-                    authentication: [`${did}#${identifier}`],
-                    assertionMethod: [`${did}#${identifier}`],
-                    keyAgreement: [`${did}#${identifier}`],
-                    capabilityInvocation: [`${did}#${identifier}`],
-                    capabilityDelegation: [`${did}#${identifier}`]
-                },
-                didResolutionMetadata: {
-                    contentType: 'application/did+ld+json'
-                },
-                didDocumentMetadata: {}
-            };
-        }
-
-        throw new Error(`Unsupported DID method: ${method}`);
     }
 }
 
-export const didService = new MockDidService();
+export const didService = new DIDService();

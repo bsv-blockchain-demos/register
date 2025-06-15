@@ -42,13 +42,20 @@ export interface Actor {
   type: ActorType;
   name: string;
   did?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
   publicKey?: string;
   privateKey?: string; // Stored locally only
   qrCode?: string;
   createdAt: Date;
+  updatedAt?: Date;
+  isActive?: boolean;
   // Doctor-specific properties
   licenseNumber?: string;
   specialization?: string;
+  // Patient-specific properties
+  insuranceProvider?: string;
 }
 
 // ==== Verifiable Credential Types ====
