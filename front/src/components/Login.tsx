@@ -8,7 +8,6 @@ const Login: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [actors, setActors] = useState<Actor[]>([]);
-  const [selectedActor, setSelectedActor] = useState<Actor | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,11 +34,9 @@ const Login: React.FC = () => {
     }
   };
 
-  const handleLogin = () => {
-    if (selectedActor) {
-      login(selectedActor);
-      navigate('/dashboard');
-    }
+  const handleActorSelection = (actor: Actor) => {
+    login(actor);
+    navigate('/dashboard');
   };
 
   const groupedActors = actors.reduce((acc, actor) => {
@@ -92,56 +89,39 @@ const Login: React.FC = () => {
               <div key={type}>
                 <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
                   <span>{actorTypeIcons[type] || '👤'}</span>
-                  <span className="capitalize">{type}s</span>
+                  <span className="capitalize">{type === 'insurance' ? 'Insurers' : type}s</span>
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {typeActors.map((actor) => (
                     <button
                       key={actor.id}
-                      onClick={() => setSelectedActor(actor)}
-                      className={`p-4 rounded-lg border-2 transition-all text-left ${
-                        selectedActor?.id === actor.id
-                          ? 'border-blue-500 bg-blue-500/20'
-                          : 'border-gray-600 bg-gray-700 hover:border-gray-500'
-                      }`}
+                      onClick={() => handleActorSelection(actor)}
+                      className={`p-6 rounded-lg border-2 transition-all cursor-pointer border-gray-600 hover:border-gray-500 bg-gray-800 hover:bg-gray-700`}
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h3 className="font-medium text-white">{actor.name}</h3>
-                          <p className="text-sm text-gray-400 mt-1">{actor.email}</p>
-                          {actor.did && (
-                            <p className="text-xs text-gray-500 mt-2 font-mono truncate">
-                              {actor.did}
-                            </p>
-                          )}
-                        </div>
-                        {selectedActor?.id === actor.id && (
-                          <div className="text-blue-500">
-                            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
+                      <h3 className="text-lg font-semibold mb-2">{actor.name}</h3>
+                      {actor.did && (
+                        <p className="text-sm text-gray-400 truncate" title={actor.did}>
+                          {actor.did}
+                        </p>
+                      )}
+                      {actor.email && (
+                        <p className="text-sm text-gray-400">{actor.email}</p>
+                      )}
+                      {actor.licenseNumber && (
+                        <p className="text-sm text-gray-400">
+                          License: {actor.licenseNumber}
+                        </p>
+                      )}
+                      {actor.specialization && (
+                        <p className="text-sm text-gray-400">
+                          {actor.specialization}
+                        </p>
+                      )}
                     </button>
                   ))}
                 </div>
               </div>
             ))}
-            
-            <div className="flex justify-center mt-8">
-              <button
-                onClick={handleLogin}
-                disabled={!selectedActor}
-                className={`px-8 py-3 rounded-lg font-medium transition-all ${
-                  selectedActor
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                    : 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                }`}
-              >
-                Login as {selectedActor?.name || 'Select an actor'}
-              </button>
-            </div>
           </div>
         )}
       </div>
