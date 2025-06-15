@@ -1,5 +1,5 @@
 // src/components/ActorManagement.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,7 @@ export const ActorManagement = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   // Load actors from backend on component mount
-  const loadActors = async () => {
+  const loadActors = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await apiService.getActors();
@@ -40,7 +40,7 @@ export const ActorManagement = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [dispatch]);
 
   useEffect(() => {
     loadActors();
