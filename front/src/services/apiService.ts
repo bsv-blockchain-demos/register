@@ -242,6 +242,24 @@ class ApiService {
     return this.request('GET', `/v1/prescriptions/status/${status}`);
   }
 
+  /**
+   * Share a prescription with a pharmacy
+   */
+  async sharePrescription(shareData: {
+    prescriptionId: string;
+    patientDid: string;
+    pharmacyDid: string;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/prescriptions/share', shareData);
+  }
+
+  /**
+   * Get prescriptions shared with a pharmacy
+   */
+  async getSharedPrescriptions(pharmacyDid: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/prescriptions/shared/${encodeURIComponent(pharmacyDid)}`);
+  }
+
   // Token Management API
 
   /**

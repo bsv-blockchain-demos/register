@@ -440,5 +440,124 @@ export function createPrescriptionRoutes(): Router {
     }
   });
 
+  /**
+   * POST /prescriptions/share - Share a prescription with a pharmacy
+   * Body: {
+   *   prescriptionId: string,
+   *   patientDid: string,
+   *   pharmacyDid: string
+   * }
+   */
+  router.post('/share', async (req: CustomRequest, res: Response) => {
+    try {
+      const { prescriptionId, patientDid, pharmacyDid } = req.body;
+
+      // Validate required fields
+      if (!prescriptionId || !patientDid || !pharmacyDid) {
+        return res.status(400).json({
+          error: 'Missing required fields: prescriptionId, patientDid, pharmacyDid'
+        });
+      }
+
+      if (!req.db) {
+        return res.status(503).json({
+          error: 'Database not available'
+        });
+      }
+
+      // Verify the prescription exists and belongs to the patient
+      const prescription = await req.db
+        .collection('prescriptions')
+        .findOne({ 
+          'credentialSubject.prescription.id': prescriptionId,
+          'credentialSubject.id': patientDid
+        });
+
+      if (!prescription) {
+        return res.status(404).json({
+          error: 'Prescription not found or does not belong to the patient'
+        });
+      }
+
+      // Check if already shared with this pharmacy
+      const existingShare = await req.db
+        .collection('sharedPrescriptions')
+        .findOne({
+          prescriptionId: prescriptionId,
+          pharmacyDid: pharmacyDid
+        });
+
+      if (existingShare) {
+        return res.status(400).json({
+          error: 'Prescription already shared with this pharmacy'
+        });
+      }
+
+      // Create a shared prescription record
+      const sharedPrescription = {
+        prescriptionId: prescriptionId,
+        prescription: prescription,
+        patientDid: patientDid,
+        pharmacyDid: pharmacyDid,
+        sharedAt: new Date(),
+        status: 'shared' // 'shared', 'viewed', 'dispensed'
+      };
+
+      await req.db.collection('sharedPrescriptions').insertOne(sharedPrescription);
+
+      console.log(`[PrescriptionRoutes] Prescription ${prescriptionId} shared with pharmacy ${pharmacyDid}`);
+
+      res.status(201).json({
+        success: true,
+        data: sharedPrescription,
+        message: 'Prescription shared successfully'
+      });
+
+    } catch (error) {
+      console.error('[PrescriptionRoutes] Error sharing prescription:', error);
+      res.status(500).json({
+        error: 'Failed to share prescription',
+        details: error.message
+      });
+    }
+  });
+
+  /**
+   * GET /prescriptions/shared/:pharmacyDid - Get prescriptions shared with a pharmacy
+   */
+  router.get('/shared/:pharmacyDid', async (req: CustomRequest, res: Response) => {
+    try {
+      const pharmacyDid = req.params.pharmacyDid;
+
+      if (!req.db) {
+        return res.status(503).json({
+          error: 'Database not available'
+        });
+      }
+
+      const sharedPrescriptions = await req.db
+        .collection('sharedPrescriptions')
+        .find({ 
+          pharmacyDid: pharmacyDid,
+          status: { $ne: 'dispensed' } // Don't show already dispensed prescriptions
+        })
+        .sort({ sharedAt: -1 })
+        .toArray();
+
+      res.json({
+        success: true,
+        data: sharedPrescriptions,
+        count: sharedPrescriptions.length
+      });
+
+    } catch (error) {
+      console.error('[PrescriptionRoutes] Error retrieving shared prescriptions:', error);
+      res.status(500).json({
+        error: 'Failed to retrieve shared prescriptions',
+        details: error.message
+      });
+    }
+  });
+
   return router;
 }
