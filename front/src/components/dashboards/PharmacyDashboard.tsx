@@ -1,358 +1,277 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useApp } from '../../context/AppContext';
-import { Link } from 'react-router-dom';
-import type { PrescriptionCredential, Actor } from '../../types';
-import { apiService } from '../../services/apiService';
-import { FiPackage, FiClock, FiCheckCircle, FiAlertCircle, FiTruck } from 'react-icons/fi';
+import apiService from '../../services/apiService';
 
-const PharmacyDashboard: React.FC = () => {
+interface SharedPrescription {
+  _id: string;
+  prescriptionId: string;
+  prescription: {
+    credentialSubject: {
+      id: string;
+      prescription: {
+        id: string;
+        patientName: string;
+        diagnosis: string;
+        medicationName: string;
+        dosage: string;
+        frequency: string;
+        duration: string;
+        prescribedBy: string;
+        prescribedAt: string;
+      };
+    };
+    issuer: string;
+    issuanceDate: string;
+  };
+  patientDid: string;
+  pharmacyDid: string;
+  sharedAt: string;
+  status: 'shared' | 'viewed' | 'dispensed';
+}
+
+function PharmacyDashboard() {
   const { currentUser } = useAuth();
-  const { state, dispatch } = useApp();
-  const [prescriptions, setPrescriptions] = useState<PrescriptionCredential[]>([]);
-  const [patients, setPatients] = useState<Actor[]>([]);
-  const [doctors, setDoctors] = useState<Actor[]>([]);
+  const [sharedPrescriptions, setSharedPrescriptions] = useState<SharedPrescription[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dispensing, setDispensing] = useState<string | null>(null);
+  const [selectedPrescription, setSelectedPrescription] = useState<SharedPrescription | null>(null);
+  const [showDispenseModal, setShowDispenseModal] = useState(false);
+  const [dispensingForm, setDispensingForm] = useState({
+    medicationProvided: '',
+    batchNumber: '',
+    expiryDate: '',
+    pharmacistNotes: ''
+  });
 
-  const loadPrescriptions = useCallback(async () => {
+  const loadSharedPrescriptions = useCallback(async () => {
+    if (!currentUser?.did) return;
+    
     try {
       setLoading(true);
-      const response = await apiService.getPrescriptions();
+      const response = await apiService.getSharedPrescriptions(currentUser.did);
       if (response.success && response.data) {
-        setPrescriptions(response.data);
+        setSharedPrescriptions(response.data);
       }
     } catch (error) {
-      console.error('Failed to load prescriptions:', error);
+      console.error('Error loading shared prescriptions:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
-    // Load prescriptions from state
-    if (state.prescriptions) {
-      setPrescriptions(state.prescriptions);
-    }
+    loadSharedPrescriptions();
+  }, [loadSharedPrescriptions]);
 
-    // Get all patients and doctors
-    if (state.actors) {
-      const allPatients = state.actors.filter(a => a.type === 'patient');
-      const allDoctors = state.actors.filter(a => a.type === 'doctor');
-      setPatients(allPatients);
-      setDoctors(allDoctors);
-    }
+  const handleDispensePrescription = (prescription: SharedPrescription) => {
+    setSelectedPrescription(prescription);
+    setDispensingForm({
+      medicationProvided: prescription.prescription.credentialSubject.prescription.medicationName,
+      batchNumber: '',
+      expiryDate: '',
+      pharmacistNotes: ''
+    });
+    setShowDispenseModal(true);
+  };
 
-    loadPrescriptions();
-  }, [state.prescriptions, state.actors, loadPrescriptions]);
-
-  // Filter prescriptions
-  const pendingPrescriptions = prescriptions.filter(p => 
-    p.credentialSubject.prescription.status === 'no dispensado'
-  );
-
-  const dispensedPrescriptions = prescriptions.filter(p => 
-    p.credentialSubject.prescription.status === 'dispensado'
-  );
-
-  const todayDispensed = dispensedPrescriptions.filter(p => {
-    const date = new Date(p.issuanceDate);
-    const today = new Date();
-    return date.toDateString() === today.toDateString();
-  }).length;
-
-  const handleDispense = async (prescriptionId: string) => {
-    if (!currentUser?.did) {
-      alert('Pharmacy DID not found');
-      return;
-    }
+  const handleConfirmDispense = async () => {
+    if (!selectedPrescription || !currentUser) return;
 
     try {
-      setDispensing(prescriptionId);
-      
-      const response = await apiService.dispensePrescription(prescriptionId, currentUser.did);
-      
+      const response = await apiService.createDispensation(
+        selectedPrescription.prescriptionId,
+        {
+          pharmacyDid: currentUser.did || '',
+          ...dispensingForm
+        }
+      );
+
       if (response.success) {
-        // Update local state
-        const updatedPrescriptions = prescriptions.map(p => {
-          if (p.id === prescriptionId) {
-            return {
-              ...p,
-              credentialSubject: {
-                ...p.credentialSubject,
-                prescription: {
-                  ...p.credentialSubject.prescription,
-                  status: 'dispensado' as const
-                }
-              }
-            };
-          }
-          return p;
-        });
-        
-        setPrescriptions(updatedPrescriptions);
-        dispatch({
-          type: 'SET_PRESCRIPTIONS',
-          payload: updatedPrescriptions
-        });
-        
         alert('Prescription dispensed successfully!');
+        setShowDispenseModal(false);
+        setSelectedPrescription(null);
+        // Reload prescriptions to update status
+        loadSharedPrescriptions();
       } else {
         alert(`Failed to dispense prescription: ${response.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error dispensing prescription:', error);
-      alert('Failed to dispense prescription');
-    } finally {
-      setDispensing(null);
+      alert('Failed to dispense prescription. Please try again.');
     }
   };
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-xl">Loading prescriptions...</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Pharmacy Dashboard</h1>
-          <p className="text-gray-400">Welcome back, {currentUser?.name}</p>
-        </div>
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold text-gray-800 mb-6">Pharmacy Dashboard</h1>
+      
+      {/* Welcome Section */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-xl font-semibold mb-2">Welcome, {currentUser?.name}</h2>
+        <p className="text-gray-600">Pharmacy ID: {currentUser?.did}</p>
+      </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-gray-800 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-gray-400">Pending</h3>
-              <FiAlertCircle className="text-yellow-500 text-2xl" />
-            </div>
-            <p className="text-3xl font-bold text-white">{pendingPrescriptions.length}</p>
-            <p className="text-sm text-gray-500 mt-2">Ready to dispense</p>
-          </div>
-
-          <div className="bg-gray-800 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-gray-400">Total Dispensed</h3>
-              <FiCheckCircle className="text-green-500 text-2xl" />
-            </div>
-            <p className="text-3xl font-bold text-white">{dispensedPrescriptions.length}</p>
-            <p className="text-sm text-gray-500 mt-2">All time</p>
-          </div>
-
-          <div className="bg-gray-800 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-gray-400">Today</h3>
-              <FiClock className="text-blue-500 text-2xl" />
-            </div>
-            <p className="text-3xl font-bold text-white">{todayDispensed}</p>
-            <p className="text-sm text-gray-500 mt-2">Dispensed today</p>
-          </div>
-
-          <div className="bg-gray-800 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-gray-400">Inventory</h3>
-              <FiPackage className="text-purple-500 text-2xl" />
-            </div>
-            <p className="text-3xl font-bold text-white">OK</p>
-            <p className="text-sm text-gray-500 mt-2">Stock status</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Pending Prescriptions */}
-          <div className="lg:col-span-2">
-            <div className="bg-gray-800 rounded-lg">
-              <div className="border-b border-gray-700 p-6">
-                <h2 className="text-lg font-semibold text-white">Pending Prescriptions</h2>
-              </div>
-              <div className="p-6">
-                {loading ? (
-                  <p className="text-gray-400 text-center py-8">Loading prescriptions...</p>
-                ) : pendingPrescriptions.length === 0 ? (
-                  <p className="text-gray-400 text-center py-8">No pending prescriptions</p>
-                ) : (
-                  <div className="space-y-4">
-                    {pendingPrescriptions.map((prescription) => {
-                      const patient = patients.find(p => p.did === prescription.credentialSubject.id);
-                      const doctor = doctors.find(d => d.did === prescription.issuer);
-                      const prescriptionData = prescription.credentialSubject.prescription;
-                      const medication = prescriptionData.medication;
-                      
-                      return (
-                        <div key={prescription.id} className="border border-gray-700 rounded-lg p-4">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <h4 className="font-medium text-white text-lg">
-                                {medication.name}
-                              </h4>
-                              <p className="text-gray-400 mt-1">
-                                <strong>Patient:</strong> {patient?.name || 'Unknown'}
-                              </p>
-                              <p className="text-gray-400">
-                                <strong>Dosage:</strong> {medication.dosage} | 
-                                <strong> Frequency:</strong> {medication.frequency}
-                              </p>
-                              <p className="text-gray-400">
-                                <strong>Duration:</strong> {medication.duration}
-                              </p>
-                              <p className="text-sm text-gray-500 mt-2">
-                                <strong>Doctor:</strong> {doctor?.name || 'Unknown'}
-                              </p>
-                              <p className="text-xs text-gray-600 mt-1">
-                                Prescribed: {new Date(prescriptionData.prescribedDate).toLocaleDateString()}
-                              </p>
-                            </div>
-                            <div className="ml-4">
-                              <span className="px-3 py-1 rounded-full text-sm font-medium bg-yellow-500/20 text-yellow-500">
-                                Pending
-                              </span>
-                            </div>
-                          </div>
-                          
-                          <div className="mt-4 flex gap-2">
-                            <button
-                              onClick={() => handleDispense(prescription.id)}
-                              disabled={dispensing === prescription.id}
-                              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-                            >
-                              <FiTruck />
-                              {dispensing === prescription.id ? 'Dispensing...' : 'Dispense'}
-                            </button>
-                            <button className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                              View Details
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Actions & Stats */}
-          <div>
-            <div className="bg-gray-800 rounded-lg">
-              <div className="border-b border-gray-700 p-6">
-                <h2 className="text-lg font-semibold text-white">Quick Actions</h2>
-              </div>
-              <div className="p-6 space-y-4">
-                <Link
-                  to="/scan"
-                  className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-medium transition-colors"
-                >
-                  📱 Scan Prescription QR
-                </Link>
-
-                <Link
-                  to="/prescription-dashboard"
-                  className="block bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-colors group"
-                >
-                  <h3 className="font-medium text-white">📊 All Prescriptions</h3>
-                  <p className="text-sm text-gray-400 mt-1">View complete history</p>
-                </Link>
-
-                <Link
-                  to="/actors"
-                  className="block bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-colors group"
-                >
-                  <h3 className="font-medium text-white">👥 Manage Actors</h3>
-                  <p className="text-sm text-gray-400 mt-1">View patients & doctors</p>
-                </Link>
-              </div>
-            </div>
-
-            {/* Pharmacy Info */}
-            <div className="bg-gray-800 rounded-lg mt-6">
-              <div className="p-6">
-                <h3 className="text-sm font-medium text-gray-400 mb-2">Pharmacy Information</h3>
-                <p className="text-white font-medium">{currentUser?.name}</p>
-                <p className="text-xs text-gray-500 mt-1">DID: {currentUser?.did?.slice(0, 20)}...</p>
-                <p className="text-xs text-gray-500">License: #PHM-2024-001</p>
-              </div>
-            </div>
-
-            {/* Recent Activity */}
-            <div className="bg-gray-800 rounded-lg mt-6">
-              <div className="border-b border-gray-700 p-4">
-                <h3 className="text-sm font-medium text-white">Recent Dispensations</h3>
-              </div>
-              <div className="p-4">
-                {dispensedPrescriptions.slice(0, 3).map((prescription, index) => {
-                  const patient = patients.find(p => p.did === prescription.credentialSubject.id);
-                  return (
-                    <div key={index} className="py-2 border-b border-gray-700 last:border-0">
-                      <p className="text-sm text-white">
-                        {prescription.credentialSubject.prescription.medication.name}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {patient?.name || 'Unknown'} • {new Date(prescription.issuanceDate).toLocaleTimeString()}
-                      </p>
+      {/* Shared Prescriptions */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-xl font-semibold mb-4">Prescriptions Shared with You</h2>
+        
+        {sharedPrescriptions.length === 0 ? (
+          <p className="text-gray-600">No prescriptions have been shared with your pharmacy yet.</p>
+        ) : (
+          <div className="grid gap-4">
+            {sharedPrescriptions.map((shared) => {
+              const prescription = shared.prescription.credentialSubject.prescription;
+              return (
+                <div key={shared._id} className="border rounded-lg p-4 hover:bg-gray-50">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg">{prescription.patientName}</h3>
+                      <div className="mt-2 space-y-1 text-sm text-gray-600">
+                        <p><span className="font-medium">Prescription ID:</span> {prescription.id}</p>
+                        <p><span className="font-medium">Diagnosis:</span> {prescription.diagnosis}</p>
+                        <p><span className="font-medium">Medication:</span> {prescription.medicationName}</p>
+                        <p><span className="font-medium">Dosage:</span> {prescription.dosage}</p>
+                        <p><span className="font-medium">Frequency:</span> {prescription.frequency}</p>
+                        <p><span className="font-medium">Duration:</span> {prescription.duration}</p>
+                        <p><span className="font-medium">Prescribed By:</span> Dr. {prescription.prescribedBy}</p>
+                        <p><span className="font-medium">Prescribed Date:</span> {formatDate(prescription.prescribedAt)}</p>
+                        <p><span className="font-medium">Shared on:</span> {formatDate(shared.sharedAt)}</p>
+                      </div>
                     </div>
-                  );
-                })}
-                {dispensedPrescriptions.length === 0 && (
-                  <p className="text-sm text-gray-500">No recent dispensations</p>
-                )}
-              </div>
-            </div>
+                    <div className="ml-4 flex flex-col gap-2">
+                      <span className={`px-3 py-1 rounded-full text-sm ${
+                        shared.status === 'dispensed' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {shared.status === 'dispensed' ? 'Dispensed' : 'Pending'}
+                      </span>
+                      {shared.status !== 'dispensed' && (
+                        <button
+                          onClick={() => handleDispensePrescription(shared)}
+                          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          Dispense
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* Dispensed Prescriptions Table */}
-        <div className="bg-gray-800 rounded-lg p-6 mt-8">
-          <h2 className="text-xl font-bold mb-4">Dispensed Prescriptions</h2>
-          
-          {dispensedPrescriptions.length === 0 ? (
-            <p className="text-gray-400">No dispensed prescriptions yet</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-700">
-                    <th className="text-left py-3 px-4 text-gray-400">Patient</th>
-                    <th className="text-left py-3 px-4 text-gray-400">Medication</th>
-                    <th className="text-left py-3 px-4 text-gray-400">Doctor</th>
-                    <th className="text-left py-3 px-4 text-gray-400">Dispensed</th>
-                    <th className="text-left py-3 px-4 text-gray-400">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dispensedPrescriptions.map((prescription, index) => {
-                    const patient = patients.find(p => p.did === prescription.credentialSubject.id);
-                    const doctor = doctors.find(d => d.did === prescription.issuer);
-                    const prescriptionData = prescription.credentialSubject.prescription;
-                    
-                    return (
-                      <tr key={index} className="border-b border-gray-700">
-                        <td className="py-3 px-4">
-                          <p className="font-medium text-white">{patient?.name || 'Unknown'}</p>
-                          <p className="text-xs text-gray-500">{patient?.insuranceProvider || 'No insurance'}</p>
-                        </td>
-                        <td className="py-3 px-4">
-                          <p className="text-white">{prescriptionData.medication.name}</p>
-                          <p className="text-sm text-gray-400">{prescriptionData.medication.dosage}</p>
-                        </td>
-                        <td className="py-3 px-4 text-gray-300">
-                          {doctor?.name || 'Unknown'}
-                        </td>
-                        <td className="py-3 px-4 text-gray-300">
-                          {new Date(prescription.issuanceDate).toLocaleDateString()}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="px-2 py-1 rounded text-xs bg-green-500/20 text-green-500">
-                            Dispensed
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+      {/* Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-lg shadow p-4">
+          <h3 className="text-sm font-medium text-gray-500">Total Shared</h3>
+          <p className="text-2xl font-bold text-gray-800">{sharedPrescriptions.length}</p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4">
+          <h3 className="text-sm font-medium text-gray-500">Pending</h3>
+          <p className="text-2xl font-bold text-yellow-600">
+            {sharedPrescriptions.filter(p => p.status !== 'dispensed').length}
+          </p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4">
+          <h3 className="text-sm font-medium text-gray-500">Dispensed</h3>
+          <p className="text-2xl font-bold text-green-600">
+            {sharedPrescriptions.filter(p => p.status === 'dispensed').length}
+          </p>
         </div>
       </div>
+
+      {/* Dispense Modal */}
+      {showDispenseModal && selectedPrescription && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-semibold mb-4">Dispense Prescription</h3>
+            
+            <div className="mb-4 p-3 bg-gray-100 rounded">
+              <p className="font-medium">Patient: {selectedPrescription.prescription.credentialSubject.prescription.patientName}</p>
+              <p className="text-sm text-gray-600">Medication: {selectedPrescription.prescription.credentialSubject.prescription.medicationName}</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Medication Provided</label>
+                <input
+                  type="text"
+                  value={dispensingForm.medicationProvided}
+                  onChange={(e) => setDispensingForm({...dispensingForm, medicationProvided: e.target.value})}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Batch Number</label>
+                <input
+                  type="text"
+                  value={dispensingForm.batchNumber}
+                  onChange={(e) => setDispensingForm({...dispensingForm, batchNumber: e.target.value})}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="e.g., LOT123456"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Expiry Date</label>
+                <input
+                  type="date"
+                  value={dispensingForm.expiryDate}
+                  onChange={(e) => setDispensingForm({...dispensingForm, expiryDate: e.target.value})}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Pharmacist Notes</label>
+                <textarea
+                  value={dispensingForm.pharmacistNotes}
+                  onChange={(e) => setDispensingForm({...dispensingForm, pharmacistNotes: e.target.value})}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  rows={3}
+                  placeholder="Any special instructions or notes..."
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowDispenseModal(false);
+                  setSelectedPrescription(null);
+                }}
+                className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDispense}
+                disabled={!dispensingForm.medicationProvided}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
+              >
+                Confirm Dispensation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-};
+}
 
 export default PharmacyDashboard;

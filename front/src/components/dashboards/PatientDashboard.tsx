@@ -11,7 +11,11 @@ const PatientDashboard: React.FC = () => {
   const { state } = useApp();
   const [prescriptions, setPrescriptions] = useState<PrescriptionCredential[]>([]);
   const [doctors, setDoctors] = useState<Actor[]>([]);
+  const [pharmacies, setPharmacies] = useState<Actor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showPharmacyModal, setShowPharmacyModal] = useState(false);
+  const [selectedPharmacy, setSelectedPharmacy] = useState<Actor | null>(null);
+  const [prescriptionToShare, setPrescriptionToShare] = useState<PrescriptionCredential | null>(null);
 
   const loadPrescriptions = useCallback(async () => {
     if (!currentUser?.did) return;
@@ -42,6 +46,10 @@ const PatientDashboard: React.FC = () => {
     if (state.actors) {
       const allDoctors = state.actors.filter(a => a.type === 'doctor');
       setDoctors(allDoctors);
+      
+      // Get all pharmacies
+      const allPharmacies = state.actors.filter(a => a.type === 'pharmacy');
+      setPharmacies(allPharmacies);
     }
 
     loadPrescriptions();
@@ -58,6 +66,58 @@ const PatientDashboard: React.FC = () => {
   const recentPrescriptions = [...prescriptions]
     .sort((a, b) => new Date(b.issuanceDate).getTime() - new Date(a.issuanceDate).getTime())
     .slice(0, 5);
+
+  const handleSharePrescription = async (prescription: PrescriptionCredential) => {
+    try {
+      // Set the prescription to share
+      setPrescriptionToShare(prescription);
+      
+      // Load pharmacies
+      const response = await apiService.getActors({ type: 'pharmacy' });
+      if (response.success && response.data) {
+        setPharmacies(response.data);
+        setShowPharmacyModal(true);
+      } else {
+        alert('Failed to load pharmacies. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error loading pharmacies:', error);
+      alert('Failed to load pharmacies');
+    }
+  };
+
+  const handleConfirmShare = async () => {
+    if (!selectedPharmacy || !prescriptionToShare || !currentUser) {
+      return;
+    }
+
+    try {
+      // Call the share prescription API
+      const response = await apiService.sharePrescription({
+        prescriptionId: prescriptionToShare.id || '',
+        patientDid: currentUser.did || '',
+        pharmacyDid: selectedPharmacy.did || ''
+      });
+
+      if (response.success) {
+        alert(`Prescription shared successfully with ${selectedPharmacy.name}`);
+        setShowPharmacyModal(false);
+        setSelectedPharmacy(null);
+        setPrescriptionToShare(null);
+        
+        // Refresh prescriptions to update UI
+        const prescriptionsResponse = await apiService.getPrescriptionsByActor(currentUser.did || '', 'patient');
+        if (prescriptionsResponse.success && prescriptionsResponse.data) {
+          setPrescriptions(prescriptionsResponse.data);
+        }
+      } else {
+        alert(`Failed to share prescription: ${response.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error sharing prescription:', error);
+      alert('Failed to share prescription. Please try again.');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -141,9 +201,7 @@ const PatientDashboard: React.FC = () => {
                         <div key={prescription.id || index} className="border border-gray-700 rounded-lg p-4">
                           <div className="flex justify-between items-start">
                             <div className="flex-1">
-                              <h4 className="font-medium text-white text-lg">
-                                {medication.name}
-                              </h4>
+                              <h4 className="font-medium text-white">{medication.name}</h4>
                               <p className="text-gray-400 mt-1">
                                 <strong>Dosage:</strong> {medication.dosage} | 
                                 <strong> Frequency:</strong> {medication.frequency}
@@ -301,6 +359,9 @@ const PatientDashboard: React.FC = () => {
                           <button className="text-blue-500 hover:text-blue-400 text-sm">
                             View Details
                           </button>
+                          <button className="text-blue-500 hover:text-blue-400 text-sm ml-2" onClick={() => handleSharePrescription(prescription)}>
+                            Share Prescription
+                          </button>
                         </td>
                       </tr>
                     );
@@ -310,6 +371,68 @@ const PatientDashboard: React.FC = () => {
             </div>
           )}
         </div>
+        
+        {/* Pharmacy Selection Modal */}
+        {showPharmacyModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
+              <h3 className="text-xl font-bold mb-4">Select a Pharmacy</h3>
+              
+              {pharmacies.length === 0 ? (
+                <p className="text-gray-400 mb-4">No pharmacies available</p>
+              ) : (
+                <div className="space-y-2 mb-4">
+                  {pharmacies.map((pharmacy) => (
+                    <label
+                      key={pharmacy.id}
+                      className="flex items-center p-3 border border-gray-700 rounded-lg hover:bg-gray-700 cursor-pointer"
+                    >
+                      <input
+                        type="radio"
+                        name="pharmacy"
+                        value={pharmacy.did}
+                        checked={selectedPharmacy?.did === pharmacy.did}
+                        onChange={(e) => {
+                          const selected = pharmacies.find(p => p.did === e.target.value);
+                          if (selected) {
+                            setSelectedPharmacy(selected);
+                          }
+                        }}
+                        className="mr-3"
+                      />
+                      <div>
+                        <p className="font-medium text-white">{pharmacy.name}</p>
+                        {pharmacy.address && (
+                          <p className="text-sm text-gray-400">{pharmacy.address}</p>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+              
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setShowPharmacyModal(false);
+                    setSelectedPharmacy(null);
+                    setPrescriptionToShare(null);
+                  }}
+                  className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmShare}
+                  disabled={!selectedPharmacy}
+                  className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400"
+                >
+                  Share Prescription
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
