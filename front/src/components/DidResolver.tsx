@@ -1,26 +1,53 @@
 // src/components/DIDResolver.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { didService } from '../services/didService';
 import type { DidResolutionResult, Actor } from '../types';
 
 const DIDResolver: React.FC = () => {
   const { state } = useApp();
+  const location = useLocation();
   const [didToResolve, setDidToResolve] = useState<string>('');
   const [resolutionResult, setResolutionResult] = useState<DidResolutionResult | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useState<'resolve' | 'actors' | 'examples'>('resolve');
 
-  const handleResolveDid = async () => {
-    if (!didToResolve.trim()) return;
+  // Check if a DID was passed from QR Scanner
+  useEffect(() => {
+    const scannedDid = location.state?.scannedDid;
+    if (scannedDid && typeof scannedDid === 'string') {
+      setDidToResolve(scannedDid);
+      // Directly call the resolution logic here to avoid dependency issues
+      setIsLoading(true);
+      setError(null);
+      setResolutionResult(null);
+      
+      didService.resolveDid(scannedDid)
+        .then(response => {
+          setResolutionResult(response);
+        })
+        .catch((err: unknown) => {
+          const errorMessage = err instanceof Error ? err.message : 'Failed to resolve DID';
+          setError(errorMessage);
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
+    }
+  }, [location.state]);
+
+  const handleResolveDid = async (did?: string) => {
+    const didToUse = did || didToResolve.trim();
+    if (!didToUse) return;
     
     setIsLoading(true);
     setError(null);
     setResolutionResult(null);
     
     try {
-      const response = await didService.resolveDid(didToResolve.trim());
+      const response = await didService.resolveDid(didToUse);
       setResolutionResult(response);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to resolve DID';
@@ -280,7 +307,7 @@ const DIDResolver: React.FC = () => {
                 />
                 <button 
                   className="primary-button"
-                  onClick={handleResolveDid} 
+                  onClick={() => handleResolveDid()} 
                   disabled={isLoading || !didToResolve.trim()}
                 >
                   {isLoading ? '⏳ Resolving...' : '🔍 Resolve'}
@@ -333,31 +360,31 @@ const DIDResolver: React.FC = () => {
                       <span className="label">DID:</span>
                       <span className="value did-value">{didToResolve}</span>
                     </div>
-                    {resolutionResult.didResolutionMetadata?.contentType && (
+                    {resolutionResult.didResolutionMetadata?.contentType ? (
                       <div className="metadata-row">
                         <span className="label">Content Type:</span>
-                        <span className="value">{resolutionResult.didResolutionMetadata.contentType}</span>
+                        <span className="value">{String(resolutionResult.didResolutionMetadata.contentType)}</span>
+                      </div>
+                    ) : null}
+
+                    {resolutionResult.didDocument ? (
+                      <div className="did-document-section">
+                        <h4>📄 DID Document</h4>
+                        {formatDIDDocument(resolutionResult.didDocument)}
+                      </div>
+                    ) : (
+                      <div className="no-document">
+                        <p>No DID document found or document format not supported for display.</p>
                       </div>
                     )}
+
+                    <details className="raw-response">
+                      <summary>View Raw Resolution Response</summary>
+                      <pre className="json-output">
+                        {JSON.stringify(resolutionResult, null, 2)}
+                      </pre>
+                    </details>
                   </div>
-
-                  {resolutionResult.didDocument ? (
-                    <div className="did-document-section">
-                      <h4>📄 DID Document</h4>
-                      {formatDIDDocument(resolutionResult.didDocument)}
-                    </div>
-                  ) : (
-                    <div className="no-document">
-                      <p>No DID document found or document format not supported for display.</p>
-                    </div>
-                  )}
-
-                  <details className="raw-response">
-                    <summary>View Raw Resolution Response</summary>
-                    <pre className="json-output">
-                      {JSON.stringify(resolutionResult, null, 2)}
-                    </pre>
-                  </details>
                 </div>
               </div>
             )}
@@ -395,7 +422,7 @@ const DIDResolver: React.FC = () => {
                   </div>
 
                   <div className="actor-method">
-                    <span className="method-badge">{getDIDMethod(actor.did)}</span>
+                    <span className="method-badge">{actor.did ? getDIDMethod(actor.did) : 'unknown'}</span>
                   </div>
 
                   <div className="actor-actions">

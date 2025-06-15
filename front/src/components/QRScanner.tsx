@@ -1,12 +1,14 @@
 // src/components/QRScanner.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { qrService } from '../services/qrService';
 import type { QRCodeData, VerifiableCredential, PrescriptionCredential } from '../types';
 
 const QRScanner: React.FC = () => {
   const { state, dispatch } = useApp();
+  const navigate = useNavigate();
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
   const [parsedData, setParsedData] = useState<QRCodeData | null>(null);
@@ -99,12 +101,8 @@ const QRScanner: React.FC = () => {
   const handleActorDID = (qrData: QRCodeData) => {
     const did = qrData.data.did;
     if (typeof did === 'string') {
-      const existingActor = state.actors.find(a => a.did === did);
-      if (existingActor) {
-        setError(`Actor already exists: ${existingActor.name}`);
-      } else {
-        setError('DID scanned successfully. Actor would need to be resolved from backend.');
-      }
+      // Navigate to DID Resolver with the scanned DID
+      navigate('/did-resolver', { state: { scannedDid: did } });
     }
   };
 
@@ -343,7 +341,7 @@ const QRScanner: React.FC = () => {
                 </div>
                 
                 {/* Show prescription details if available */}
-                {(decryptedVC.credentialSubject as Record<string, unknown>).prescription && (
+                {(decryptedVC.credentialSubject as Record<string, unknown>).prescription ? (
                   <div className="prescription-details">
                     <h5>💊 Prescription Details</h5>
                     <div className="prescription-grid">
@@ -365,7 +363,7 @@ const QRScanner: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                )}
+                ) : null}
               </div>
               
               <details className="vc-details">
