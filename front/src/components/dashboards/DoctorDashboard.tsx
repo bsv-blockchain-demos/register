@@ -1,22 +1,43 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { Link } from 'react-router-dom';
 import type { PrescriptionCredential, Actor } from '../../types';
+import { PrescriptionForm } from '../PrescriptionForm';
+import { apiService } from '../../services/apiService';
+import { FiFileText, FiPlus, FiUser, FiCalendar } from 'react-icons/fi';
 
 const DoctorDashboard: React.FC = () => {
   const { currentUser } = useAuth();
   const { state } = useApp();
   const [prescriptions, setPrescriptions] = useState<PrescriptionCredential[]>([]);
   const [patients, setPatients] = useState<Actor[]>([]);
+  const [showPrescriptionForm, setShowPrescriptionForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const loadPrescriptions = useCallback(async () => {
+    if (!currentUser?.did) return;
+    
+    try {
+      setLoading(true);
+      const response = await apiService.getPrescriptionsByActor(currentUser.did, 'doctor');
+      if (response.success && response.data) {
+        setPrescriptions(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load prescriptions:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser?.did]);
 
   useEffect(() => {
     // Filter prescriptions issued by current doctor
-    if (currentUser && state.prescriptions) {
-      const myPrescriptions = state.prescriptions.filter(
-        p => p.doctorDid === currentUser.did
+    if (currentUser?.did && state.prescriptions) {
+      const doctorPrescriptions = state.prescriptions.filter(p => 
+        p.issuer === currentUser.did
       );
-      setPrescriptions(myPrescriptions);
+      setPrescriptions(doctorPrescriptions);
     }
 
     // Get all patients
@@ -24,156 +45,269 @@ const DoctorDashboard: React.FC = () => {
       const allPatients = state.actors.filter(a => a.type === 'patient');
       setPatients(allPatients);
     }
-  }, [currentUser, state.prescriptions, state.actors]);
+
+    loadPrescriptions();
+  }, [currentUser, state.prescriptions, state.actors, loadPrescriptions]);
 
   const todaysPrescriptions = prescriptions.filter(p => {
     const today = new Date().toDateString();
-    return new Date(p.issuedDate).toDateString() === today;
+    return new Date(p.issuanceDate).toDateString() === today;
   });
 
-  const activePrescriptions = prescriptions.filter(p => p.status === 'active');
+  const activePrescriptions = prescriptions.filter(p => 
+    p.credentialSubject.prescription.status === 'no dispensado'
+  );
+
+  const dispensedPrescriptions = prescriptions.filter(p => 
+    p.credentialSubject.prescription.status === 'dispensado'
+  );
+
+  const recentPrescriptions = [...prescriptions]
+    .sort((a, b) => new Date(b.issuanceDate).getTime() - new Date(a.issuanceDate).getTime())
+    .slice(0, 5);
 
   return (
-    <div className="min-h-screen bg-gray-900">
-      <div className="bg-gray-800 border-b border-gray-700 px-8 py-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Doctor Portal</h1>
-            <p className="text-gray-300 mt-1">Welcome, Dr. {currentUser?.name}</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link
-              to="/prescription"
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-            >
-              ➕ New Prescription
-            </Link>
-          </div>
+    <div className="min-h-screen bg-gray-900 text-white">
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">Doctor Dashboard</h1>
+          <p className="text-gray-400">Welcome, Dr. {currentUser?.name}</p>
         </div>
-      </div>
 
-      <div className="p-8">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-gray-300 text-sm font-medium">Today's Prescriptions</h3>
-              <span className="text-2xl">📋</span>
+          {/* Today's Prescriptions */}
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-gray-400">Today's Prescriptions</h3>
+              <span className="text-blue-500">📋</span>
             </div>
             <p className="text-3xl font-bold text-white">{todaysPrescriptions.length}</p>
-            <p className="text-gray-400 text-sm mt-1">Issued today</p>
+            <p className="text-sm text-gray-500 mt-2">Issued today</p>
           </div>
 
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-gray-300 text-sm font-medium">Active Prescriptions</h3>
-              <span className="text-2xl">💊</span>
+          {/* Active Prescriptions */}
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-gray-400">Active Prescriptions</h3>
+              <span className="text-green-500">✓</span>
             </div>
             <p className="text-3xl font-bold text-white">{activePrescriptions.length}</p>
-            <p className="text-gray-400 text-sm mt-1">Currently active</p>
+            <p className="text-sm text-gray-500 mt-2">Not yet dispensed</p>
           </div>
 
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-gray-300 text-sm font-medium">Total Patients</h3>
-              <span className="text-2xl">👥</span>
+          {/* Dispensed Prescriptions */}
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-gray-400">Dispensed</h3>
+              <span className="text-purple-500">💊</span>
+            </div>
+            <p className="text-3xl font-bold text-white">{dispensedPrescriptions.length}</p>
+            <p className="text-sm text-gray-500 mt-2">Completed prescriptions</p>
+          </div>
+
+          {/* Total Patients */}
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-gray-400">Total Patients</h3>
+              <span className="text-yellow-500">👥</span>
             </div>
             <p className="text-3xl font-bold text-white">{patients.length}</p>
-            <p className="text-gray-400 text-sm mt-1">Registered patients</p>
-          </div>
-
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-gray-300 text-sm font-medium">Total Prescriptions</h3>
-              <span className="text-2xl">📄</span>
-            </div>
-            <p className="text-3xl font-bold text-white">{prescriptions.length}</p>
-            <p className="text-gray-400 text-sm mt-1">All time</p>
+            <p className="text-sm text-gray-500 mt-2">Registered patients</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-gray-800 rounded-lg border border-gray-700">
-            <div className="px-6 py-4 border-b border-gray-700">
-              <h2 className="text-lg font-semibold text-white">Recent Prescriptions</h2>
-            </div>
-            <div className="p-6">
-              {prescriptions.length === 0 ? (
-                <p className="text-gray-400 text-center py-8">No prescriptions issued yet</p>
-              ) : (
-                <div className="space-y-4 max-h-96 overflow-y-auto">
-                  {prescriptions.slice(0, 5).map((prescription) => {
-                    const patient = state.actors.find(a => a.did === prescription.patientDid);
-                    return (
-                      <div key={prescription.id} className="bg-gray-700 rounded-lg p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <h4 className="font-medium text-white">{prescription.medication}</h4>
-                            <p className="text-sm text-gray-300 mt-1">
-                              Patient: {patient?.name || 'Unknown'}
-                            </p>
-                            <p className="text-sm text-gray-400 mt-1">
-                              {prescription.dosage} - {prescription.quantity} units
-                            </p>
-                            <p className="text-xs text-gray-500 mt-2">
-                              {new Date(prescription.issuedDate).toLocaleString()}
-                            </p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Recent Prescriptions */}
+          <div className="lg:col-span-2">
+            <div className="bg-gray-800 rounded-lg">
+              <div className="border-b border-gray-700 p-6">
+                <h2 className="text-lg font-semibold text-white">Recent Prescriptions</h2>
+              </div>
+              <div className="p-6">
+                {recentPrescriptions.length === 0 ? (
+                  <p className="text-gray-400 text-center py-8">No prescriptions yet</p>
+                ) : (
+                  <div className="space-y-4">
+                    {recentPrescriptions.map((prescription, index) => {
+                      const patient = patients.find(p => p.did === prescription.credentialSubject.id);
+                      return (
+                        <div key={prescription.id || index} className="border border-gray-700 rounded-lg p-4">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-medium text-white">
+                                {patient?.name || 'Unknown Patient'}
+                              </h4>
+                              <p className="text-sm text-gray-400 mt-1">
+                                💊 {prescription.credentialSubject.prescription.medication.name} - 
+                                {prescription.credentialSubject.prescription.medication.dosage}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-2">
+                                {new Date(prescription.issuanceDate).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <span className={`px-2 py-1 text-xs rounded ${
+                              prescription.credentialSubject.prescription.status === 'no dispensado' 
+                                ? 'bg-yellow-500/20 text-yellow-500' 
+                                : 'bg-green-500/20 text-green-500'
+                            }`}>
+                              {prescription.credentialSubject.prescription.status}
+                            </span>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            prescription.status === 'active' 
-                              ? 'bg-green-500/20 text-green-400 border border-green-500/50'
-                              : prescription.status === 'dispensed'
-                              ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50'
-                              : 'bg-gray-500/20 text-gray-400 border border-gray-500/50'
-                          }`}>
-                            {prescription.status}
-                          </span>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div>
+            <div className="bg-gray-800 rounded-lg">
+              <div className="border-b border-gray-700 p-6">
+                <h2 className="text-lg font-semibold text-white">Quick Actions</h2>
+              </div>
+              <div className="p-6 space-y-4">
+                <button
+                  onClick={() => setShowPrescriptionForm(!showPrescriptionForm)}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-medium transition-colors w-full justify-center"
+                >
+                  <FiPlus />
+                  {showPrescriptionForm ? 'Hide Form' : 'New Prescription'}
+                </button>
+
+                <Link
+                  to="/actors"
+                  className="block bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-colors group"
+                >
+                  <h3 className="font-medium text-white">👥 View Patients</h3>
+                  <p className="text-sm text-gray-400 mt-1">Manage patient records</p>
+                </Link>
+
+                <Link
+                  to="/scan"
+                  className="block bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-colors group"
+                >
+                  <h3 className="font-medium text-white">📷 Scan QR Code</h3>
+                  <p className="text-sm text-gray-400 mt-1">Verify patient or prescription</p>
+                </Link>
+              </div>
+            </div>
+
+            {/* Doctor Info */}
+            <div className="bg-gray-800 rounded-lg mt-6">
+              <div className="p-6">
+                <h3 className="text-sm font-medium text-gray-400 mb-2">Your Information</h3>
+                <p className="text-white font-medium">{currentUser?.name}</p>
+                <p className="text-xs text-gray-500 mt-1">{currentUser?.specialization || 'General Practitioner'}</p>
+                <p className="text-xs text-gray-500">License: {currentUser?.licenseNumber || 'N/A'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Prescription Form Modal */}
+        {showPrescriptionForm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-900 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold">Create New Prescription</h2>
+                  <button
+                    onClick={() => setShowPrescriptionForm(false)}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    ✕
+                  </button>
                 </div>
-              )}
+                <PrescriptionForm />
+              </div>
             </div>
           </div>
+        )}
 
-          <div className="bg-gray-800 rounded-lg border border-gray-700">
-            <div className="px-6 py-4 border-b border-gray-700">
-              <h2 className="text-lg font-semibold text-white">Quick Actions</h2>
-            </div>
-            <div className="p-6 space-y-4">
-              <Link
-                to="/prescription"
-                className="block bg-blue-600 hover:bg-blue-700 p-4 rounded-lg transition-colors text-center"
-              >
-                <h3 className="font-medium text-white">➕ Create New Prescription</h3>
-                <p className="text-sm text-blue-100 mt-1">Issue a prescription for a patient</p>
-              </Link>
-              
-              <Link
-                to="/actors"
-                className="block bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-colors group"
-              >
-                <h3 className="font-medium text-white group-hover:text-blue-400">👥 Manage Patients</h3>
-                <p className="text-sm text-gray-400 mt-1">View and manage patient records</p>
-              </Link>
-
-              <Link
-                to="/prescription-dashboard"
-                className="block bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-colors group"
-              >
-                <h3 className="font-medium text-white group-hover:text-blue-400">📊 Prescription Analytics</h3>
-                <p className="text-sm text-gray-400 mt-1">View prescription history and statistics</p>
-              </Link>
-
-              <Link
-                to="/qr-scanner"
-                className="block bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-colors group"
-              >
-                <h3 className="font-medium text-white group-hover:text-blue-400">📱 Scan QR Code</h3>
-                <p className="text-sm text-gray-400 mt-1">Verify patient credentials</p>
-              </Link>
+        {/* Additional Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-400 text-sm">Total Prescriptions</p>
+                <p className="text-3xl font-bold">{prescriptions.length}</p>
+              </div>
+              <FiFileText className="text-blue-500 text-3xl" />
             </div>
           </div>
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-400 text-sm">Active Prescriptions</p>
+                <p className="text-3xl font-bold">
+                  {prescriptions.filter(p => p.credentialSubject.prescription.status === 'no dispensado').length}
+                </p>
+              </div>
+              <FiUser className="text-green-500 text-3xl" />
+            </div>
+          </div>
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-400 text-sm">This Month</p>
+                <p className="text-3xl font-bold">
+                  {prescriptions.filter(p => {
+                    const date = new Date(p.issuanceDate);
+                    const now = new Date();
+                    return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+                  }).length}
+                </p>
+              </div>
+              <FiCalendar className="text-purple-500 text-3xl" />
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Prescriptions Table */}
+        <div className="bg-gray-800 rounded-lg p-6 mt-8">
+          <h2 className="text-xl font-bold mb-4">All Prescriptions</h2>
+          
+          {loading ? (
+            <p className="text-gray-400">Loading prescriptions...</p>
+          ) : prescriptions.length === 0 ? (
+            <p className="text-gray-400">No prescriptions found</p>
+          ) : (
+            <div className="space-y-4">
+              {prescriptions.slice(0, 10).map((prescription) => {
+                const patient = patients.find(p => p.did === prescription.credentialSubject.id);
+                return (
+                  <div key={prescription.id} className="border border-gray-700 rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-semibold text-lg">
+                          {prescription.credentialSubject.prescription.medication.name}
+                        </h3>
+                        <p className="text-gray-400">
+                          Patient: {patient?.name || prescription.credentialSubject.patientInfo.name}
+                        </p>
+                        <p className="text-gray-400">
+                          Dosage: {prescription.credentialSubject.prescription.medication.dosage}
+                        </p>
+                        <p className="text-sm text-gray-500 mt-2">
+                          Issued: {new Date(prescription.issuanceDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-sm ${
+                        prescription.credentialSubject.prescription.status === 'dispensado'
+                          ? 'bg-green-500/20 text-green-500'
+                          : 'bg-yellow-500/20 text-yellow-500'
+                      }`}>
+                        {prescription.credentialSubject.prescription.status === 'dispensado' ? 'Dispensed' : 'Active'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

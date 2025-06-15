@@ -18,6 +18,7 @@ type AppAction =
   | { type: 'ADD_ACTOR'; payload: Actor }
   | { type: 'UPDATE_ACTOR'; payload: Actor }
   | { type: 'REMOVE_ACTOR'; payload: string } // payload is actor id
+  | { type: 'SET_PRESCRIPTIONS'; payload: PrescriptionCredential[] }
   | { type: 'ADD_PRESCRIPTION'; payload: PrescriptionCredential }
   | { type: 'UPDATE_PRESCRIPTION'; payload: PrescriptionCredential }
   | { type: 'ADD_DISPENSATION'; payload: DispensationCredential }
@@ -83,6 +84,13 @@ function appReducer(state: AppState, action: AppAction): AppState {
         currentActor: state.currentActor?.id === action.payload 
           ? null 
           : state.currentActor
+      };
+    }
+
+    case 'SET_PRESCRIPTIONS': {
+      return {
+        ...state,
+        prescriptions: action.payload
       };
     }
 
