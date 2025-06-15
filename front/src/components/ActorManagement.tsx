@@ -1,5 +1,6 @@
 // src/components/ActorManagement.tsx
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,7 +44,7 @@ export const ActorManagement = () => {
 
   useEffect(() => {
     loadActors();
-  }, []);
+  }, [loadActors]);
 
   const handleCreateActor = async () => {
     if (!newActor.name.trim()) {
@@ -157,6 +158,32 @@ export const ActorManagement = () => {
         <h2>👤 Actor Management</h2>
         <p>Create and manage actors (Patient, Doctor, Pharmacy) for the medical prescription demo</p>
       </div>
+
+      {state.actors.length === 0 ? (
+        <div className="bg-blue-500/10 border border-blue-500 rounded-lg p-4 mb-6">
+          <h2 className="text-lg font-semibold mb-2">Welcome to BSV Medical System Setup</h2>
+          <p className="text-gray-300">
+            Please create at least one actor for each role (Patient, Doctor, Pharmacy, Insurance) to start using the system.
+          </p>
+        </div>
+      ) : (
+        <div className="bg-green-500/10 border border-green-500 rounded-lg p-4 mb-6">
+          <h2 className="text-lg font-semibold mb-2">✓ Actors Created Successfully</h2>
+          <p className="text-gray-300 mb-4">
+            You have created {state.actors.length} actor{state.actors.length !== 1 ? 's' : ''}. 
+            {state.actors.length >= 4 ? ' The system is ready to use!' : ' Consider creating actors for all roles before proceeding.'}
+          </p>
+          <Link
+            to="/login"
+            className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+          >
+            <span>Continue to Login</span>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </div>
+      )}
 
       <div className="action-bar">
         <Button 
