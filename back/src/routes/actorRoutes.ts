@@ -92,20 +92,20 @@ export function createActorRoutes(): Router {
 
       // Generate identityKey if not provided - ensures valid controllerPublicKeyHex for BSV DID creation
       let finalIdentityKey = identityKey;
+      let privateKey = '';
+      
       if (!finalIdentityKey) {
         try {
-          // Generate a new public key using the wallet client for this actor
-          const publicKeyResult = await req.walletClient.getPublicKey({
-            protocolID: [1, 'BSV DID Actor'], // Security level 1, protocol for actor DID
-            counterparty: 'self', // For self (actor identity)
-            keyID: `actor-${name}-${Date.now()}` // Unique key ID for this actor
-          });
-          finalIdentityKey = publicKeyResult.publicKey;
-          console.log(`[ActorRoutes] Generated new identityKey for actor ${name}: ${finalIdentityKey}`);
+          // Generate a new private/public key pair for this actor
+          const actorPrivateKey = PrivateKey.fromRandom();
+          privateKey = actorPrivateKey.toHex();
+          finalIdentityKey = actorPrivateKey.toPublicKey().toString();
+          console.log(`[ActorRoutes] Generated new key pair for actor ${name}`);
+          console.log(`[ActorRoutes] Public key: ${finalIdentityKey}`);
         } catch (error) {
-          console.error(`[ActorRoutes] Error generating identityKey for actor:`, error);
+          console.error(`[ActorRoutes] Error generating key pair for actor:`, error);
           return res.status(500).json({
-            error: 'Failed to generate identity key for actor'
+            error: 'Failed to generate identity key pair for actor'
           });
         }
       }
@@ -180,6 +180,7 @@ export function createActorRoutes(): Router {
         phone,
         address,
         publicKey: finalIdentityKey,
+        privateKey, // Store private key for demo purposes
         licenseNumber,
         specialization,
         insuranceProvider,
@@ -203,13 +204,22 @@ export function createActorRoutes(): Router {
 
       console.log(`[ActorRoutes] Actor created: ${actor.id} (${type})`);
 
-      // Remove private key from response
-      const responseActor = { ...actor };
-
+      // Return created actor
+      console.log(`[ActorRoutes] Actor created successfully: ${actor.name} (${actor.type})`);
+      console.log(`[ActorRoutes] Actor ID: ${actor.id}`);
+      console.log(`[ActorRoutes] Actor DID: ${actor.did || 'No DID generated'}`);
+      
+      // For demo purposes, include private key in response
+      // In production, this should NEVER be done
+      const responseActor = {
+        ...actor,
+        privateKey: actor.privateKey
+      };
+      
       res.status(201).json({
         success: true,
         data: responseActor,
-        message: 'Actor created successfully'
+        warning: 'Private key included for demo purposes only. Never expose private keys in production!'
       });
 
     } catch (error) {

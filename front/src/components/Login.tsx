@@ -35,7 +35,21 @@ const Login: React.FC = () => {
   };
 
   const handleActorSelection = (actor: Actor) => {
-    login(actor);
+    // Retrieve private key from localStorage for this actor
+    const privateKeyStorage = JSON.parse(localStorage.getItem('actorPrivateKeys') || '{}');
+    const privateKey = privateKeyStorage[actor.id];
+    
+    // Create actor object with private key
+    const actorWithPrivateKey = {
+      ...actor,
+      privateKey: privateKey || ''
+    };
+    
+    if (!privateKey) {
+      console.warn(`No private key found for actor ${actor.id}. Prescription creation may fail.`);
+    }
+    
+    login(actorWithPrivateKey);
     navigate('/dashboard');
   };
 

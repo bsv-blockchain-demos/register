@@ -188,6 +188,23 @@ class ApiService {
   }
 
   /**
+   * Get all prescriptions
+   */
+  async getPrescriptions(): Promise<ApiResponse> {
+    return this.request('GET', '/v1/prescriptions');
+  }
+
+  /**
+   * Dispense a prescription
+   */
+  async dispensePrescription(prescriptionId: string, pharmacyDid: string): Promise<ApiResponse> {
+    return this.request('POST', `/v1/prescriptions/${prescriptionId}/dispense`, {
+      pharmacyDid,
+      dispensedAt: new Date().toISOString()
+    });
+  }
+
+  /**
    * Create dispensation record
    */
   async createDispensation(prescriptionId: string, dispensationData: {
@@ -197,7 +214,7 @@ class ApiService {
     expiryDate?: string;
     pharmacistNotes?: string;
   }): Promise<ApiResponse> {
-    return this.request('POST', `/v1/prescriptions/${prescriptionId}/dispense`, dispensationData);
+    return this.request('POST', `/v1/prescriptions/${prescriptionId}/dispensations`, dispensationData);
   }
 
   /**
