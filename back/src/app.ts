@@ -23,6 +23,7 @@ const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017"
 const medicalKey = process.env.MEDICAL_LICENSE_CERTIFIER
 const PORT = process.env.PORT || 3000
 const PLATFORM_FUNDING_KEY = process.env.PLATFORM_FUNDING_KEY
+const DB_NAME = process.env.DB_NAME || "LARS_lookup_services";
 const requiredEnvVars = {
   MEDICAL_LICENSE_CERTIFIER: process.env.MEDICAL_LICENSE_CERTIFIER,
   DID_TOPIC: process.env.DID_TOPIC || 'quarkid-test',
