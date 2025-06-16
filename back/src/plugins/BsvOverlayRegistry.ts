@@ -243,7 +243,7 @@ export class BsvOverlayRegistry {
   private async notifyOverlayProvider(topic: string, beef: number[]): Promise<void> {
     const url = `${this.overlayProvider}/submit`;
 
-    await fetch(`${url}/submit`, {
+    await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/octet-stream',
