@@ -19,6 +19,8 @@ interface CustomRequest extends Request {
 export function createPrescriptionRoutes(): Router {
   const router = Router();
   
+  console.log('[PrescriptionRoutes] Creating prescription routes...');
+  
   // Initialize prescription service (in production, this would use dependency injection)
   let prescriptionService: PrescriptionService;
 
@@ -95,11 +97,19 @@ export function createPrescriptionRoutes(): Router {
 
       // Store prescription in database for lookup
       if (req.db) {
-        await req.db.collection('prescriptions').insertOne({
-          ...result.prescriptionVC,
-          createdAt: new Date(),
-          tokenTxid: result.token.txid
-        });
+        console.log('[PrescriptionRoutes] Database available, storing prescription...');
+        try {
+          const insertResult = await req.db.collection('prescriptions').insertOne({
+            ...result.prescriptionVC,
+            createdAt: new Date(),
+            tokenTxid: result.token.txid
+          });
+          console.log('[PrescriptionRoutes] Prescription stored in database:', insertResult.insertedId);
+        } catch (dbError) {
+          console.error('[PrescriptionRoutes] Error storing prescription in database:', dbError);
+        }
+      } else {
+        console.error('[PrescriptionRoutes] Database not available! Prescription not stored.');
       }
 
       console.log(`[PrescriptionRoutes] Prescription created: ${result.prescriptionVC.credentialSubject.prescription.id}`);
@@ -238,11 +248,19 @@ export function createPrescriptionRoutes(): Router {
 
       // Store dispensation in database
       if (req.db) {
-        await req.db.collection('dispensations').insertOne({
-          ...result.dispensationVC,
-          createdAt: new Date(),
-          tokenTxid: result.updatedToken.txid
-        });
+        console.log('[PrescriptionRoutes] Database available, storing dispensation...');
+        try {
+          const insertResult = await req.db.collection('dispensations').insertOne({
+            ...result.dispensationVC,
+            createdAt: new Date(),
+            tokenTxid: result.updatedToken.txid
+          });
+          console.log('[PrescriptionRoutes] Dispensation stored in database:', insertResult.insertedId);
+        } catch (dbError) {
+          console.error('[PrescriptionRoutes] Error storing dispensation in database:', dbError);
+        }
+      } else {
+        console.error('[PrescriptionRoutes] Database not available! Dispensation not stored.');
       }
 
       console.log(`[PrescriptionRoutes] Dispensation created for prescription: ${prescriptionId}`);
@@ -307,11 +325,19 @@ export function createPrescriptionRoutes(): Router {
 
       // Store confirmation in database
       if (req.db) {
-        await req.db.collection('confirmations').insertOne({
-          ...result.confirmationVC,
-          createdAt: new Date(),
-          tokenTxid: result.finalizedToken.txid
-        });
+        console.log('[PrescriptionRoutes] Database available, storing confirmation...');
+        try {
+          const insertResult = await req.db.collection('confirmations').insertOne({
+            ...result.confirmationVC,
+            createdAt: new Date(),
+            tokenTxid: result.finalizedToken.txid
+          });
+          console.log('[PrescriptionRoutes] Confirmation stored in database:', insertResult.insertedId);
+        } catch (dbError) {
+          console.error('[PrescriptionRoutes] Error storing confirmation in database:', dbError);
+        }
+      } else {
+        console.error('[PrescriptionRoutes] Database not available! Confirmation not stored.');
       }
 
       console.log(`[PrescriptionRoutes] Confirmation created for prescription: ${prescriptionId}`);
@@ -389,6 +415,10 @@ export function createPrescriptionRoutes(): Router {
         .sort({ createdAt: -1 })
         .toArray();
 
+      console.log('[PrescriptionRoutes] GET /actor/:did - Query:', JSON.stringify(query));
+      console.log('[PrescriptionRoutes] GET /actor/:did - Found prescriptions:', prescriptions.length);
+      console.log('[PrescriptionRoutes] GET /actor/:did - First prescription:', prescriptions[0]);
+
       res.json({
         success: true,
         data: prescriptions,
@@ -449,6 +479,9 @@ export function createPrescriptionRoutes(): Router {
    * }
    */
   router.post('/share', async (req: CustomRequest, res: Response) => {
+    console.log('[PrescriptionRoutes] POST /share - Handler called');
+    console.log('[PrescriptionRoutes] POST /share - Body:', req.body);
+    
     try {
       const { prescriptionId, patientDid, pharmacyDid } = req.body;
 
@@ -469,7 +502,7 @@ export function createPrescriptionRoutes(): Router {
       const prescription = await req.db
         .collection('prescriptions')
         .findOne({ 
-          'credentialSubject.prescription.id': prescriptionId,
+          id: prescriptionId,
           'credentialSubject.id': patientDid
         });
 
@@ -503,7 +536,17 @@ export function createPrescriptionRoutes(): Router {
         status: 'shared' // 'shared', 'viewed', 'dispensed'
       };
 
-      await req.db.collection('sharedPrescriptions').insertOne(sharedPrescription);
+      if (req.db) {
+        console.log('[PrescriptionRoutes] Database available, storing shared prescription...');
+        try {
+          const insertResult = await req.db.collection('sharedPrescriptions').insertOne(sharedPrescription);
+          console.log('[PrescriptionRoutes] Shared prescription stored in database:', insertResult.insertedId);
+        } catch (dbError) {
+          console.error('[PrescriptionRoutes] Error storing shared prescription in database:', dbError);
+        }
+      } else {
+        console.error('[PrescriptionRoutes] Database not available! Shared prescription not stored.');
+      }
 
       console.log(`[PrescriptionRoutes] Prescription ${prescriptionId} shared with pharmacy ${pharmacyDid}`);
 

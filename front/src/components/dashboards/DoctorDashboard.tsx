@@ -9,11 +9,12 @@ import { FiFileText, FiPlus, FiUser, FiCalendar } from 'react-icons/fi';
 
 const DoctorDashboard: React.FC = () => {
   const { currentUser } = useAuth();
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const [prescriptions, setPrescriptions] = useState<PrescriptionCredential[]>([]);
   const [patients, setPatients] = useState<Actor[]>([]);
   const [showPrescriptionForm, setShowPrescriptionForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [creatingTestPrescription, setCreatingTestPrescription] = useState(false);
 
   const loadPrescriptions = useCallback(async () => {
     if (!currentUser?.did) return;
@@ -48,6 +49,62 @@ const DoctorDashboard: React.FC = () => {
 
     loadPrescriptions();
   }, [currentUser, state.prescriptions, state.actors, loadPrescriptions]);
+
+  const createTestPrescription = async () => {
+    if (!currentUser?.did || !currentUser?.privateKey) {
+      alert('Doctor DID or private key not found');
+      return;
+    }
+
+    const testPatient = patients[0];
+    if (!testPatient) {
+      alert('No patient found to create prescription for');
+      return;
+    }
+
+    setCreatingTestPrescription(true);
+    try {
+      const prescriptionData = {
+        doctorDid: currentUser.did,
+        patientDid: testPatient.did!,
+        doctorPrivateKey: currentUser.privateKey,
+        prescriptionData: {
+          patientName: testPatient.name,
+          patientId: testPatient.did!,
+          patientAge: 35,
+          insuranceProvider: testPatient.insuranceProvider || 'Test Insurance',
+          diagnosis: 'Common cold with mild fever',
+          medicationName: 'Amoxicillin',
+          dosage: '500mg',
+          frequency: 'Twice daily',
+          duration: '7 days',
+          instructions: 'Take with food. Complete the full course even if symptoms improve.'
+        }
+      };
+
+      const response = await apiService.createPrescription(prescriptionData);
+      
+      if (response.success && response.data) {
+        alert('Test prescription created successfully!');
+        // Add the prescription to local state
+        if (response.data.prescriptionVC) {
+          dispatch({
+            type: 'ADD_PRESCRIPTION',
+            payload: response.data.prescriptionVC
+          });
+        }
+        // Reload prescriptions
+        await loadPrescriptions();
+      } else {
+        alert(`Failed to create prescription: ${response.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error creating test prescription:', error);
+      alert('Failed to create test prescription');
+    } finally {
+      setCreatingTestPrescription(false);
+    }
+  };
 
   const todaysPrescriptions = prescriptions.filter(p => {
     const today = new Date().toDateString();
@@ -164,33 +221,29 @@ const DoctorDashboard: React.FC = () => {
 
           {/* Quick Actions */}
           <div>
-            <div className="bg-gray-800 rounded-lg">
-              <div className="border-b border-gray-700 p-6">
-                <h2 className="text-lg font-semibold text-white">Quick Actions</h2>
-              </div>
-              <div className="p-6 space-y-4">
+            <div className="bg-gray-800 rounded-lg p-6 mb-8">
+              <h2 className="text-xl font-bold mb-4">Quick Actions</h2>
+              <div className="flex gap-4">
                 <button
-                  onClick={() => setShowPrescriptionForm(!showPrescriptionForm)}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-medium transition-colors w-full justify-center"
+                  onClick={() => setShowPrescriptionForm(true)}
+                  className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg flex items-center gap-2 transition-colors"
                 >
-                  <FiPlus />
-                  {showPrescriptionForm ? 'Hide Form' : 'New Prescription'}
+                  <FiPlus /> Create Prescription
                 </button>
-
+                {patients.length > 0 && (
+                  <button
+                    onClick={createTestPrescription}
+                    disabled={creatingTestPrescription}
+                    className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg flex items-center gap-2 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                  >
+                    {creatingTestPrescription ? 'Creating...' : 'Create Test Prescription'}
+                  </button>
+                )}
                 <Link
-                  to="/actors"
-                  className="block bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-colors group"
+                  to="/patients"
+                  className="bg-gray-700 hover:bg-gray-600 px-6 py-3 rounded-lg flex items-center gap-2 transition-colors"
                 >
-                  <h3 className="font-medium text-white">👥 View Patients</h3>
-                  <p className="text-sm text-gray-400 mt-1">Manage patient records</p>
-                </Link>
-
-                <Link
-                  to="/scan"
-                  className="block bg-gray-700 hover:bg-gray-600 p-4 rounded-lg transition-colors group"
-                >
-                  <h3 className="font-medium text-white">📷 Scan QR Code</h3>
-                  <p className="text-sm text-gray-400 mt-1">Verify patient or prescription</p>
+                  View All Patients
                 </Link>
               </div>
             </div>

@@ -22,26 +22,25 @@ const PatientDashboard: React.FC = () => {
     
     try {
       setLoading(true);
+      console.log('[PatientDashboard] Loading prescriptions for:', currentUser.did);
       const response = await apiService.getPrescriptionsByActor(currentUser.did, 'patient');
+      console.log('[PatientDashboard] API response:', response);
       if (response.success && response.data) {
+        console.log('[PatientDashboard] Setting prescriptions:', response.data);
         setPrescriptions(response.data);
+      } else {
+        console.log('[PatientDashboard] No prescriptions found or error:', response);
+        setPrescriptions([]);
       }
     } catch (error) {
       console.error('Failed to load prescriptions:', error);
+      setPrescriptions([]);
     } finally {
       setLoading(false);
     }
   }, [currentUser?.did]);
 
   useEffect(() => {
-    // Filter prescriptions for current patient
-    if (currentUser?.did && state.prescriptions) {
-      const myPrescriptions = state.prescriptions.filter(
-        p => p.credentialSubject.id === currentUser.did
-      );
-      setPrescriptions(myPrescriptions);
-    }
-
     // Get all doctors
     if (state.actors) {
       const allDoctors = state.actors.filter(a => a.type === 'doctor');
@@ -53,7 +52,7 @@ const PatientDashboard: React.FC = () => {
     }
 
     loadPrescriptions();
-  }, [currentUser, state.prescriptions, state.actors, loadPrescriptions]);
+  }, [currentUser, state.actors, loadPrescriptions]);
 
   const activePrescriptions = prescriptions.filter(p => 
     p.credentialSubject.prescription.status === 'no dispensado'
