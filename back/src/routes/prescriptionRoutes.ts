@@ -566,6 +566,110 @@ export function createPrescriptionRoutes(): Router {
   });
 
   /**
+   * POST /prescriptions/:prescriptionId/dispensations - Create a dispensation record
+   * Body: {
+   *   pharmacyDid: string,
+   *   medicationProvided: string,
+   *   batchNumber?: string,
+   *   expiryDate?: string,
+   *   pharmacistNotes?: string
+   * }
+   */
+  router.post('/:prescriptionId/dispensations', async (req: CustomRequest, res: Response) => {
+    console.log('[PrescriptionRoutes] POST /:prescriptionId/dispensations - Handler called');
+    console.log('[PrescriptionRoutes] Params:', req.params);
+    console.log('[PrescriptionRoutes] Body:', req.body);
+    
+    try {
+      const { prescriptionId } = req.params;
+      const { pharmacyDid, medicationProvided, batchNumber, expiryDate, pharmacistNotes } = req.body;
+
+      // Validate required fields
+      if (!prescriptionId || !pharmacyDid || !medicationProvided) {
+        return res.status(400).json({
+          error: 'Missing required fields: prescriptionId, pharmacyDid, medicationProvided'
+        });
+      }
+
+      if (!req.db) {
+        return res.status(503).json({
+          error: 'Database not available'
+        });
+      }
+
+      // Verify the prescription exists
+      const prescription = await req.db
+        .collection('prescriptions')
+        .findOne({ id: prescriptionId });
+
+      if (!prescription) {
+        return res.status(404).json({
+          error: 'Prescription not found'
+        });
+      }
+
+      // Verify the prescription is shared with this pharmacy
+      const sharedPrescription = await req.db
+        .collection('sharedPrescriptions')
+        .findOne({
+          prescriptionId: prescriptionId,
+          pharmacyDid: pharmacyDid
+        });
+
+      if (!sharedPrescription) {
+        return res.status(403).json({
+          error: 'Prescription not shared with this pharmacy'
+        });
+      }
+
+      // Check if already dispensed
+      const existingDispensation = await req.db
+        .collection('dispensations')
+        .findOne({
+          prescriptionId: prescriptionId,
+          pharmacyDid: pharmacyDid
+        });
+
+      if (existingDispensation) {
+        return res.status(400).json({
+          error: 'Prescription already dispensed by this pharmacy'
+        });
+      }
+
+      // Create dispensation record
+      const dispensation = {
+        prescriptionId,
+        pharmacyDid,
+        patientDid: prescription.credentialSubject.id,
+        medicationProvided,
+        batchNumber: batchNumber || '',
+        expiryDate: expiryDate || '',
+        pharmacistNotes: pharmacistNotes || '',
+        dispensedAt: new Date().toISOString(),
+        status: 'dispensed'
+      };
+
+      const result = await req.db
+        .collection('dispensations')
+        .insertOne(dispensation);
+
+      console.log('[PrescriptionRoutes] Dispensation created:', result.insertedId);
+
+      res.status(201).json({
+        success: true,
+        dispensationId: result.insertedId,
+        dispensation
+      });
+    } catch (error) {
+      console.error('[PrescriptionRoutes] Error creating dispensation:', error);
+      res.status(500).json({
+        error: 'Failed to create dispensation',
+        details: error.message
+      });
+    }
+  });
+
+  /**
    * GET /prescriptions/shared/:pharmacyDid - Get prescriptions shared with a pharmacy
    */
   router.get('/shared/:pharmacyDid', async (req: CustomRequest, res: Response) => {
@@ -581,16 +685,33 @@ export function createPrescriptionRoutes(): Router {
       const sharedPrescriptions = await req.db
         .collection('sharedPrescriptions')
         .find({ 
-          pharmacyDid: pharmacyDid,
-          status: { $ne: 'dispensed' } // Don't show already dispensed prescriptions
+          pharmacyDid: pharmacyDid
         })
         .sort({ sharedAt: -1 })
         .toArray();
 
+      // For each shared prescription, check if it has been dispensed
+      const prescriptionsWithStatus = await Promise.all(
+        sharedPrescriptions.map(async (shared) => {
+          const dispensation = await req.db
+            .collection('dispensations')
+            .findOne({
+              prescriptionId: shared.prescriptionId,
+              pharmacyDid: pharmacyDid
+            });
+
+          return {
+            ...shared,
+            status: dispensation ? 'dispensed' : 'pending',
+            dispensation: dispensation || null
+          };
+        })
+      );
+
       res.json({
         success: true,
-        data: sharedPrescriptions,
-        count: sharedPrescriptions.length
+        data: prescriptionsWithStatus,
+        count: prescriptionsWithStatus.length
       });
 
     } catch (error) {
