@@ -212,7 +212,7 @@ function PharmacyDashboard() {
                   type="text"
                   value={dispensingForm.medicationProvided}
                   onChange={(e) => setDispensingForm({...dispensingForm, medicationProvided: e.target.value})}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
 
@@ -222,7 +222,7 @@ function PharmacyDashboard() {
                   type="text"
                   value={dispensingForm.batchNumber}
                   onChange={(e) => setDispensingForm({...dispensingForm, batchNumber: e.target.value})}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="e.g., LOT123456"
                 />
               </div>
@@ -233,7 +233,7 @@ function PharmacyDashboard() {
                   type="date"
                   value={dispensingForm.expiryDate}
                   onChange={(e) => setDispensingForm({...dispensingForm, expiryDate: e.target.value})}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
 
@@ -242,7 +242,7 @@ function PharmacyDashboard() {
                 <textarea
                   value={dispensingForm.pharmacistNotes}
                   onChange={(e) => setDispensingForm({...dispensingForm, pharmacistNotes: e.target.value})}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500"
                   rows={3}
                   placeholder="Any special instructions or notes..."
                 />
