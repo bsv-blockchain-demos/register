@@ -2,7 +2,7 @@ import { MongoClient } from 'mongodb';
 import 'dotenv/config';
 
 const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017";
-const dbName = "LARS_lookup_services";
+const DB_NAME = process.env.DB_NAME || "LARS_lookup_services";
 
 async function clearActors() {
   const client = new MongoClient(mongoUri);
@@ -11,7 +11,7 @@ async function clearActors() {
     console.log('Connecting to MongoDB...');
     await client.connect();
     
-    const db = client.db(dbName);
+    const db = client.db(DB_NAME);
     const actorsCollection = db.collection('actors');
     
     // Count existing actors

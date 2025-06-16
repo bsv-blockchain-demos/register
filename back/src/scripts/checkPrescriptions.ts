@@ -1,11 +1,12 @@
 import { MongoClient } from 'mongodb';
+const DB_NAME = process.env.DB_NAME || "LARS_lookup_services";
 
 async function checkPrescriptions() {
   const client = new MongoClient('mongodb://localhost:27017');
   
   try {
     await client.connect();
-    const db = client.db('quarkid_register');
+    const db = client.db(DB_NAME);
     
     console.log('\n=== All Prescriptions ===');
     const prescriptions = await db.collection('prescriptions').find({}).toArray();

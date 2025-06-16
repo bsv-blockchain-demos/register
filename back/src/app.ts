@@ -115,7 +115,7 @@ async function startServer() {
     console.log('Connecting to MongoDB...');
     const client = new MongoClient(mongoUri);
     await client.connect();
-    db = client.db("LARS_lookup_services");
+    db = client.db(DB_NAME);
     console.log('Connected to MongoDB successfully');
 
     // Initialize QuarkIdActorService
@@ -129,7 +129,7 @@ async function startServer() {
     quarkIdAgentService = new QuarkIdAgentService({
       mongodb: {
         uri: process.env.MONGODB_URI || 'mongodb://localhost:27017',
-        dbName: 'quarkid'
+        dbName: DB_NAME
       },
       walletClient: walletClient,
       overlayProvider: process.env.OVERLAY_PROVIDER_URL || 'https://overlay.test.com',
