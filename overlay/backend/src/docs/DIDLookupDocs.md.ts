@@ -7,7 +7,7 @@ export default `# DID Lookup Service Documentation
       const didService = new DIDLookupService()
       const answer = await didService.lookup({
         query: { outpoint: 'txid.vout' },
-        service: 'ls_qdid'
+        service: 'ls_did'
       })
       console.log(answer)
       \`\`\``

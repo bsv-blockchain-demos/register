@@ -4,7 +4,7 @@ import WalletService from '../services/walletService';
 import { TopicBroadcaster, WalletClient, Transaction } from '@bsv/sdk';
 import type { BroadcastResponse, BroadcastFailure } from '@bsv/sdk';
 
-const DID_TOPIC_NAME = 'tm_qdid'; // From didService.ts, used for constructing DID
+const DID_TOPIC_NAME = 'tm_did'; // From didService.ts, used for constructing DID
 
 // Create a mock wallet service instance for demo purposes
 const walletService = new WalletService({} as WalletClient);
