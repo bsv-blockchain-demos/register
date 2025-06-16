@@ -214,7 +214,7 @@ const DIDResolver: React.FC = () => {
   const exampleDIDs = [
     {
       method: 'BSV Overlay',
-      did: 'did:bsv:tm_qdid:9c7c9b9e8b5a4f3d2e1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8:0',
+      did: 'did:bsv:tm_did:9c7c9b9e8b5a4f3d2e1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8:0',
       description: 'BSV overlay DID for medical license verification'
     },
     {
@@ -301,7 +301,7 @@ const DIDResolver: React.FC = () => {
                   type="text"
                   value={didToResolve}
                   onChange={(e) => setDidToResolve(e.target.value)}
-                  placeholder="did:bsv:tm_qdid:txid:vout or did:ion:..."
+                  placeholder="did:bsv:tm_did:txid:vout or did:ion:..."
                   className="did-input"
                   disabled={isLoading}
                 />

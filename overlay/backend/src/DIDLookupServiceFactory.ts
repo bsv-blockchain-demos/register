@@ -18,7 +18,7 @@ class DIDLookupService implements LookupService {
   async outputAdmittedByTopic(payload: OutputAdmittedByTopic): Promise<void> {
     if (payload.mode !== 'locking-script') throw new Error('Invalid payload')
     const { txid, outputIndex, topic, lockingScript } = payload
-    if (topic !== 'tm_qdid') return
+    if (topic !== 'tm_did') return
     console.log(`DID lookup service outputAdded called with ${txid}.${outputIndex}`)
     // Decode the DID token fields from the Bitcoin outputScript
     const result = PushDrop.decode(lockingScript)
@@ -42,7 +42,7 @@ class DIDLookupService implements LookupService {
   async outputSpent(payload: OutputSpent): Promise<void> {
     if (payload.mode !== 'none') throw new Error('Invalid payload')
     const { topic, txid, outputIndex } = payload
-    if (topic !== 'tm_qdid') return
+    if (topic !== 'tm_did') return
     await this.storageManager.deleteRecord(txid, outputIndex)
   }
 
@@ -55,7 +55,7 @@ class DIDLookupService implements LookupService {
     if (question.query === undefined || question.query === null) {
       throw new Error('A valid query must be provided!')
     }
-    if (question.service !== 'ls_qdid') {
+    if (question.service !== 'ls_did') {
       throw new Error('Lookup service not supported!')
     }
 

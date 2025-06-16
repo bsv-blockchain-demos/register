@@ -118,7 +118,7 @@ export class BsvOverlayRegistry {
       if (this.overlayProvider) {
         try {
           console.log("[aegkjhbgfsdkjhbsdfvkjhdfs] Notifying overlay provider...")
-          await this.notifyOverlayProvider('tm_qdid', result.tx);
+          await this.notifyOverlayProvider('tm_did', result.tx);
         } catch (error) {
           console.warn('[BsvOverlayRegistry] Failed to notify overlay provider:', error);
           // Non-critical error, DID is still created on-chain
