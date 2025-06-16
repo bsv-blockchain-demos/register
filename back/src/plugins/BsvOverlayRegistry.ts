@@ -89,7 +89,7 @@ export class BsvOverlayRegistry {
       description: 'Create DID transaction with BSV overlay',
       outputs: outputsForAction,
       options: {
-        randomizeOutputs: false
+        randomizeOutputs: false,
       },
       labels
     };
@@ -117,7 +117,8 @@ export class BsvOverlayRegistry {
       // This helps with indexing and faster lookups
       if (this.overlayProvider) {
         try {
-          await this.notifyOverlayProvider(result.txid, result);
+          console.log("[aegkjhbgfsdkjhbsdfvkjhdfs] Notifying overlay provider...")
+          await this.notifyOverlayProvider('tm_qdid', result.tx);
         } catch (error) {
           console.warn('[BsvOverlayRegistry] Failed to notify overlay provider:', error);
           // Non-critical error, DID is still created on-chain
@@ -239,18 +240,16 @@ export class BsvOverlayRegistry {
    * Notify overlay provider about new transaction
    * This helps with faster indexing (BRC-22 submission)
    */
-  private async notifyOverlayProvider(txid: string, result: CreateActionResult): Promise<void> {
+  private async notifyOverlayProvider(topic: string, beef: number[]): Promise<void> {
     const url = `${this.overlayProvider}/submit`;
-    
-    await fetch(url, {
+
+    await fetch(`${url}/submit`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        txid,
-        topic: this.topic,
-        // Additional transaction data if available
-        ...(result.signableTransaction ? { transaction: result.signableTransaction } : {})
-      })
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Topics': JSON.stringify([topic])
+      },
+      body: new Uint8Array(beef)
     });
   }
   
