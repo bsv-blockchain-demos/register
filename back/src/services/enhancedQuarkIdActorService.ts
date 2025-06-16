@@ -84,7 +84,7 @@ export class EnhancedQuarkIdActorService {
     this.actorsCollection = db.collection('actors');
     this.overlayConfig = overlayConfig || {
       endpoint: 'https://overlay.quarkid.org', // Default overlay endpoint
-      topic: 'did-registry' // Default topic
+      topic: 'tm_qdid' // Default topic
     };
   }
 

@@ -1,0 +1,6 @@
+node_modules
+dist
+*/dist
+*/node_modules
+local-data
+*/local-data
