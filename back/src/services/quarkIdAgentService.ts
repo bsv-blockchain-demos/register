@@ -6,9 +6,11 @@ import { MongoClient, Db, Collection } from 'mongodb';
 import { DIDDocument } from '@quarkid/did-core';
 import { AgentSecureStorage } from '@quarkid/agent';
 import { IVCStorage } from '@quarkid/agent';
-import { BsvOverlayRegistry } from '../plugins/BsvOverlayRegistry';
+import { BsvOverlayRegistry, BsvOverlayRegistryConfig } from '../plugins/BsvOverlayRegistry';
 import { BsvOverlayResolver } from '../plugins/BsvOverlayResolver';
+import { MockBsvOverlayResolver } from '../plugins/MockBsvOverlayResolver';
 import { BsvOverlayRegistryAdapter } from '../plugins/BsvOverlayRegistryAdapter';
+import { BsvWalletKMS } from '../plugins/BsvWalletKMS';
 
 /**
  * Configuration interface for QuarkID Agent with BSV overlay integration
@@ -73,6 +75,10 @@ export class QuarkIdAgentService {
       await mongoClient.connect();
       this.db = mongoClient.db(this.config.mongodb.dbName);
 
+      // Create BSV KMS instance using the wallet client
+      const bsvKMS = new BsvWalletKMS(this.walletClient);
+      console.log('[QuarkIdAgentService] BSV KMS created for wallet-based key management');
+
       // Create BSV overlay registry using our new BRC-100 compliant implementation
       const bsvRegistry = new BsvOverlayRegistry(
         this.walletClient,
@@ -83,6 +89,9 @@ export class QuarkIdAgentService {
       // Create QuarkID-compatible adapters
       const didRegistry = new BsvOverlayRegistryAdapter(bsvRegistry);
       const didResolver = new BsvOverlayResolver(bsvRegistry);
+      
+      // Initialize the registry adapter with KMS
+      didRegistry.initialize({ kms: bsvKMS });
       
       // Initialize Status List Plugin for VC status management
       // const statusListPlugin = new StatusListAgentPlugin({
@@ -101,12 +110,44 @@ export class QuarkIdAgentService {
         agentStorage: agentStorage,
         vcStorage: this.vcStorage,
         vcProtocols: [],
-        agentPlugins: [] // Add empty plugins array
+        agentPlugins: [], // Add empty plugins array
+        kms: bsvKMS // Add KMS to agent configuration
         // plugins: [statusListPlugin] // Uncomment when type declarations are available
       });
       
       // Initialize the agent
       await agent.initialize();
+      
+      // Handle operational DID for the agent
+      // The agent needs its own DID to access the VC module
+      console.log('[QuarkIdAgentService] Checking for existing agent operational DID...');
+      
+      try {
+        // First check if we already have an operational DID stored
+        const storedOperationalDid = await agentStorage.get('operational-did');
+        
+        if (storedOperationalDid) {
+          // Load the existing operational DID
+          console.log('[QuarkIdAgentService] Loading existing operational DID:', storedOperationalDid);
+          // The agent should load this DID during initialization from storage
+          // If not already loaded, we may need to explicitly set it
+          const currentDid = agent.identity.getOperationalDID();
+          if (!currentDid) {
+            console.log('[QuarkIdAgentService] Agent does not have operational DID loaded, may need manual intervention');
+          } else {
+            console.log('[QuarkIdAgentService] Agent operational DID loaded:', currentDid.value);
+          }
+        } else {
+          // No stored operational DID, create a new one
+          console.log('[QuarkIdAgentService] No existing operational DID found, creating new one...');
+          const agentDid = await agent.identity.createNewDID();
+          console.log('[QuarkIdAgentService] Agent operational DID created:', agentDid.value);
+          // The agent should handle storing this internally
+        }
+      } catch (error) {
+        console.error('[QuarkIdAgentService] Error handling agent operational DID:', error);
+        // Try to continue anyway - the agent might work without it for some operations
+      }
       
       console.log('[QuarkIdAgentService] QuarkID Agent initialized successfully');
       this.agent = agent;
@@ -265,32 +306,57 @@ export class QuarkIdAgentService {
       }
 
       // Sign the credential using Agent's VC module
-      const signedVC = await this.agent.vc.signVC({
-        credential,
-        did: DID.from(issuerDid) as unknown as DID,
-        purpose: 'assertionMethod' as any
-      });
+      console.log('[QuarkIdAgentService] Attempting to sign VC with issuer DID:', issuerDid);
+      
+      // Debug: Try to resolve the issuer's DID document to see if it has verification methods
+      try {
+        console.log('[QuarkIdAgentService] Resolving issuer DID document for debugging...');
+        const issuerDidDocument = await this.agent.resolver.resolve(DID.from(issuerDid));
+        console.log('[QuarkIdAgentService] Issuer DID document:', JSON.stringify(issuerDidDocument, null, 2));
+        
+        if (!issuerDidDocument) {
+          console.error('[QuarkIdAgentService] ERROR: Issuer DID document is null!');
+        } else if (!issuerDidDocument.verificationMethod) {
+          console.error('[QuarkIdAgentService] ERROR: Issuer DID document has no verificationMethod!');
+        } else {
+          console.log('[QuarkIdAgentService] Issuer verification methods:', issuerDidDocument.verificationMethod);
+        }
+      } catch (debugError) {
+        console.error('[QuarkIdAgentService] Error resolving issuer DID for debugging:', debugError);
+      }
+      
+      try {
+        const signedVC = await this.agent.vc.signVC({
+          credential,
+          did: DID.from(issuerDid) as unknown as DID,
+          purpose: 'assertionMethod' as any
+        });
 
-      // Create BSV overlay transaction with VC hash
-      const vcHash = this.hashVC(signedVC);
-      const script = new Script()
-        .writeOpCode(OP.OP_RETURN)
-        .writeBin(Array.from(Buffer.from('VC')))
-        .writeBin(Array.from(Buffer.from(vcHash, 'hex')));
+        // Create BSV overlay transaction with VC hash
+        const vcHash = this.hashVC(signedVC);
+        const script = new Script()
+          .writeOpCode(OP.OP_RETURN)
+          .writeBin(Array.from(Buffer.from('VC')))
+          .writeBin(Array.from(Buffer.from(vcHash, 'hex')));
 
-      const action = await this.walletClient.createAction({
-        description: 'Store VC hash on BSV',
-        outputs: [{
-          lockingScript: script.toHex(),
-          satoshis: 0,
-          outputDescription: 'VC hash storage'
-        }]
-      });
+        const action = await this.walletClient.createAction({
+          description: 'Store VC hash on BSV',
+          outputs: [{
+            lockingScript: script.toHex(),
+            satoshis: 0,
+            outputDescription: 'VC hash storage'
+          }]
+        });
 
-      // Just log the action - actual BSV broadcast would happen here
-      console.log('[QuarkIdAgentService] VC hash stored on BSV:', vcHash);
+        // Just log the action - actual BSV broadcast would happen here
+        console.log('[QuarkIdAgentService] VC hash stored on BSV:', vcHash);
 
-      return signedVC;
+        return signedVC;
+      } catch (error) {
+        console.error('[QuarkIdAgentService] Error during VC signing:', error);
+        console.error('[QuarkIdAgentService] Error stack:', error.stack);
+        throw new Error(`Failed to issue VC: ${error.message}`);
+      }
     } catch (error) {
       throw new Error(`Failed to issue VC: ${error.message}`);
     }
@@ -370,7 +436,12 @@ class SecureStorageImpl implements AgentSecureStorage {
   }
 
   async add(key: string, data: any): Promise<void> {
-    await this.collection.insertOne({ _id: key, data });
+    // Use upsert to avoid duplicate key errors
+    await this.collection.replaceOne(
+      { _id: key }, 
+      { _id: key, data, createdAt: new Date() },
+      { upsert: true }
+    );
   }
 
   async get(key: string): Promise<any> {
@@ -404,7 +475,12 @@ class AgentStorageImpl implements IAgentStorage {
   }
 
   async add(key: string, value: any): Promise<void> {
-    await this.collection.insertOne({ _id: key, value, createdAt: new Date() });
+    // Use upsert to avoid duplicate key errors
+    await this.collection.replaceOne(
+      { _id: key }, 
+      { _id: key, value, createdAt: new Date() },
+      { upsert: true }
+    );
   }
 
   async get(key: string): Promise<any> {

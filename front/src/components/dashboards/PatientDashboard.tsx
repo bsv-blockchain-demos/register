@@ -6,16 +6,58 @@ import type { PrescriptionCredential, Actor } from '../../types';
 import { apiService } from '../../services/apiService';
 import { FiFileText, FiClock, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
 
+interface DispensedPrescription extends PrescriptionCredential {
+  status: 'dispensed' | 'confirmed';
+  dispensation?: {
+    _id: string;
+    prescriptionId: string;
+    pharmacyDid: string;
+    patientDid: string;
+    medicationProvided: string;
+    batchNumber?: string;
+    expiryDate?: string;
+    pharmacistNotes?: string;
+    dispensedAt: string;
+    status: string;
+  };
+  confirmation?: {
+    _id: string;
+    prescriptionId: string;
+    patientDid: string;
+    pharmacyDid: string;
+    confirmationNotes?: string;
+    confirmedAt: string;
+    dispensationId: string;
+    status: string;
+    type: string;
+    vcData: {
+      '@context': string[];
+      type: string[];
+      issuer: string;
+      issuanceDate: string;
+      credentialSubject: {
+        id: string;
+        prescriptionId: string;
+        pharmacyDid: string;
+        confirmationTimestamp: string;
+        dispensationId: string;
+      };
+    };
+  };
+}
+
 const PatientDashboard: React.FC = () => {
   const { currentUser } = useAuth();
   const { state } = useApp();
   const [prescriptions, setPrescriptions] = useState<PrescriptionCredential[]>([]);
+  const [dispensedPrescriptions, setDispensedPrescriptions] = useState<DispensedPrescription[]>([]);
   const [doctors, setDoctors] = useState<Actor[]>([]);
   const [pharmacies, setPharmacies] = useState<Actor[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPharmacyModal, setShowPharmacyModal] = useState(false);
   const [selectedPharmacy, setSelectedPharmacy] = useState<Actor | null>(null);
   const [prescriptionToShare, setPrescriptionToShare] = useState<PrescriptionCredential | null>(null);
+  const [confirmingPrescription, setConfirmingPrescription] = useState<string | null>(null);
 
   const loadPrescriptions = useCallback(async () => {
     if (!currentUser?.did) return;
@@ -40,6 +82,30 @@ const PatientDashboard: React.FC = () => {
     }
   }, [currentUser?.did]);
 
+  const loadDispensedPrescriptions = useCallback(async () => {
+    if (!currentUser?.did) return;
+    
+    try {
+      console.log('[PatientDashboard] Loading dispensed prescriptions for:', currentUser.did);
+      const response = await fetch(`http://localhost:3000/v1/prescriptions/dispensed/${currentUser.did}`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          console.log('[PatientDashboard] Dispensed prescriptions:', data.data);
+          setDispensedPrescriptions(data.data);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load dispensed prescriptions:', error);
+    }
+  }, [currentUser?.did]);
+
   useEffect(() => {
     // Get all doctors
     if (state.actors) {
@@ -52,13 +118,14 @@ const PatientDashboard: React.FC = () => {
     }
 
     loadPrescriptions();
-  }, [currentUser, state.actors, loadPrescriptions]);
+    loadDispensedPrescriptions();
+  }, [currentUser, state.actors, loadPrescriptions, loadDispensedPrescriptions]);
 
   const activePrescriptions = prescriptions.filter(p => 
     p.credentialSubject.prescription.status === 'no dispensado'
   );
   
-  const dispensedPrescriptions = prescriptions.filter(p => 
+  const dispensedPrescriptionsFiltered = prescriptions.filter(p => 
     p.credentialSubject.prescription.status === 'dispensado'
   );
 
@@ -118,6 +185,43 @@ const PatientDashboard: React.FC = () => {
     }
   };
 
+  const handleConfirmDispensation = async (prescriptionId: string) => {
+    if (!currentUser?.did) return;
+    
+    try {
+      setConfirmingPrescription(prescriptionId);
+      
+      const response = await fetch(`http://localhost:3000/v1/prescriptions/${prescriptionId}/confirmations`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          patientDid: currentUser.did,
+          confirmationNotes: 'Medication received successfully'
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          alert('Prescription confirmation recorded successfully');
+          // Reload dispensed prescriptions to update the UI
+          loadDispensedPrescriptions();
+        }
+      } else {
+        const error = await response.json();
+        alert(`Failed to confirm prescription: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error confirming prescription:', error);
+      alert('Failed to confirm prescription');
+    } finally {
+      setConfirmingPrescription(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -156,7 +260,7 @@ const PatientDashboard: React.FC = () => {
               <h3 className="text-gray-400">Dispensed</h3>
               <FiCheckCircle className="text-green-500 text-2xl" />
             </div>
-            <p className="text-3xl font-bold text-white">{dispensedPrescriptions.length}</p>
+            <p className="text-3xl font-bold text-white">{dispensedPrescriptionsFiltered.length}</p>
             <p className="text-sm text-gray-500 mt-2">Completed</p>
           </div>
 
@@ -306,9 +410,83 @@ const PatientDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* All Prescriptions Table */}
+        {/* Dispensed Prescriptions Section */}
+        <div className="bg-gray-900 rounded-lg shadow-lg p-6 mb-6">
+          <h2 className="text-2xl font-bold mb-4 text-white flex items-center">
+            <FiCheckCircle className="mr-2 text-green-500" />
+            Dispensed Prescriptions
+          </h2>
+          {dispensedPrescriptions.length === 0 ? (
+            <p className="text-gray-400">No dispensed prescriptions</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-gray-400 border-b border-gray-700">
+                    <th className="py-3 px-4">Medication</th>
+                    <th className="py-3 px-4">Doctor</th>
+                    <th className="py-3 px-4">Dispensed Date</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dispensedPrescriptions.map((prescription) => {
+                    const prescriptionData = prescription.credentialSubject.prescription;
+                    const doctorName = doctors.find(d => d.did === prescription.issuer)?.name || 'Unknown Doctor';
+                    
+                    return (
+                      <tr key={prescription.id} className="border-b border-gray-800">
+                        <td className="py-3 px-4">
+                          <div>
+                            <p className="font-medium text-white">{prescriptionData.medication.name}</p>
+                            <p className="text-sm text-gray-400">{prescriptionData.medication.dosage}</p>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-gray-300">
+                          {doctorName}
+                        </td>
+                        <td className="py-3 px-4 text-gray-300">
+                          {prescription.dispensation ? 
+                            new Date(prescription.dispensation.dispensedAt).toLocaleDateString() : 
+                            'N/A'
+                          }
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-1 rounded text-xs ${
+                            prescription.status === 'confirmed'
+                              ? 'bg-green-500/20 text-green-500'
+                              : 'bg-yellow-500/20 text-yellow-500'
+                          }`}>
+                            {prescription.status === 'confirmed' ? 'Confirmed' : 'Awaiting Confirmation'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {prescription.status === 'dispensed' && !prescription.confirmation && (
+                            <button 
+                              onClick={() => handleConfirmDispensation(prescription.id || '')}
+                              disabled={confirmingPrescription === prescription.id}
+                              className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-500 text-sm"
+                            >
+                              {confirmingPrescription === prescription.id ? 'Confirming...' : 'Confirm Receipt'}
+                            </button>
+                          )}
+                          {prescription.status === 'confirmed' && (
+                            <span className="text-green-500 text-sm">✓ Confirmed</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Recent Prescriptions */}
         <div className="bg-gray-800 rounded-lg p-6 mt-8">
-          <h2 className="text-xl font-bold mb-4">All Prescriptions</h2>
+          <h2 className="text-xl font-bold mb-4">Recent Prescriptions</h2>
           
           {loading ? (
             <p className="text-gray-400">Loading...</p>
@@ -327,7 +505,7 @@ const PatientDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {prescriptions.map((prescription, index) => {
+                  {recentPrescriptions.map((prescription, index) => {
                     const doctor = doctors.find(d => d.did === prescription.issuer);
                     const prescriptionData = prescription.credentialSubject.prescription;
                     

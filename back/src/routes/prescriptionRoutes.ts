@@ -501,8 +501,7 @@ export function createPrescriptionRoutes(): Router {
       // Verify the prescription exists and belongs to the patient
       const prescription = await req.db
         .collection('prescriptions')
-        .findOne({ 
-          id: prescriptionId,
+        .findOne({ id: prescriptionId,
           'credentialSubject.id': patientDid
         });
 
@@ -718,6 +717,319 @@ export function createPrescriptionRoutes(): Router {
       console.error('[PrescriptionRoutes] Error retrieving shared prescriptions:', error);
       res.status(500).json({
         error: 'Failed to retrieve shared prescriptions',
+        details: error.message
+      });
+    }
+  });
+
+  /**
+   * POST /prescriptions/:prescriptionId/confirmations - Patient confirms receipt of medication
+   * Body: {
+   *   patientDid: string,
+   *   confirmationNotes?: string
+   * }
+   */
+  router.post('/:prescriptionId/confirmations', async (req: CustomRequest, res: Response) => {
+    try {
+      const prescriptionId = req.params.prescriptionId;
+      const { patientDid, confirmationNotes } = req.body;
+
+      // Validate required fields
+      if (!prescriptionId || !patientDid) {
+        return res.status(400).json({
+          error: 'Missing required fields: prescriptionId, patientDid'
+        });
+      }
+
+      if (!req.db) {
+        return res.status(503).json({
+          error: 'Database not available'
+        });
+      }
+
+      // Verify the prescription exists
+      const prescription = await req.db
+        .collection('prescriptions')
+        .findOne({ id: prescriptionId });
+
+      if (!prescription) {
+        return res.status(404).json({
+          error: 'Prescription not found'
+        });
+      }
+
+      // Verify the patient is the owner of the prescription
+      if (prescription.credentialSubject.id !== patientDid) {
+        return res.status(403).json({
+          error: 'Unauthorized: You can only confirm your own prescriptions'
+        });
+      }
+
+      // Check if prescription has been dispensed
+      const dispensation = await req.db
+        .collection('dispensations')
+        .findOne({ prescriptionId: prescriptionId });
+
+      if (!dispensation) {
+        return res.status(400).json({
+          error: 'Cannot confirm prescription that has not been dispensed'
+        });
+      }
+
+      // Check if already confirmed
+      const existingConfirmation = await req.db
+        .collection('confirmations')
+        .findOne({ prescriptionId: prescriptionId });
+
+      if (existingConfirmation) {
+        return res.status(400).json({
+          error: 'Prescription already confirmed'
+        });
+      }
+
+      // Create confirmation record (Confirmacion VC)
+      const confirmation = {
+        prescriptionId,
+        patientDid,
+        pharmacyDid: dispensation.pharmacyDid,
+        confirmationNotes: confirmationNotes || '',
+        confirmedAt: new Date().toISOString(),
+        dispensationId: dispensation._id,
+        status: 'confirmed',
+        // In production, this would be a full VC with signature
+        type: 'ConfirmacionVC',
+        vcData: {
+          '@context': ['https://www.w3.org/2018/credentials/v1'],
+          type: ['VerifiableCredential', 'PrescriptionConfirmationCredential'],
+          issuer: patientDid,
+          issuanceDate: new Date().toISOString(),
+          credentialSubject: {
+            id: patientDid,
+            prescriptionId: prescriptionId,
+            pharmacyDid: dispensation.pharmacyDid,
+            confirmationTimestamp: new Date().toISOString(),
+            dispensationId: dispensation._id.toString()
+          }
+        }
+      };
+
+      const result = await req.db
+        .collection('confirmations')
+        .insertOne(confirmation);
+
+      console.log('[PrescriptionRoutes] Confirmation created:', result.insertedId);
+
+      res.status(201).json({
+        success: true,
+        confirmationId: result.insertedId,
+        confirmation
+      });
+    } catch (error) {
+      console.error('[PrescriptionRoutes] Error creating confirmation:', error);
+      res.status(500).json({
+        error: 'Failed to create confirmation',
+        details: error.message
+      });
+    }
+  });
+
+  /**
+   * GET /prescriptions/dispensed/:patientDid - Get dispensed prescriptions for a patient
+   */
+  router.get('/dispensed/:patientDid', async (req: CustomRequest, res: Response) => {
+    try {
+      const patientDid = req.params.patientDid;
+
+      if (!req.db) {
+        return res.status(503).json({
+          error: 'Database not available'
+        });
+      }
+
+      // Get all prescriptions for the patient
+      const prescriptions = await req.db
+        .collection('prescriptions')
+        .find({ 'credentialSubject.id': patientDid })
+        .toArray();
+
+      // For each prescription, check if it has been dispensed and confirmed
+      const prescriptionsWithStatus = await Promise.all(
+        prescriptions.map(async (prescription) => {
+          const dispensation = await req.db
+            .collection('dispensations')
+            .findOne({ prescriptionId: prescription.id });
+
+          const confirmation = await req.db
+            .collection('confirmations')
+            .findOne({ prescriptionId: prescription.id });
+
+          return {
+            ...prescription,
+            status: confirmation ? 'confirmed' : (dispensation ? 'dispensed' : 'pending'),
+            dispensation: dispensation || null,
+            confirmation: confirmation || null
+          };
+        })
+      );
+
+      // Filter only dispensed prescriptions (dispensed or confirmed)
+      const dispensedPrescriptions = prescriptionsWithStatus.filter(p => 
+        p.status === 'dispensed' || p.status === 'confirmed'
+      );
+
+      res.json({
+        success: true,
+        data: dispensedPrescriptions,
+        count: dispensedPrescriptions.length
+      });
+
+    } catch (error) {
+      console.error('[PrescriptionRoutes] Error retrieving dispensed prescriptions:', error);
+      res.status(500).json({
+        error: 'Failed to retrieve dispensed prescriptions',
+        details: error.message
+      });
+    }
+  });
+
+  /**
+   * GET /prescriptions/insurance/:insuranceProviderName - Get prescriptions for an insurance provider
+   * Gets all prescriptions where the insuranceProvider field matches
+   */
+  router.get('/insurance/:insuranceProviderName', async (req: CustomRequest, res: Response) => {
+    try {
+      const insuranceProviderName = decodeURIComponent(req.params.insuranceProviderName);
+
+      if (!req.db) {
+        return res.status(503).json({
+          error: 'Database not available'
+        });
+      }
+
+      // Get all prescriptions for this insurance provider
+      const prescriptions = await req.db
+        .collection('prescriptions')
+        .find({ 'credentialSubject.prescription.insuranceProvider': insuranceProviderName })
+        .sort({ issuanceDate: -1 })
+        .toArray();
+
+      // For each prescription, get dispensation and confirmation status
+      const prescriptionsWithStatus = await Promise.all(
+        prescriptions.map(async (prescription) => {
+          const dispensation = await req.db
+            .collection('dispensations')
+            .findOne({ prescriptionId: prescription.id });
+
+          const confirmation = await req.db
+            .collection('confirmations')
+            .findOne({ prescriptionId: prescription.id });
+
+          // Get patient and doctor information
+          const sharedInfo = await req.db
+            .collection('sharedPrescriptions')
+            .findOne({ prescriptionId: prescription.id });
+
+          return {
+            ...prescription,
+            status: confirmation ? 'confirmed' : (dispensation ? 'dispensed' : 'active'),
+            dispensation: dispensation || null,
+            confirmation: confirmation || null,
+            sharedWithPharmacy: sharedInfo ? sharedInfo.pharmacyDid : null,
+            sharedAt: sharedInfo ? sharedInfo.sharedAt : null
+          };
+        })
+      );
+
+      res.json({
+        success: true,
+        insuranceProvider: insuranceProviderName,
+        data: prescriptionsWithStatus,
+        count: prescriptionsWithStatus.length,
+        summary: {
+          total: prescriptionsWithStatus.length,
+          active: prescriptionsWithStatus.filter(p => p.status === 'active').length,
+          dispensed: prescriptionsWithStatus.filter(p => p.status === 'dispensed').length,
+          confirmed: prescriptionsWithStatus.filter(p => p.status === 'confirmed').length
+        }
+      });
+
+    } catch (error) {
+      console.error('[PrescriptionRoutes] Error retrieving insurance prescriptions:', error);
+      res.status(500).json({
+        error: 'Failed to retrieve prescriptions for insurance provider',
+        details: error.message
+      });
+    }
+  });
+
+  /**
+   * GET /prescriptions/insurance/:insuranceProviderName/stats - Get statistics for an insurance provider
+   */
+  router.get('/insurance/:insuranceProviderName/stats', async (req: CustomRequest, res: Response) => {
+    try {
+      const insuranceProviderName = decodeURIComponent(req.params.insuranceProviderName);
+
+      if (!req.db) {
+        return res.status(503).json({
+          error: 'Database not available'
+        });
+      }
+
+      // Get all prescriptions for this insurance provider
+      const prescriptions = await req.db
+        .collection('prescriptions')
+        .find({ 'credentialSubject.prescription.insuranceProvider': insuranceProviderName })
+        .toArray();
+
+      // Calculate statistics
+      const prescriptionIds = prescriptions.map(p => p.id);
+      
+      const dispensationsCount = await req.db
+        .collection('dispensations')
+        .countDocuments({ prescriptionId: { $in: prescriptionIds } });
+
+      const confirmationsCount = await req.db
+        .collection('confirmations')
+        .countDocuments({ prescriptionId: { $in: prescriptionIds } });
+
+      // Group by medication
+      const medicationStats = prescriptions.reduce((acc, prescription) => {
+        const med = prescription.credentialSubject.prescription.medication.name;
+        if (!acc[med]) {
+          acc[med] = 0;
+        }
+        acc[med]++;
+        return acc;
+      }, {} as Record<string, number>);
+
+      // Group by month
+      const monthlyStats = prescriptions.reduce((acc, prescription) => {
+        const date = new Date(prescription.issuanceDate);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (!acc[monthKey]) {
+          acc[monthKey] = 0;
+        }
+        acc[monthKey]++;
+        return acc;
+      }, {} as Record<string, number>);
+
+      res.json({
+        success: true,
+        insuranceProvider: insuranceProviderName,
+        statistics: {
+          totalPrescriptions: prescriptions.length,
+          dispensed: dispensationsCount,
+          confirmed: confirmationsCount,
+          pending: prescriptions.length - dispensationsCount,
+          medicationBreakdown: medicationStats,
+          monthlyBreakdown: monthlyStats
+        }
+      });
+
+    } catch (error) {
+      console.error('[PrescriptionRoutes] Error retrieving insurance statistics:', error);
+      res.status(500).json({
+        error: 'Failed to retrieve statistics for insurance provider',
         details: error.message
       });
     }

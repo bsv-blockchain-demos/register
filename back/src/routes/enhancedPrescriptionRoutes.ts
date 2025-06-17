@@ -11,6 +11,7 @@ interface CustomRequest extends Request {
   walletClient?: WalletClient;
   db?: Db;
   prescriptionTokenService?: PrescriptionTokenService;
+  quarkIdAgentService?: any;
   body: any;
   params: any;
   query: any;
@@ -32,6 +33,10 @@ router.post('/', async (req: CustomRequest, res) => {
 
     if (!req.walletClient) {
       return res.status(500).json({ error: 'Wallet client not available' });
+    }
+
+    if (!req.quarkIdAgentService) {
+      return res.status(500).json({ error: 'QuarkID Agent service not available' });
     }
 
     const {
@@ -60,7 +65,8 @@ router.post('/', async (req: CustomRequest, res) => {
       {
         endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
         topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-      }
+      },
+      req.quarkIdAgentService
     );
 
     const prescriptionData = {
@@ -106,11 +112,15 @@ router.get('/:tokenId', async (req: CustomRequest, res) => {
       return res.status(500).json({ error: 'Wallet client not available' });
     }
 
+    if (!req.quarkIdAgentService) {
+      return res.status(500).json({ error: 'QuarkID Agent service not available' });
+    }
+
     const { tokenId } = req.params;
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
       endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
       topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-    });
+    }, req.quarkIdAgentService);
 
     const token = await tokenService.getToken(tokenId);
 
@@ -146,13 +156,17 @@ router.get('/patient/:patientDid', async (req: CustomRequest, res) => {
       return res.status(500).json({ error: 'Wallet client not available' });
     }
 
+    if (!req.quarkIdAgentService) {
+      return res.status(500).json({ error: 'QuarkID Agent service not available' });
+    }
+
     const { patientDid } = req.params;
     const decodedDid = decodeURIComponent(patientDid);
     
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
       endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
       topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-    });
+    }, req.quarkIdAgentService);
 
     const tokens = await tokenService.getTokensByPatient(decodedDid);
 
@@ -185,13 +199,17 @@ router.get('/doctor/:doctorDid', async (req: CustomRequest, res) => {
       return res.status(500).json({ error: 'Wallet client not available' });
     }
 
+    if (!req.quarkIdAgentService) {
+      return res.status(500).json({ error: 'QuarkID Agent service not available' });
+    }
+
     const { doctorDid } = req.params;
     const decodedDid = decodeURIComponent(doctorDid);
     
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
       endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
       topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-    });
+    }, req.quarkIdAgentService);
 
     const tokens = await tokenService.getTokensByDoctor(decodedDid);
 
@@ -224,13 +242,17 @@ router.get('/pharmacy/:pharmacyDid', async (req: CustomRequest, res) => {
       return res.status(500).json({ error: 'Wallet client not available' });
     }
 
+    if (!req.quarkIdAgentService) {
+      return res.status(500).json({ error: 'QuarkID Agent service not available' });
+    }
+
     const { pharmacyDid } = req.params;
     const decodedDid = decodeURIComponent(pharmacyDid);
     
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
       endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
       topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-    });
+    }, req.quarkIdAgentService);
 
     const tokens = await tokenService.getTokensByPharmacy(decodedDid);
 
@@ -263,6 +285,10 @@ router.post('/:tokenId/dispense', async (req: CustomRequest, res) => {
       return res.status(500).json({ error: 'Wallet client not available' });
     }
 
+    if (!req.quarkIdAgentService) {
+      return res.status(500).json({ error: 'QuarkID Agent service not available' });
+    }
+
     const { tokenId } = req.params;
     const {
       pharmacyDid,
@@ -282,7 +308,7 @@ router.post('/:tokenId/dispense', async (req: CustomRequest, res) => {
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
       endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
       topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-    });
+    }, req.quarkIdAgentService);
 
     const dispensationData = {
       batchNumber,
@@ -323,6 +349,10 @@ router.post('/:tokenId/confirm', async (req: CustomRequest, res) => {
       return res.status(500).json({ error: 'Wallet client not available' });
     }
 
+    if (!req.quarkIdAgentService) {
+      return res.status(500).json({ error: 'QuarkID Agent service not available' });
+    }
+
     const { tokenId } = req.params;
     const { patientSignature } = req.body;
 
@@ -336,7 +366,7 @@ router.post('/:tokenId/confirm', async (req: CustomRequest, res) => {
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
       endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
       topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-    });
+    }, req.quarkIdAgentService);
 
     const updatedToken = await tokenService.confirmPrescriptionReceipt(tokenId, patientSignature);
 

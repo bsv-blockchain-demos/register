@@ -7,48 +7,84 @@ import { PrescriptionForm } from '../PrescriptionForm';
 import { apiService } from '../../services/apiService';
 import { FiFileText, FiPlus, FiUser, FiCalendar } from 'react-icons/fi';
 
+interface PrescriptionToken {
+  id: string;
+  txid: string;
+  vout: number;
+  satoshis: number;
+  status: 'created' | 'dispensing' | 'dispensed' | 'confirmed' | 'expired';
+  prescriptionDid: string;
+  patientDid: string;
+  doctorDid: string;
+  pharmacyDid?: string;
+  insuranceDid?: string;
+  metadata: {
+    medicationName: string;
+    dosage: string;
+    quantity: number;
+    instructions: string;
+    diagnosisCode?: string;
+    batchNumber?: string;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 const DoctorDashboard: React.FC = () => {
   const { currentUser } = useAuth();
-  const { state, dispatch } = useApp();
+  const { state } = useApp();
   const [prescriptions, setPrescriptions] = useState<PrescriptionCredential[]>([]);
   const [patients, setPatients] = useState<Actor[]>([]);
   const [showPrescriptionForm, setShowPrescriptionForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [creatingTestPrescription, setCreatingTestPrescription] = useState(false);
 
-  const loadPrescriptions = useCallback(async () => {
+  const loadEnhancedPrescriptions = useCallback(async () => {
     if (!currentUser?.did) return;
     
     try {
       setLoading(true);
-      const response = await apiService.getPrescriptionsByActor(currentUser.did, 'doctor');
+      const response = await apiService.getEnhancedPrescriptionsByDoctor(currentUser.did);
       if (response.success && response.data) {
-        setPrescriptions(response.data);
+        // Transform enhanced prescription tokens to match existing prescription format
+        const transformedPrescriptions = response.data.map((token: PrescriptionToken) => ({
+          id: token.id,
+          issuer: token.doctorDid,
+          issuanceDate: token.createdAt,
+          credentialSubject: {
+            id: token.patientDid,
+            patientInfo: {
+              name: 'Patient' // This would come from the actual patient data
+            },
+            prescription: {
+              id: token.id,
+              medication: {
+                name: token.metadata.medicationName,
+                dosage: token.metadata.dosage
+              },
+              status: token.status === 'confirmed' ? 'dispensado' : 'no dispensado'
+            }
+          }
+        }));
+        setPrescriptions(transformedPrescriptions);
       }
     } catch (error) {
-      console.error('Failed to load prescriptions:', error);
+      console.error('Failed to load enhanced prescriptions:', error);
     } finally {
       setLoading(false);
     }
   }, [currentUser?.did]);
 
   useEffect(() => {
-    // Filter prescriptions issued by current doctor
-    if (currentUser?.did && state.prescriptions) {
-      const doctorPrescriptions = state.prescriptions.filter(p => 
-        p.issuer === currentUser.did
-      );
-      setPrescriptions(doctorPrescriptions);
-    }
-
-    // Get all patients
+    // Get all patients for the form
     if (state.actors) {
       const allPatients = state.actors.filter(a => a.type === 'patient');
       setPatients(allPatients);
     }
 
-    loadPrescriptions();
-  }, [currentUser, state.prescriptions, state.actors, loadPrescriptions]);
+    // Load enhanced prescriptions with BSV tokens
+    loadEnhancedPrescriptions();
+  }, [currentUser, state.actors, loadEnhancedPrescriptions]);
 
   const createTestPrescription = async () => {
     if (!currentUser?.did || !currentUser?.privateKey) {
@@ -67,34 +103,21 @@ const DoctorDashboard: React.FC = () => {
       const prescriptionData = {
         doctorDid: currentUser.did,
         patientDid: testPatient.did!,
-        doctorPrivateKey: currentUser.privateKey,
-        prescriptionData: {
-          patientName: testPatient.name,
-          patientId: testPatient.did!,
-          patientAge: 35,
-          insuranceProvider: testPatient.insuranceProvider || 'Test Insurance',
-          diagnosis: 'Common cold with mild fever',
-          medicationName: 'Amoxicillin',
-          dosage: '500mg',
-          frequency: 'Twice daily',
-          duration: '7 days',
-          instructions: 'Take with food. Complete the full course even if symptoms improve.'
-        }
+        medicationName: 'Amoxicillin',
+        dosage: '500mg',
+        quantity: '21', // 7 days * 3 times daily
+        instructions: 'Take with food. Complete the full course even if symptoms improve. Three times daily for 7 days.',
+        diagnosisCode: 'J00', // ICD-10 code for acute nasopharyngitis (common cold)
+        insuranceDid: testPatient.insuranceProvider || undefined,
+        expiryHours: '720' // 30 days
       };
 
-      const response = await apiService.createPrescription(prescriptionData);
+      const response = await apiService.createEnhancedPrescription(prescriptionData);
       
       if (response.success && response.data) {
-        alert('Test prescription created successfully!');
-        // Add the prescription to local state
-        if (response.data.prescriptionVC) {
-          dispatch({
-            type: 'ADD_PRESCRIPTION',
-            payload: response.data.prescriptionVC
-          });
-        }
-        // Reload prescriptions
-        await loadPrescriptions();
+        alert('Test prescription created successfully with BSV token!');
+        // Reload prescriptions using enhanced endpoint
+        await loadEnhancedPrescriptions();
       } else {
         alert(`Failed to create prescription: ${response.error || 'Unknown error'}`);
       }
