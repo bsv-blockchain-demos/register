@@ -17,6 +17,8 @@ import { createPrescriptionRoutes } from './routes/prescriptionRoutes';
 import { createRegisterRoutes } from './routes/registerRoutes';
 import { createTokenRoutes } from './routes/tokenRoutes';
 import { createDWNRoutes } from './routes/dwnRoutes';
+import enhancedActorRoutes from './routes/enhancedActorRoutes';
+import enhancedPrescriptionRoutes from './routes/enhancedPrescriptionRoutes';
 
 // Environment variables
 const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017"
@@ -183,6 +185,7 @@ async function startServer() {
         version: '1.0.0',
         status: 'running',
         mongodb: !!db ? 'connected' : 'not connected',
+        walletClient: !!walletClient ? 'connected' : 'not connected',
         quarkIdAgentService: !!quarkIdAgentService ? 'connected' : 'not connected',
         prescriptionTokenService: !!prescriptionTokenService ? 'connected' : 'not connected',
         endpoints: {
@@ -203,11 +206,9 @@ async function startServer() {
           health: '/v1/vcs/health (GET)'
         },
         enhanced: {
-          note: 'Enhanced BSV overlay routes temporarily disabled due to import issues',
-          planned: [
-            '/v1/enhanced/actors',
-            '/v1/enhanced/prescriptions'
-          ]
+          note: 'Enhanced BSV overlay routes for full token integration',
+          actors: '/v1/enhanced/actors/* (CRUD operations with BSV DIDs)',
+          prescriptions: '/v1/enhanced/prescriptions/* (Token-based prescription lifecycle)'
         }
       });
     });
@@ -220,6 +221,10 @@ async function startServer() {
     app.use('/v1/dwn', createDWNRoutes());
     app.use('/v1/status', createStatusRoutes(db));
     app.use('/register', createRegisterRoutes(db));
+
+    // Enhanced BSV overlay routes
+    app.use('/v1/enhanced/actors', enhancedActorRoutes);
+    app.use('/v1/enhanced/prescriptions', enhancedPrescriptionRoutes);
 
     // This catch-all route MUST come after all other /v1/* routes
     // Otherwise it will intercept requests meant for specific routes

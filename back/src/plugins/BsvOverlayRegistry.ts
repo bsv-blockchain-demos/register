@@ -1,5 +1,15 @@
-import { DIDDocument } from '@quarkid/did-core';
-import { WalletClient, CreateActionArgs, CreateActionResult, Utils, PushDrop, SecurityLevels, WalletProtocol, Random } from '@bsv/sdk';
+import { DIDDocument, VerificationMethodTypes } from '@quarkid/did-core';
+import { 
+  WalletClient, 
+  CreateActionArgs, 
+  CreateActionResult, 
+  WalletProtocol,
+  SecurityLevels,
+  PushDrop,
+  Random,
+  Utils 
+} from '@bsv/sdk';
+import { IJWK } from '@quarkid/kms-core';
 
 /**
  * BSV Overlay Registry for QuarkID Agent
@@ -40,24 +50,27 @@ export class BsvOverlayRegistry {
    * Create a new DID on BSV overlay
    * Uses BRC-100 createAction to request wallet to create the transaction
    */
-  async createDID(didDocument: DIDDocument): Promise<{ did: string; txid: string }> {
+  async createDID(options: { didDocument: DIDDocument; publicKeyJWK?: IJWK; keyId?: string }): Promise<{ did: string; txid: string; didDocument: DIDDocument }> {
+    const { didDocument, publicKeyJWK, keyId } = options;
     console.log('[BsvOverlayRegistry] createDID called with document:', JSON.stringify(didDocument, null, 2));
+    console.log('[BsvOverlayRegistry] publicKeyJWK provided:', !!publicKeyJWK);
+    console.log('[BsvOverlayRegistry] keyId provided:', keyId);
     
     if (!this.walletClient) {
       throw new Error('WalletClient not initialized');
     }
     
-    // Prepare the DID document data for storage
-    const didData = {
+    // We need to create the DID first to know the identifier
+    // So we'll create a temporary document, get the txid, then update it
+    const tempDoc = {
       ...didDocument,
-      created: new Date().toISOString(),
       '@context': didDocument['@context'] || ['https://www.w3.org/ns/did/v1']
     };
     
     console.log('[BsvOverlayRegistry] Preparing BRC-100 CreateAction...');
     
-    // Prepare the DID document for storage
-    const didDocumentString = JSON.stringify(didData);
+    // First, create the transaction to get the txid
+    const didDocumentString = JSON.stringify(tempDoc);
     
     const data = Utils.toArray(didDocumentString, 'utf8')
     const template = new PushDrop(this.walletClient, 'quarkid_did')
@@ -113,6 +126,52 @@ export class BsvOverlayRegistry {
       
       console.log(`[BsvOverlayRegistry] DID created: ${did}`);
       
+      // Now construct the final DID document with the correct ID and verification method
+      const finalDidDocument: DIDDocument = {
+        ...didDocument,
+        id: did,
+        '@context': didDocument['@context'] || ['https://www.w3.org/ns/did/v1'],
+        verificationMethod: [],
+        authentication: [],
+        assertionMethod: [],
+        keyAgreement: [],
+        capabilityDelegation: [],
+        capabilityInvocation: []
+      };
+      
+      // Add verification method if public key is provided
+      if (publicKeyJWK && keyId) {
+        const verificationMethod = {
+          id: keyId,
+          type: VerificationMethodTypes.EcdsaSecp256k1VerificationKey2019,
+          controller: did,
+          publicKeyJwk: publicKeyJWK
+        };
+        
+        finalDidDocument.verificationMethod = [verificationMethod];
+        finalDidDocument.authentication = [keyId];
+        finalDidDocument.assertionMethod = [keyId];
+        
+        console.log('[BsvOverlayRegistry] Added verification method with keyId:', keyId);
+      } else if (publicKeyJWK) {
+        // Fallback to default if keyId not provided
+        const verificationMethod = {
+          id: `${did}#key-1`,
+          type: VerificationMethodTypes.EcdsaSecp256k1VerificationKey2019,
+          controller: did,
+          publicKeyJwk: publicKeyJWK
+        };
+        
+        finalDidDocument.verificationMethod = [verificationMethod];
+        finalDidDocument.authentication = [`${did}#key-1`];
+        finalDidDocument.assertionMethod = [`${did}#key-1`];
+        
+        console.log('[BsvOverlayRegistry] Added verification method with default key-1');
+      }
+      
+      // Note: In a real implementation, we would need to update the on-chain document
+      // For now, we're storing the complete document in our overlay provider
+      
       // Optionally notify the overlay provider about the new DID
       // This helps with indexing and faster lookups
       if (this.overlayProvider) {
@@ -125,7 +184,7 @@ export class BsvOverlayRegistry {
         }
       }
       
-      return { did, txid: result.txid };
+      return { did, txid: result.txid, didDocument: finalDidDocument };
       
     } catch (error) {
       console.error('[BsvOverlayRegistry] Error creating DID:', error);
@@ -237,8 +296,8 @@ export class BsvOverlayRegistry {
   }
 
   /**
-   * Notify overlay provider about new transaction
-   * This helps with faster indexing (BRC-22 submission)
+   * Notify overlay provider about a new DID
+   * This helps with indexing and faster lookups
    */
   private async notifyOverlayProvider(topic: string, beef: number[]): Promise<void> {
     const url = `${this.overlayProvider}/submit`;

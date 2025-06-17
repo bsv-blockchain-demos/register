@@ -28,65 +28,48 @@ interface VerifiableCredential {
 export interface PrescriptionToken {
   id: string;
   txid: string;
-  vout: number;
-  satoshis: number;
   status: 'created' | 'dispensing' | 'dispensed' | 'confirmed' | 'expired';
-  prescriptionDid: string; // DID of the prescription VC
+  prescriptionVC: VerifiableCredential;
   patientDid: string;
   doctorDid: string;
-  pharmacyDid?: string;
-  insuranceDid?: string;
-  unlockConditions: {
-    requiresPatientSignature: boolean;
-    requiresPharmacySignature: boolean;
-    expiryTimestamp?: number;
-  };
-  metadata: {
-    medicationName: string;
-    dosage: string;
-    quantity: number;
-    instructions: string;
-    diagnosisCode?: string;
-    batchNumber?: string;
-  };
-  prescriptionVC?: VerifiableCredential;
+  pharmacyDid: string | null;
   dispensationVC?: VerifiableCredential;
   confirmationVC?: VerifiableCredential;
   createdAt: Date;
   updatedAt: Date;
+  tokenState: {
+    owner: string;
+    canDispense: boolean;
+    dispensedAt: Date | null;
+    confirmedAt: Date | null;
+  };
 }
 
 /**
  * Enhanced prescription token service with real BSV overlay integration
  */
 export class PrescriptionTokenService {
+  private db: Db;
+  private walletClient: any;
+  private overlayConfig: any;
   private quarkIdAgentService: any;
   private vcService: any;
   private tokensCollection: any;
 
   constructor(
-    private db: Db,
-    private walletClient: any,
-    private overlayConfig: {
-      endpoint: string;
-      topic: string;
-    }
+    db: Db, 
+    walletClient: any, 
+    overlayConfig: any,
+    quarkIdAgentService: any
   ) {
-    this.tokensCollection = db.collection('prescription_tokens');
-    this.vcService = {};
+    this.db = db;
+    this.walletClient = walletClient;
+    this.overlayConfig = overlayConfig;
+    this.quarkIdAgentService = quarkIdAgentService;
     
-    // Initialize QuarkID Agent service for DID operations
-    const { QuarkIdAgentService } = require('./quarkIdAgentService');
-    this.quarkIdAgentService = new QuarkIdAgentService({
-      mongodb: {
-        uri: process.env.MONGODB_URI || 'mongodb://localhost:27017',
-        dbName: this.db.databaseName
-      },
-      walletClient: this.walletClient,
-      db: this.db,
-      overlayConfig: this.overlayConfig,
-      overlayProvider: this.overlayConfig.endpoint
-    });
+    // Initialize VC service (placeholder for now)
+    this.vcService = {};
+    this.tokensCollection = db.collection('prescription_tokens');
   }
 
   /**
@@ -108,48 +91,39 @@ export class PrescriptionTokenService {
       // 1. Create prescription VC
       const prescriptionVC = await this.createPrescriptionVC(prescriptionData);
       
-      // 2. Create DID for this prescription
-      const prescriptionDidResponse = await this.createPrescriptionDid(prescriptionVC);
+      // 2. Create BSV token with push-drop mechanics
+      // The token references the prescription VC and is locked to patient/pharmacy signatures
+      const tokenTx = await this.createTokenTransaction(prescriptionData, prescriptionVC.id);
       
-      // 3. Create BSV token with push-drop mechanics
-      const tokenTx = await this.createTokenTransaction(prescriptionData, prescriptionDidResponse.did);
-      
-      // 4. Store token record
+      // 3. Store token record
       const token: PrescriptionToken = {
         id: crypto.randomUUID(),
         txid: tokenTx.id('hex'),
-        vout: 0, // Assuming prescription token is first output
-        satoshis: 1000, // Minimum value for token
+        prescriptionVC,
         status: 'created',
-        prescriptionDid: prescriptionDidResponse.did,
         patientDid: prescriptionData.patientDid,
         doctorDid: prescriptionData.doctorDid,
-        insuranceDid: prescriptionData.insuranceDid,
-        unlockConditions: {
-          requiresPatientSignature: true,
-          requiresPharmacySignature: true,
-          expiryTimestamp: prescriptionData.expiryHours ? 
-            Date.now() + (prescriptionData.expiryHours * 60 * 60 * 1000) : undefined
-        },
-        metadata: {
-          medicationName: prescriptionData.medicationName,
-          dosage: prescriptionData.dosage,
-          quantity: prescriptionData.quantity,
-          instructions: prescriptionData.instructions,
-          diagnosisCode: prescriptionData.diagnosisCode
-        },
-        prescriptionVC: prescriptionVC,
+        pharmacyDid: null,
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        tokenState: {
+          owner: prescriptionData.patientDid,
+          canDispense: true,
+          dispensedAt: null,
+          confirmedAt: null
+        }
       };
-
-      await this.tokensCollection.insertOne(token);
       
-      console.log(`Created prescription token: ${token.txid}:${token.vout}`);
+      // Store in database
+      await this.db.collection('prescription_tokens').insertOne(token);
+      
+      // Broadcast transaction (in production)
+      // await this.broadcastTransaction(tokenTx);
+      
       return token;
-
+      
     } catch (error) {
-      console.error('Error creating prescription token:', error);
+      console.error('[PrescriptionTokenService] Error creating prescription token:', error);
       throw new Error(`Failed to create prescription token: ${error.message}`);
     }
   }
@@ -189,7 +163,7 @@ export class PrescriptionTokenService {
           $set: {
             status: 'dispensed',
             pharmacyDid: pharmacyDid,
-            'metadata.batchNumber': dispensationData.batchNumber,
+            'tokenState.dispensedAt': new Date(),
             dispensationVC: dispensationVC,
             updatedAt: new Date()
           }
@@ -235,6 +209,7 @@ export class PrescriptionTokenService {
         {
           $set: {
             status: 'confirmed',
+            'tokenState.confirmedAt': new Date(),
             confirmationVC: confirmationVC,
             updatedAt: new Date()
           }
@@ -283,39 +258,28 @@ export class PrescriptionTokenService {
 
   private async createPrescriptionVC(prescriptionData: any): Promise<VerifiableCredential> {
     const vcData = {
-      patient: { did: prescriptionData.patientDid },
-      doctor: { did: prescriptionData.doctorDid },
-      medication: {
-        name: prescriptionData.medicationName,
-        dosage: prescriptionData.dosage,
-        quantity: prescriptionData.quantity,
-        instructions: prescriptionData.instructions
-      },
-      diagnosis: prescriptionData.diagnosisCode,
-      prescribedDate: new Date().toISOString()
+      medicationName: prescriptionData.medicationName,
+      dosage: prescriptionData.dosage,
+      quantity: prescriptionData.quantity,
+      instructions: prescriptionData.instructions,
+      diagnosisCode: prescriptionData.diagnosisCode,
+      patientDid: prescriptionData.patientDid,
+      doctorDid: prescriptionData.doctorDid,
+      insuranceDid: prescriptionData.insuranceDid,
+      prescribedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + (prescriptionData.expiryHours || 720) * 60 * 60 * 1000).toISOString()
     };
-
-    return {
-      '@context': [
-        'https://www.w3.org/2018/credentials/v1',
-        'https://schema.quarkid.com/prescription/v1'
-      ],
-      id: `urn:prescription:${crypto.randomUUID()}`,
-      type: ['VerifiableCredential', 'PrescriptionCredential'],
-      issuer: prescriptionData.doctorDid,
-      issuanceDate: new Date().toISOString(),
-      expirationDate: prescriptionData.expiryHours ? 
-        new Date(Date.now() + prescriptionData.expiryHours * 60 * 60 * 1000).toISOString() :
-        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days default
-      credentialSubject: vcData
-    };
+    
+    // Issue VC using doctor's DID
+    return await this.quarkIdAgentService.issueVC(
+      prescriptionData.doctorDid,
+      'https://health.example/schemas/prescription',
+      'Prescription',
+      vcData
+    );
   }
 
-  private async createPrescriptionDid(prescriptionVC: VerifiableCredential): Promise<any> {
-    return await this.quarkIdAgentService.createDid(prescriptionVC);
-  }
-
-  private async createTokenTransaction(prescriptionData: any, prescriptionDid: string): Promise<any> {
+  private async createTokenTransaction(prescriptionData: any, prescriptionVCId: string): Promise<any> {
     // Create a BSV transaction that represents the prescription token
     // This would use push-drop mechanics where the token can only be spent
     // by both patient and pharmacy signatures
@@ -325,7 +289,7 @@ export class PrescriptionTokenService {
     };
     
     // Add prescription data as OP_RETURN output
-    const prescriptionScript = this.createPrescriptionScript(prescriptionData, prescriptionDid);
+    const prescriptionScript = this.createPrescriptionScript(prescriptionData, prescriptionVCId);
     tx.outputs.push({
       satoshis: 0,
       lockingScript: prescriptionScript
@@ -341,7 +305,7 @@ export class PrescriptionTokenService {
     return tx;
   }
 
-  private createPrescriptionScript(prescriptionData: any, prescriptionDid: string): any {
+  private createPrescriptionScript(prescriptionData: any, prescriptionVCId: string): any {
     // Create OP_RETURN script with prescription metadata
     // This is where the prescription data would be embedded
     // Implementation would depend on specific BSV script requirements
@@ -356,7 +320,7 @@ export class PrescriptionTokenService {
 
   private async createDispensationVC(token: PrescriptionToken, pharmacyDid: string, dispensationData: any): Promise<VerifiableCredential> {
     const vcData = {
-      prescriptionReference: token.prescriptionDid,
+      prescriptionReference: token.prescriptionVC.id,
       pharmacy: { did: pharmacyDid },
       patient: { did: token.patientDid },
       dispensation: {
@@ -384,13 +348,13 @@ export class PrescriptionTokenService {
 
   private async createConfirmationVC(token: PrescriptionToken, patientSignature: string): Promise<VerifiableCredential> {
     const vcData = {
-      prescriptionReference: token.prescriptionDid,
+      prescriptionReference: token.prescriptionVC.id,
       patient: { did: token.patientDid },
       confirmation: {
         confirmedDate: new Date().toISOString(),
         patientSignature: patientSignature,
-        medicationReceived: token.metadata.medicationName,
-        quantity: token.metadata.quantity
+        medicationReceived: token.prescriptionVC.credentialSubject.medicationName,
+        quantity: token.prescriptionVC.credentialSubject.quantity
       }
     };
 
@@ -411,7 +375,7 @@ export class PrescriptionTokenService {
   private async finalizeToken(token: PrescriptionToken): Promise<void> {
     // This would create a final transaction that "burns" or locks the token
     // to prevent double-spending and mark the prescription as completed
-    console.log(`Finalizing token: ${token.txid}:${token.vout}`);
+    console.log(`Finalizing token: ${token.txid}`);
   }
   
   // BSV SDK integration helpers have been removed - now handled by QuarkIdAgentService

@@ -330,6 +330,82 @@ class ApiService {
     return this.request('GET', '/v1/tokens/stats');
   }
 
+  // Enhanced BSV Token Prescription API
+
+  /**
+   * Create enhanced prescription with BSV token and VCs
+   */
+  async createEnhancedPrescription(prescriptionData: {
+    patientDid: string;
+    doctorDid: string;
+    medicationName: string;
+    dosage: string;
+    quantity: string;
+    instructions: string;
+    diagnosisCode?: string;
+    insuranceDid?: string;
+    expiryHours?: string;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/enhanced/prescriptions', prescriptionData);
+  }
+
+  /**
+   * Get enhanced prescription token by ID
+   */
+  async getEnhancedPrescription(tokenId: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/enhanced/prescriptions/${tokenId}`);
+  }
+
+  /**
+   * Get enhanced prescriptions by patient DID
+   */
+  async getEnhancedPrescriptionsByPatient(patientDid: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/enhanced/prescriptions/patient/${encodeURIComponent(patientDid)}`);
+  }
+
+  /**
+   * Get enhanced prescriptions by doctor DID
+   */
+  async getEnhancedPrescriptionsByDoctor(doctorDid: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/enhanced/prescriptions/doctor/${encodeURIComponent(doctorDid)}`);
+  }
+
+  /**
+   * Get enhanced prescriptions by pharmacy DID
+   */
+  async getEnhancedPrescriptionsByPharmacy(pharmacyDid: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/enhanced/prescriptions/pharmacy/${encodeURIComponent(pharmacyDid)}`);
+  }
+
+  /**
+   * Dispense enhanced prescription with BSV token update
+   */
+  async dispenseEnhancedPrescription(tokenId: string, dispensationData: {
+    pharmacyDid: string;
+    batchNumber: string;
+    manufacturerInfo: string;
+    dispensedQuantity: string;
+    pharmacistSignature: string;
+  }): Promise<ApiResponse> {
+    return this.request('POST', `/v1/enhanced/prescriptions/${tokenId}/dispense`, dispensationData);
+  }
+
+  /**
+   * Confirm enhanced prescription receipt with BSV token finalization
+   */
+  async confirmEnhancedPrescription(tokenId: string, confirmationData: {
+    patientSignature: string;
+  }): Promise<ApiResponse> {
+    return this.request('POST', `/v1/enhanced/prescriptions/${tokenId}/confirm`, confirmationData);
+  }
+
+  /**
+   * Get enhanced prescriptions by status
+   */
+  async getEnhancedPrescriptionsByStatus(status: 'created' | 'dispensing' | 'dispensed' | 'confirmed' | 'expired'): Promise<ApiResponse> {
+    return this.request('GET', `/v1/enhanced/prescriptions/status/${status}`);
+  }
+
   // DWN Messaging API
 
   /**

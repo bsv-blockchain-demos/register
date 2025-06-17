@@ -2,6 +2,7 @@ import { IAgentRegistry, CreateDIDRequest, CreateDIDResponse, UpdateDIDRequest, 
 import { IKMS } from '@quarkid/kms-core';
 import { DIDDocument, Service, VerificationMethodTypes } from '@quarkid/did-core';
 import { BsvOverlayRegistry } from './BsvOverlayRegistry';
+import { Suite } from '@quarkid/kms-core';
 
 /**
  * BSV Overlay Registry Adapter for QuarkID Agent
@@ -47,6 +48,19 @@ export class BsvOverlayRegistryAdapter extends IAgentRegistry {
   async createDID(createRequest: CreateDIDRequest): Promise<CreateDIDResponse> {
     console.log('[BsvOverlayRegistryAdapter] createDID called with request:', createRequest);
     
+    // Check if KMS is available
+    if (!this.kms) {
+      throw new Error('KMS not initialized. Cannot create DID without key management.');
+    }
+    
+    // Generate a new key pair using the KMS
+    console.log('[BsvOverlayRegistryAdapter] Creating key pair with KMS...');
+    const keyResult = await this.kms.create(Suite.ES256k);
+    const publicKeyJWK = keyResult.publicKeyJWK;
+    
+    // Reconstruct the keyId from the public key (matching the pattern used in BsvWalletKMS)
+    const keyId = `did:bsv:${publicKeyJWK.x.substring(0, 16)}`;
+    
     // Create a basic DID document structure
     const didDocument: DIDDocument = {
       '@context': ['https://www.w3.org/ns/did/v1'],
@@ -60,34 +74,27 @@ export class BsvOverlayRegistryAdapter extends IAgentRegistry {
       service: []
     };
     
-    // If request includes specific keys or services, add them
+    // If request includes specific services, add them
     if (createRequest.services) {
       didDocument.service = createRequest.services;
     }
     
-    console.log('[BsvOverlayRegistryAdapter] Calling bsvRegistry.createDID...');
+    console.log('[BsvOverlayRegistryAdapter] Calling bsvRegistry.createDID with publicKeyJWK...');
     
-    // Create the DID on BSV overlay
-    const result = await this.bsvRegistry.createDID(didDocument);
+    // Create the DID on BSV overlay with the public key
+    const result = await this.bsvRegistry.createDID({
+      didDocument,
+      publicKeyJWK,
+      keyId
+    });
     
     console.log('[BsvOverlayRegistryAdapter] bsvRegistry result:', result);
+    console.log('[BsvOverlayRegistryAdapter] Final DID document:', result.didDocument);
     
-    // Update the document with the generated DID
-    didDocument.id = result.did;
-    
-    // Add default verification method if none provided
-    if (didDocument.verificationMethod.length === 0) {
-      didDocument.verificationMethod = [{
-        id: `${result.did}#primary`,
-        controller: result.did,
-        type: VerificationMethodTypes.EcdsaSecp256k1VerificationKey2019,
-        publicKeyBase58: 'wallet-managed' // Actual key is in wallet
-      }];
-      
-      // Reference the verification method in authentication
-      didDocument.authentication = [`${result.did}#primary`];
-      didDocument.assertionMethod = [`${result.did}#primary`];
-    }
+    // The registry now returns a complete DID document with verification methods
+    // Store the key association in KMS
+    // The KMS should already have the key stored from the create() call
+    console.log('[BsvOverlayRegistryAdapter] Key pair created and associated with DID:', result.did);
     
     console.log('[BsvOverlayRegistryAdapter] Returning CreateDIDResponse with did:', result.did);
     
