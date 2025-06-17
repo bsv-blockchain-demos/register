@@ -1,5 +1,4 @@
-import { IAgentResolver } from '@quarkid/agent';
-import { DID } from '@quarkid/did-core';
+import { IAgentResolver, DID } from '@quarkid/agent';
 import { BsvOverlayRegistry } from './BsvOverlayRegistry';
 
 /**
@@ -51,6 +50,19 @@ export class MockBsvOverlayResolver implements IAgentResolver {
       console.error('[MockBsvOverlayResolver] Error resolving DID:', error);
       return null;
     }
+  }
+
+  /**
+   * Resolve a DID with metadata
+   * Required by IAgentResolver interface
+   */
+  async resolveWithMetdata(did: DID): Promise<any> {
+    const didDocument = await this.resolve(did);
+    return {
+      didDocument,
+      didDocumentMetadata: {},
+      didResolutionMetadata: {}
+    };
   }
 
   /**

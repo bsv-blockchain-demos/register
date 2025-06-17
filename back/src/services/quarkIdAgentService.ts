@@ -6,7 +6,7 @@ import { MongoClient, Db, Collection } from 'mongodb';
 import { DIDDocument } from '@quarkid/did-core';
 import { AgentSecureStorage } from '@quarkid/agent';
 import { IVCStorage } from '@quarkid/agent';
-import { BsvOverlayRegistry, BsvOverlayRegistryConfig } from '../plugins/BsvOverlayRegistry';
+import { BsvOverlayRegistry } from '../plugins/BsvOverlayRegistry';
 import { BsvOverlayResolver } from '../plugins/BsvOverlayResolver';
 import { MockBsvOverlayResolver } from '../plugins/MockBsvOverlayResolver';
 import { BsvOverlayRegistryAdapter } from '../plugins/BsvOverlayRegistryAdapter';
