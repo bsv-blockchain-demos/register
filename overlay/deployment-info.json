@@ -2,11 +2,16 @@
   "schema": "bsv-app",
   "schemaVersion": "1.0",
   "topicManagers": {
-    "tm_did": "./backend/src/DIDTopicManager.ts"
+    "tm_did": "./backend/src/DIDTopicManager.ts",
+    "tm_vc": "./backend/src/VCTopicManager.ts"
   },
   "lookupServices": {
     "ls_did": {
       "serviceFactory": "./backend/src/DIDLookupServiceFactory.ts",
+      "hydrateWith": "mongo"
+    },
+    "ls_vc": {
+      "serviceFactory": "./backend/src/VCLookupServiceFactory.ts",
       "hydrateWith": "mongo"
     }
   },
@@ -18,26 +23,6 @@
       "run": [
         "backend"
       ]
-    },
-    {
-      "name": "Babbage",
-      "provider": "CARS",
-      "CARSCloudURL": "https://cars.babbage.systems",
-      "projectID": "280bebfcc32756a4bcb52a2a1035e1ca",
-      "network": "mainnet",
-      "deploy": [
-        "backend"
-      ]
-    },
-    {
-      "name": "Babbage testnet",
-      "provider": "CARS",
-      "CARSCloudURL": "https://cars.babbage.systems",
-      "projectID": "",
-      "network": "testnet",
-      "deploy": [
-        "backend"
-      ]
-    }
+    } 
   ]
 }

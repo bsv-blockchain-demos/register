@@ -18,7 +18,10 @@ export class MockBsvOverlayResolver implements IAgentResolver {
    */
   storeDIDDocument(did: string, document: any): void {
     console.log('[MockBsvOverlayResolver] Storing DID document:', did);
+    console.log('[MockBsvOverlayResolver] Document to store:', JSON.stringify(document, null, 2));
     this.didDocuments.set(did, document);
+    console.log('[MockBsvOverlayResolver] Total stored documents:', this.didDocuments.size);
+    console.log('[MockBsvOverlayResolver] All stored DIDs:', Array.from(this.didDocuments.keys()));
   }
 
   /**

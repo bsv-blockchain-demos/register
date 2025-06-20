@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { apiService } from '../services/apiService';
+import type { DispensationCredential } from '../types';
 
 const PrescriptionWorkflow: React.FC = () => {
   const { state, dispatch, getPrescriptionFlows } = useApp();
@@ -41,7 +42,6 @@ const PrescriptionWorkflow: React.FC = () => {
       const requestData = {
         doctorDid: state.currentActor.did || '',
         patientDid: prescriptionForm.patientDid,
-        doctorPrivateKey: state.currentActor.privateKey || 'mock-private-key', // In demo mode
         prescriptionData: {
           patientName: patient.name,
           patientId: patient.id,
@@ -96,7 +96,7 @@ const PrescriptionWorkflow: React.FC = () => {
       return;
     }
 
-    const patient = state.actors.find(a => a.did === prescription.patientDid);
+    const patient = state.actors.find(a => a.did === prescription.credentialSubject.id);
     if (!patient) {
       alert('Patient not found');
       return;
@@ -105,29 +105,64 @@ const PrescriptionWorkflow: React.FC = () => {
     setIsProcessing(true);
     try {
       // Create dispensation VC
-      const dispensationVC = {
-        prescriptionId: prescriptionId,
-        dispensedDate: new Date().toISOString(),
-        pharmacyId: state.currentActor.did,
-        dispensedQuantity: prescription.quantity
+      const dispensationVC: DispensationCredential = {
+        '@context': ['https://www.w3.org/2018/credentials/v1'],
+        id: `urn:uuid:${Date.now()}-dispensation`,
+        type: ['VerifiableCredential', 'DispensationCredential'],
+        issuer: state.currentActor.did || '',
+        issuanceDate: new Date().toISOString(),
+        credentialSubject: {
+          id: prescription.credentialSubject.id,
+          prescription: {
+            id: prescriptionId,
+            medication: {
+              name: prescription.credentialSubject.prescription.medication.name,
+              batchNumber: `BATCH-${Date.now()}`,
+              expirationDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year from now
+              manufacturer: 'Unknown' // Default manufacturer since it's not in prescription medication
+            },
+            dispensedDate: new Date().toISOString(),
+            pharmacyId: state.currentActor.did || '',
+            pharmacistId: state.currentActor.did || '' // Using pharmacy DID as pharmacist for now
+          }
+        }
       };
 
       dispatch({ type: 'ADD_DISPENSATION', payload: dispensationVC });
 
       // Update prescription status
-      const updatedPrescription = { ...prescription, status: 'dispensed' };
+      const updatedPrescription = { 
+        ...prescription, 
+        credentialSubject: {
+          ...prescription.credentialSubject,
+          prescription: {
+            ...prescription.credentialSubject.prescription,
+            status: 'dispensado' as const
+          }
+        }
+      };
       dispatch({ type: 'UPDATE_PRESCRIPTION', payload: updatedPrescription });
 
-      // Transfer token to pharmacy
-      const token = state.tokens.find(t => t.metadata?.prescriptionId === prescriptionId);
-      if (token) {
-        const updatedToken = { ...token, status: 'transferred' };
-        dispatch({ type: 'UPDATE_TOKEN', payload: updatedToken });
-      }
+      // Create BSV token for dispensation
+      const tokenData: any = {
+        status: 'dispensado' as const,
+        txid: `demo-txid-${Date.now()}`,
+        vout: 0,
+        satoshis: 1000,
+        script: 'demo-script',
+        unlockableBy: patient.did || '',
+        metadata: {
+          prescriptionId: prescriptionId,
+          medicationInfo: prescription.credentialSubject.prescription.medication.name,
+          batchNumber: `BATCH-${Date.now()}`
+        }
+      };
+
+      dispatch({ type: 'ADD_TOKEN', payload: tokenData });
 
       alert('Prescription dispensed successfully');
     } catch (error) {
-      console.error('Dispensation failed:', error);
+      console.error('Failed to dispense prescription:', error);
       alert('Failed to dispense prescription');
     } finally {
       setIsProcessing(false);
@@ -136,11 +171,11 @@ const PrescriptionWorkflow: React.FC = () => {
 
   const handleConfirmDispensation = async (prescriptionId: string) => {
     if (!state.currentActor || state.currentActor.type !== 'patient') {
-      alert('Only patients can confirm dispensation');
+      alert('Only patients can confirm dispensations');
       return;
     }
 
-    const dispensation = state.dispensations.find(d => d.prescriptionId === prescriptionId);
+    const dispensation = state.dispensations.find(d => d.credentialSubject.prescription.id === prescriptionId);
     if (!dispensation) {
       alert('Dispensation not found');
       return;
@@ -149,21 +184,44 @@ const PrescriptionWorkflow: React.FC = () => {
     setIsProcessing(true);
     try {
       // Create confirmation VC
-      const confirmationVC = {
-        prescriptionId: prescriptionId,
-        confirmedDate: new Date().toISOString(),
-        confirmationType: 'dispensation_received',
-        confirmed: true
+      const confirmationVC: any = {
+        '@context': ['https://www.w3.org/2018/credentials/v1'],
+        id: `urn:uuid:${Date.now()}-confirmation`,
+        type: ['VerifiableCredential', 'ConfirmationCredential'],
+        issuer: state.currentActor.did || '',
+        issuanceDate: new Date().toISOString(),
+        credentialSubject: {
+          id: state.currentActor.did,
+          confirmation: {
+            id: dispensation.id,
+            status: 'confirmado' as const,
+            confirmationType: 'receipt' as 'receipt' | 'insurance',
+            confirmedBy: state.currentActor.did,
+            confirmedAt: new Date().toISOString(),
+            dispensationId: dispensation.id,
+            prescriptionId: prescriptionId
+          }
+        }
       };
 
       dispatch({ type: 'ADD_CONFIRMATION', payload: confirmationVC });
 
-      // Update token status to completed
-      const token = state.tokens.find(t => t.metadata?.prescriptionId === prescriptionId);
-      if (token) {
-        const completedToken = { ...token, status: 'completed' };
-        dispatch({ type: 'UPDATE_TOKEN', payload: completedToken });
-      }
+      // Update token to confirmed status
+      const tokenData: any = {
+        status: 'confirmado' as const,
+        txid: `demo-txid-${Date.now()}`,
+        vout: 0,
+        satoshis: 1000,
+        script: 'demo-script',
+        unlockableBy: state.currentActor.did || '',
+        metadata: {
+          prescriptionId: prescriptionId,
+          medicationInfo: 'Confirmed',
+          batchNumber: `BATCH-CONFIRMED-${Date.now()}`
+        }
+      };
+
+      dispatch({ type: 'UPDATE_TOKEN', payload: tokenData });
 
       alert('Dispensation confirmed successfully');
     } catch (error) {
@@ -256,13 +314,13 @@ const PrescriptionWorkflow: React.FC = () => {
                     <div className="detail-row">
                       <span className="label">Patient:</span>
                       <span className="value">
-                        {state.actors.find(a => a.did === flow.patientDid)?.name || 'Unknown'}
+                        {state.actors.find(a => a.did === flow.prescriptionVC?.credentialSubject.id)?.name || 'Unknown'}
                       </span>
                     </div>
                     <div className="detail-row">
                       <span className="label">Doctor:</span>
                       <span className="value">
-                        {state.actors.find(a => a.did === flow.doctorDid)?.name || 'Unknown'}
+                        {state.actors.find(a => a.did === flow.prescriptionVC?.issuer)?.name || 'Unknown'}
                       </span>
                     </div>
                     {flow.pharmacyDid && (
@@ -276,11 +334,11 @@ const PrescriptionWorkflow: React.FC = () => {
                     <div className="detail-row">
                       <span className="label">Medication:</span>
                       <span className="value">
-                        {flow.prescriptionVC?.medication}
+                        {flow.prescriptionVC?.credentialSubject.prescription.medication.name}
                       </span>
                     </div>
                     <div className="detail-row">
-                      <span className="label">Created:</span>
+                      <span className="label">Date:</span>
                       <span className="value">
                         {flow.createdAt.toLocaleDateString()}
                       </span>
@@ -450,25 +508,25 @@ const PrescriptionWorkflow: React.FC = () => {
                         <div className="detail-grid">
                           <div className="detail-item">
                             <span className="label">Patient:</span>
-                            <span className="value">{state.actors.find(a => a.did === flow.patientDid)?.name}</span>
+                            <span className="value">{state.actors.find(a => a.did === flow.prescriptionVC?.credentialSubject.id)?.name}</span>
                           </div>
                           <div className="detail-item">
                             <span className="label">Medication:</span>
-                            <span className="value">{flow.prescriptionVC?.medication}</span>
+                            <span className="value">{flow.prescriptionVC?.credentialSubject.prescription.medication.name}</span>
                           </div>
                           <div className="detail-item">
                             <span className="label">Dosage:</span>
-                            <span className="value">{flow.prescriptionVC?.dosage}</span>
+                            <span className="value">{flow.prescriptionVC?.credentialSubject.prescription.medication.dosage}</span>
                           </div>
                           <div className="detail-item">
                             <span className="label">Quantity:</span>
-                            <span className="value">{flow.prescriptionVC?.quantity}</span>
+                            <span className="value">{flow.prescriptionVC?.credentialSubject.prescription.medication.frequency}</span>
                           </div>
                         </div>
                         
                         <div className="instructions">
                           <span className="label">Instructions:</span>
-                          <p>{flow.prescriptionVC?.instructions}</p>
+                          <p>{flow.prescriptionVC?.credentialSubject.prescription.medication.duration}</p>
                         </div>
                       </div>
 
@@ -525,13 +583,13 @@ const PrescriptionWorkflow: React.FC = () => {
                           </div>
                           <div className="detail-item">
                             <span className="label">Medication:</span>
-                            <span className="value">{flow.prescriptionVC?.medication}</span>
+                            <span className="value">{flow.prescriptionVC?.credentialSubject.prescription.medication.name}</span>
                           </div>
                           <div className="detail-item">
                             <span className="label">Dispensed:</span>
                             <span className="value">
-                              {flow.dispensationVC?.dispensedDate && 
-                                new Date(flow.dispensationVC.dispensedDate).toLocaleDateString()}
+                              {flow.dispensationVC?.credentialSubject.prescription.dispensedDate && 
+                                new Date(flow.dispensationVC.credentialSubject.prescription.dispensedDate).toLocaleDateString()}
                             </span>
                           </div>
                         </div>

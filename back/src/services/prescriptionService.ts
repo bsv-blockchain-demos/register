@@ -5,8 +5,10 @@ import crypto from 'crypto';
 import { Hash } from '@bsv/sdk';
 
 // Import QuarkID Agent components (would be actual imports in production)
-// import { Agent, VCIssuanceRequest, VCVerificationRequest } from '@quarkid/agent';
-// import { DWNClient } from '@quarkid/dwn-client';
+import { Agent } from '@quarkid/agent';
+import { DWNClient } from '@quarkid/dwn-client';
+import { VC } from '@quarkid/agent/dist/vc/vc';
+import { QuarkIdAgentService } from './quarkIdAgentService';
 
 /**
  * Prescription-related types and interfaces
@@ -105,16 +107,16 @@ export interface BSVPrescriptionToken {
  */
 export class PrescriptionService {
   private walletClient: WalletClient;
-  // private agent: Agent; // QuarkID Agent instance
+  private quarkIdAgentService: QuarkIdAgentService; // QuarkID Agent instance
   // private dwnClient: DWNClient; // DWN client for encrypted messaging
 
   constructor(
     walletClient: WalletClient,
-    // agent: Agent,
+    quarkIdAgentService: QuarkIdAgentService
     // dwnClient: DWNClient
   ) {
     this.walletClient = walletClient;
-    // this.agent = agent;
+    this.quarkIdAgentService = quarkIdAgentService;
     // this.dwnClient = dwnClient;
   }
 
@@ -134,8 +136,7 @@ export class PrescriptionService {
       dosage: string;
       frequency: string;
       duration: string;
-    },
-    doctorPrivateKey: string
+    }
   ): Promise<{
     prescriptionVC: PrescriptionVC;
     token: BSVPrescriptionToken;
@@ -144,46 +145,53 @@ export class PrescriptionService {
     try {
       console.log('[PrescriptionService] Creating prescription for patient:', patientDid);
 
-      // Generate unique prescription ID
-      const prescriptionId = this.generatePrescriptionId(patientDid, doctorDid, prescriptionData.medicationName);
-
-      // Create Prescription VC
-      const prescriptionVC: PrescriptionVC = {
-        '@context': [
-          'https://www.w3.org/2018/credentials/v1',
-          'https://schema.org/',
-          'https://quarkid.org/medical/v1'
-        ],
-        id: uuidv4(),
-        type: ['VerifiableCredential', 'PrescriptionCredential'],
-        issuer: doctorDid,
-        issuanceDate: new Date().toISOString(),
-        credentialSubject: {
-          id: patientDid,
-          patientInfo: {
-            name: prescriptionData.patientName,
-            identificationNumber: prescriptionData.patientId,
-            age: prescriptionData.patientAge,
-            insuranceProvider: prescriptionData.insuranceProvider
+      const prescriptionId = uuidv4();
+      
+      // Prepare the credential claims
+      const credentialClaims = {
+        patientInfo: {
+          name: prescriptionData.patientName,
+          identificationNumber: prescriptionData.patientId,
+          age: prescriptionData.patientAge,
+          insuranceProvider: prescriptionData.insuranceProvider
+        },
+        prescription: {
+          id: prescriptionId,
+          diagnosis: prescriptionData.diagnosis,
+          medication: {
+            name: prescriptionData.medicationName,
+            dosage: prescriptionData.dosage,
+            frequency: prescriptionData.frequency,
+            duration: prescriptionData.duration
           },
-          prescription: {
-            id: prescriptionId,
-            diagnosis: prescriptionData.diagnosis,
-            medication: {
-              name: prescriptionData.medicationName,
-              dosage: prescriptionData.dosage,
-              frequency: prescriptionData.frequency,
-              duration: prescriptionData.duration
-            },
-            doctorId: doctorDid,
-            prescribedDate: new Date().toISOString(),
-            status: 'no dispensado'
-          }
+          doctorId: doctorDid,
+          prescribedDate: new Date().toISOString(),
+          status: 'no dispensado'
         }
       };
 
-      // Add digital signature to VC
-      prescriptionVC.proof = await this.signVC(prescriptionVC, doctorPrivateKey);
+      // Use QuarkID agent to issue and sign the VC
+      const signedVC = await this.quarkIdAgentService.issueVC(
+        doctorDid,           // issuerDid
+        patientDid,          // subjectDid
+        'PrescriptionCredential',  // credentialType
+        credentialClaims     // claims
+      );
+
+      // Convert VerifiableCredential to PrescriptionVC format
+      const prescriptionVC: PrescriptionVC = {
+        '@context': signedVC['@context'] || [],
+        id: signedVC.id,
+        type: signedVC.type,
+        issuer: typeof signedVC.issuer === 'string' 
+          ? signedVC.issuer 
+          : signedVC.issuer.id,
+        issuanceDate: signedVC.issuanceDate instanceof Date 
+          ? signedVC.issuanceDate.toISOString() 
+          : signedVC.issuanceDate,
+        credentialSubject: signedVC.credentialSubject,
+        proof: signedVC.proof
+      };
 
       // Create BSV token with "no dispensado" status
       const token = await this.createPrescriptionToken(

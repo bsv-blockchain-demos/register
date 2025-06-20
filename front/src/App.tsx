@@ -5,7 +5,6 @@ import { ActorManagement } from './components/ActorManagement';
 import PrescriptionWorkflow from './components/PrescriptionWorkflow';
 import PrescriptionDashboard from './components/PrescriptionDashboard';
 import QRScanner from './components/QRScanner';
-import TokenManager from './components/TokenManager';
 import DIDResolver from './components/DidResolver';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -46,7 +45,8 @@ function App() {
               )}
             </div>
             
-            <ul className="space-y-2">
+            <ul className="space-y-2 p-4 pt-0">
+              {/* Dashboard - Available to all users */}
               <li>
                 <Link 
                   to="/dashboard" 
@@ -58,75 +58,54 @@ function App() {
                 </Link>
               </li>
               
-              {/* Show role-specific navigation items */}
-              {currentUser?.type === 'doctor' && (
-                <li>
-                  <Link 
-                    to="/prescription" 
-                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors hover:bg-gray-700 ${
-                      location.pathname === '/prescription' ? 'bg-blue-600 text-white' : 'text-gray-300'
-                    }`}
-                  >
-                    💊 Create Prescription
-                  </Link>
-                </li>
+              {/* Admin-only pages */}
+              {currentUser?.type === 'admin' && (
+                <>
+                  <li>
+                    <Link 
+                      to="/prescription-dashboard" 
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors hover:bg-gray-700 ${
+                        location.pathname === '/prescription-dashboard' ? 'bg-blue-600 text-white' : 'text-gray-300'
+                      }`}
+                    >
+                      📊 Prescriptions
+                    </Link>
+                  </li>
+                  
+                  <li>
+                    <Link 
+                      to="/qr-scanner" 
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors hover:bg-gray-700 ${
+                        location.pathname === '/qr-scanner' ? 'bg-blue-600 text-white' : 'text-gray-300'
+                      }`}
+                    >
+                      📷 QR Scanner
+                    </Link>
+                  </li>
+                  
+                  <li>
+                    <Link 
+                      to="/did-resolver" 
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors hover:bg-gray-700 ${
+                        location.pathname === '/did-resolver' ? 'bg-blue-600 text-white' : 'text-gray-300'
+                      }`}
+                    >
+                      🔍 DID Resolver
+                    </Link>
+                  </li>
+                  
+                  <li>
+                    <Link 
+                      to="/actors" 
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors hover:bg-gray-700 ${
+                        location.pathname === '/actors' ? 'bg-blue-600 text-white' : 'text-gray-300'
+                      }`}
+                    >
+                      👤 Actor Management
+                    </Link>
+                  </li>
+                </>
               )}
-              
-              <li>
-                <Link 
-                  to="/prescription-dashboard" 
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors hover:bg-gray-700 ${
-                    location.pathname === '/prescription-dashboard' ? 'bg-blue-600 text-white' : 'text-gray-300'
-                  }`}
-                >
-                  📊 Prescriptions
-                </Link>
-              </li>
-              
-              <li>
-                <Link 
-                  to="/qr-scanner" 
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors hover:bg-gray-700 ${
-                    location.pathname === '/qr-scanner' ? 'bg-blue-600 text-white' : 'text-gray-300'
-                  }`}
-                >
-                  📱 QR Scanner
-                </Link>
-              </li>
-              
-              <li>
-                <Link 
-                  to="/did-resolver" 
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors hover:bg-gray-700 ${
-                    location.pathname === '/did-resolver' ? 'bg-blue-600 text-white' : 'text-gray-300'
-                  }`}
-                >
-                  🔍 DID Resolver
-                </Link>
-              </li>
-              
-              {/* Admin/setup options for all users */}
-              <li className="pt-4 border-t border-gray-700">
-                <Link 
-                  to="/actors" 
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors hover:bg-gray-700 ${
-                    location.pathname === '/actors' ? 'bg-blue-600 text-white' : 'text-gray-300'
-                  }`}
-                >
-                  👤 Actor Management
-                </Link>
-              </li>
-              
-              <li>
-                <Link 
-                  to="/tokens" 
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors hover:bg-gray-700 ${
-                    location.pathname === '/tokens' ? 'bg-blue-600 text-white' : 'text-gray-300'
-                  }`}
-                >
-                  🪙 Token Manager
-                </Link>
-              </li>
             </ul>
             
             <div className="pt-4 border-t border-gray-700">
@@ -161,37 +140,31 @@ function App() {
           } />
           
           <Route path="/actors" element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin']}>
               <ActorManagement />
             </ProtectedRoute>
           } />
           
           <Route path="/prescription" element={
-            <ProtectedRoute allowedRoles={['doctor']}>
+            <ProtectedRoute allowedRoles={['doctor', 'admin']}>
               <PrescriptionWorkflow />
             </ProtectedRoute>
           } />
           
           <Route path="/prescription-dashboard" element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin']}>
               <PrescriptionDashboard />
             </ProtectedRoute>
           } />
           
           <Route path="/qr-scanner" element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin']}>
               <QRScanner />
             </ProtectedRoute>
           } />
           
-          <Route path="/tokens" element={
-            <ProtectedRoute>
-              <TokenManager />
-            </ProtectedRoute>
-          } />
-          
           <Route path="/did-resolver" element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin']}>
               <DIDResolver />
             </ProtectedRoute>
           } />

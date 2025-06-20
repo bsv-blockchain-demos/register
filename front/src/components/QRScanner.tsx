@@ -4,6 +4,7 @@ import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { qrService } from '../services/qrService';
+import { apiService } from '../services/apiService';
 import type { QRCodeData, VerifiableCredential, PrescriptionCredential } from '../types';
 
 const QRScanner: React.FC = () => {
@@ -107,29 +108,51 @@ const QRScanner: React.FC = () => {
   };
 
   const handlePrescriptionVC = async (qrData: QRCodeData) => {
-    if (!state.currentActor?.privateKey) {
+    if (!state.currentActor) {
       setError('Please select an actor first');
       return;
     }
 
     try {
-      const vc = qrService.decryptVCFromQR(qrData, state.currentActor.privateKey);
-      setDecryptedVC(vc);
+      // Send encrypted QR data to backend for decryption
+      const response = await apiService.decryptQRCode({
+        actorId: state.currentActor.id,
+        qrData: qrData
+      });
 
-      // Verify the VC - skip verification for now as it may have type issues  
-      // const isValid = vcService.verifyVC(vc);
-      // if (!isValid) {
-      //   setError('Invalid Verifiable Credential signature');
-      //   return;
-      // }
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to decrypt QR code');
+      }
 
-      // Add to state if it's new and is a PrescriptionCredential
-      const existingVC = state.prescriptions.find(p => p.id === vc.id);
-      if (!existingVC && vc.type?.includes('PrescriptionCredential')) {
-        dispatch({ type: 'ADD_PRESCRIPTION', payload: vc as PrescriptionCredential });
-        setError('Prescription VC imported successfully');
+      const vcData = response.data;
+      
+      // Type guard to check if it's a valid VC structure
+      if (typeof vcData === 'object' && vcData !== null && 'id' in vcData && 'type' in vcData) {
+        // Cast to VerifiableCredential for setDecryptedVC
+        const vc = vcData as VerifiableCredential;
+        setDecryptedVC(vc);
+        
+        // Check if it's a PrescriptionCredential
+        const types = Array.isArray(vc.type) ? vc.type : [vc.type];
+        const isPrescriptionCredential = types.some(t => 
+          typeof t === 'string' && t.includes('PrescriptionCredential')
+        );
+
+        if (isPrescriptionCredential && vc.id) {
+          // Check if already exists
+          const existingVC = state.prescriptions.find(p => p.id === vc.id);
+          if (!existingVC) {
+            // Double cast through unknown for PrescriptionCredential
+            dispatch({ type: 'ADD_PRESCRIPTION', payload: vcData as unknown as PrescriptionCredential });
+            setError('Prescription VC imported successfully');
+          } else {
+            setError('Prescription VC already exists');
+          }
+        } else {
+          setError('Invalid credential type - expected PrescriptionCredential');
+        }
       } else {
-        setError('Prescription VC already exists or wrong credential type');
+        setError('Invalid Verifiable Credential structure');
       }
     } catch (err) {
       setError(`Failed to decrypt VC: ${err instanceof Error ? err.message : 'Unknown error'}`);

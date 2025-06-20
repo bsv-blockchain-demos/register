@@ -35,7 +35,7 @@ export interface CreateDidResponse {
 }
 
 // ==== Actor Types ====
-export type ActorType = 'patient' | 'doctor' | 'pharmacy' | 'insurance';
+export type ActorType = 'patient' | 'doctor' | 'pharmacy' | 'insurance' | 'admin';
 
 export interface Actor {
   id: string;
@@ -46,7 +46,6 @@ export interface Actor {
   phone?: string;
   address?: string;
   publicKey?: string;
-  privateKey?: string; // Stored locally only
   qrCode?: string;
   createdAt: Date;
   updatedAt?: Date;

@@ -3,6 +3,8 @@
  * Handles all HTTP requests to the backend API
  */
 
+import type { ActorType } from "@/types";
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 interface ApiResponse<T = any> {
@@ -92,7 +94,7 @@ class ApiService {
    */
   async createActor(actorData: {
     name: string;
-    type: 'patient' | 'doctor' | 'pharmacy' | 'insurance';
+    type: ActorType 
     email?: string;
     phone?: string;
     address?: string;
@@ -164,7 +166,6 @@ class ApiService {
   async createPrescription(requestData: {
     doctorDid: string;
     patientDid: string;
-    doctorPrivateKey: string;
     prescriptionData: {
       patientName: string;
       patientId: string;
@@ -470,6 +471,18 @@ class ApiService {
    */
   async getDWNStats(did: string): Promise<ApiResponse> {
     return this.request('GET', `/v1/dwn/stats/${encodeURIComponent(did)}`);
+  }
+
+  // QR Code Operations
+
+  /**
+   * Decrypt QR code data using backend
+   */
+  async decryptQRCode(data: {
+    actorId: string;
+    qrData: unknown;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/qr/decrypt', data);
   }
 
   // DID Management API

@@ -10,6 +10,7 @@ import type {
   Actor
 } from '../types';
 import { encryptionService } from './encryptionService';
+import { API_BASE_URL } from '../config';
 
 /**
  * Service for creating and managing Verifiable Credentials
@@ -18,11 +19,11 @@ class VCService {
   /**
    * Create a Prescription Verifiable Credential
    */
-  createPrescriptionVC(
+  async createPrescriptionVC(
     formData: PrescriptionFormData,
     patient: Actor,
     doctor: Actor
-  ): PrescriptionCredential {
+  ): Promise<PrescriptionCredential> {
     if (!patient.did || !doctor.did) {
       throw new Error('Patient and doctor must have DIDs');
     }
@@ -32,201 +33,183 @@ class VCService {
       `${patient.did}-${doctor.did}-${Date.now()}-${formData.medicationName}`
     );
 
-    const prescriptionVC: PrescriptionCredential = {
-      '@context': [
-        'https://www.w3.org/2018/credentials/v1',
-        'https://schema.org/',
-        'https://quarkid.org/medical/v1'
-      ],
-      id: vcId,
-      type: ['VerifiableCredential', 'PrescriptionCredential'],
-      issuer: doctor.did,
-      issuanceDate: new Date().toISOString(),
-      credentialSubject: {
-        id: patient.did,
-        patientInfo: {
-          name: formData.patientName,
-          identificationNumber: formData.patientId,
-          age: formData.patientAge,
-          insuranceProvider: formData.insuranceProvider
+    // Prepare the VC structure without proof
+    const credentialSubject = {
+      id: patient.did,
+      patientInfo: {
+        name: formData.patientName,
+        identificationNumber: formData.patientId,
+        age: formData.patientAge,
+        insuranceProvider: formData.insuranceProvider
+      },
+      prescription: {
+        id: prescriptionId,
+        diagnosis: formData.diagnosis,
+        medication: {
+          name: formData.medicationName,
+          dosage: formData.dosage,
+          frequency: formData.frequency,
+          duration: formData.duration
         },
-        prescription: {
-          id: prescriptionId,
-          diagnosis: formData.diagnosis,
-          medication: {
-            name: formData.medicationName,
-            dosage: formData.dosage,
-            frequency: formData.frequency,
-            duration: formData.duration
-          },
-          doctorId: doctor.did,
-          prescribedDate: new Date().toISOString(),
-          status: 'no dispensado'
-        }
+        doctorId: doctor.did,
+        prescribedDate: new Date().toISOString(),
+        status: 'no dispensado'
       }
     };
 
-    // Add proof (simplified implementation)
-    if (doctor.privateKey) {
-      const vcString = JSON.stringify({
-        ...prescriptionVC,
-        proof: undefined // Exclude proof from signing
-      });
-      
-      prescriptionVC.proof = {
-        type: 'Ed25519Signature2018',
-        created: new Date().toISOString(),
-        verificationMethod: `${doctor.did}#key-1`,
-        proofPurpose: 'assertionMethod',
-        jws: encryptionService.sign(vcString, doctor.privateKey)
-      };
+    // Call backend to issue the VC
+    const response = await fetch(`${API_BASE_URL}/vcs/issue`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        issuerDid: doctor.did,
+        subjectDid: patient.did,
+        credentialSubject,
+        vcType: 'PrescriptionCredential',
+        vcId
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to issue prescription VC');
     }
 
-    return prescriptionVC;
+    const { vc } = await response.json();
+    return vc as PrescriptionCredential;
   }
 
   /**
    * Create a Dispensation Verifiable Credential
    */
-  createDispensationVC(
+  async createDispensationVC(
     prescriptionVC: PrescriptionCredential,
     formData: DispensationFormData,
     pharmacy: Actor
-  ): DispensationCredential {
+  ): Promise<DispensationCredential> {
     if (!pharmacy.did) {
       throw new Error('Pharmacy must have a DID');
     }
 
     const vcId = uuidv4();
 
-    const dispensationVC: DispensationCredential = {
-      '@context': [
-        'https://www.w3.org/2018/credentials/v1',
-        'https://schema.org/',
-        'https://quarkid.org/medical/v1'
-      ],
-      id: vcId,
-      type: ['VerifiableCredential', 'DispensationCredential'],
-      issuer: pharmacy.did,
-      issuanceDate: new Date().toISOString(),
-      credentialSubject: {
-        id: prescriptionVC.credentialSubject.id, // Patient DID
-        prescription: {
-          id: prescriptionVC.credentialSubject.prescription.id,
-          medication: {
-            name: prescriptionVC.credentialSubject.prescription.medication.name,
-            batchNumber: formData.batchNumber,
-            expirationDate: formData.expirationDate,
-            manufacturer: formData.manufacturer
-          },
-          dispensedDate: new Date().toISOString(),
-          pharmacyId: pharmacy.did,
-          pharmacistId: formData.pharmacistId
-        }
+    // Prepare the VC structure without proof
+    const credentialSubject = {
+      id: prescriptionVC.credentialSubject.id, // Patient DID
+      prescription: {
+        id: prescriptionVC.credentialSubject.prescription.id,
+        medication: {
+          name: prescriptionVC.credentialSubject.prescription.medication.name,
+          batchNumber: formData.batchNumber,
+          expirationDate: formData.expirationDate,
+          manufacturer: formData.manufacturer
+        },
+        dispensedDate: new Date().toISOString(),
+        pharmacyId: pharmacy.did,
+        pharmacistId: formData.pharmacistId
       }
     };
 
-    // Add proof
-    if (pharmacy.privateKey) {
-      const vcString = JSON.stringify({
-        ...dispensationVC,
-        proof: undefined
-      });
-      
-      dispensationVC.proof = {
-        type: 'Ed25519Signature2018',
-        created: new Date().toISOString(),
-        verificationMethod: `${pharmacy.did}#key-1`,
-        proofPurpose: 'assertionMethod',
-        jws: encryptionService.sign(vcString, pharmacy.privateKey)
-      };
+    // Call backend to issue the VC
+    const response = await fetch(`${API_BASE_URL}/vcs/issue`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        issuerDid: pharmacy.did,
+        subjectDid: prescriptionVC.credentialSubject.id,
+        credentialSubject,
+        vcType: 'DispensationCredential',
+        vcId
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to issue dispensation VC');
     }
 
-    return dispensationVC;
+    const { vc } = await response.json();
+    return vc as DispensationCredential;
   }
 
   /**
    * Create a Confirmation Verifiable Credential
    */
-  createConfirmationVC(
+  async createConfirmationVC(
     prescriptionVC: PrescriptionCredential,
     formData: ConfirmationFormData,
     patient: Actor
-  ): ConfirmationCredential {
+  ): Promise<ConfirmationCredential> {
     if (!patient.did) {
       throw new Error('Patient must have a DID');
     }
 
     const vcId = uuidv4();
 
-    const confirmationVC: ConfirmationCredential = {
-      '@context': [
-        'https://www.w3.org/2018/credentials/v1',
-        'https://schema.org/',
-        'https://quarkid.org/medical/v1'
-      ],
-      id: vcId,
-      type: ['VerifiableCredential', 'ConfirmationCredential'],
-      issuer: patient.did,
-      issuanceDate: new Date().toISOString(),
-      credentialSubject: {
-        id: patient.did,
-        confirmation: {
-          prescriptionId: prescriptionVC.credentialSubject.prescription.id,
-          confirmedDate: new Date().toISOString(),
-          status: formData.status,
-          notes: formData.notes
-        }
+    // Prepare the VC structure without proof
+    const credentialSubject = {
+      id: patient.did,
+      confirmation: {
+        prescriptionId: prescriptionVC.credentialSubject.prescription.id,
+        confirmedDate: new Date().toISOString(),
+        confirmationType: 'patient-confirmation', // Default type
+        status: formData.status,
+        notes: formData.notes || ''
       }
     };
 
-    // Add proof
-    if (patient.privateKey) {
-      const vcString = JSON.stringify({
-        ...confirmationVC,
-        proof: undefined
-      });
-      
-      confirmationVC.proof = {
-        type: 'Ed25519Signature2018',
-        created: new Date().toISOString(),
-        verificationMethod: `${patient.did}#key-1`,
-        proofPurpose: 'assertionMethod',
-        jws: encryptionService.sign(vcString, patient.privateKey)
-      };
+    // Call backend to issue the VC
+    const response = await fetch(`${API_BASE_URL}/vcs/issue`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        issuerDid: patient.did,
+        subjectDid: patient.did,
+        credentialSubject,
+        vcType: 'ConfirmationCredential',
+        vcId
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to issue confirmation VC');
     }
 
-    return confirmationVC;
+    const { vc } = await response.json();
+    return vc as ConfirmationCredential;
   }
 
   /**
    * Verify a Verifiable Credential's signature
    */
-  verifyVC(vc: PrescriptionCredential | DispensationCredential | ConfirmationCredential): boolean {
+  async verifyVC(vc: PrescriptionCredential | DispensationCredential | ConfirmationCredential): Promise<boolean> {
     if (!vc.proof) {
       return false;
     }
 
     try {
-      // Extract proof and create verification string
-      const vcWithoutProof = {
-        ...vc,
-        proof: undefined
-      };
-      const vcString = JSON.stringify(vcWithoutProof);
-      
-      // In a real implementation, we would:
-      // 1. Resolve the DID to get the public key
-      // 2. Verify the signature using the public key
-      // For this demo, we'll do basic format validation
-      
-      return (
-        vc.proof.type === 'Ed25519Signature2018' &&
-        vc.proof.jws &&
-        vc.proof.jws.length === 64 && // Basic signature format check
-        vc.proof.verificationMethod &&
-        vc.proof.created
-      );
+      // Call backend to verify the VC
+      const response = await fetch(`${API_BASE_URL}/vcs/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ vc })
+      });
+
+      if (!response.ok) {
+        return false;
+      }
+
+      const { valid } = await response.json();
+      return valid;
     } catch (error) {
       console.error('VC verification failed:', error);
       return false;

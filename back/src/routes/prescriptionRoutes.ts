@@ -8,6 +8,7 @@ interface CustomRequest extends Request {
   walletClient?: WalletClient;
   db?: Db;
   prescriptionService?: PrescriptionService;
+  quarkIdAgentService?: any;
   body: any;
   params: any;
   query: any;
@@ -26,8 +27,8 @@ export function createPrescriptionRoutes(): Router {
 
   // Middleware to initialize prescription service
   router.use((req: CustomRequest, res: Response, next) => {
-    if (!prescriptionService && req.walletClient) {
-      prescriptionService = new PrescriptionService(req.walletClient);
+    if (!prescriptionService && req.walletClient && req.quarkIdAgentService) {
+      prescriptionService = new PrescriptionService(req.walletClient, req.quarkIdAgentService);
     }
     next();
   });
@@ -37,7 +38,6 @@ export function createPrescriptionRoutes(): Router {
    * Body: {
    *   doctorDid: string,
    *   patientDid: string,
-   *   doctorPrivateKey: string,
    *   prescriptionData: {
    *     patientName: string,
    *     patientId: string,
@@ -56,14 +56,13 @@ export function createPrescriptionRoutes(): Router {
       const {
         doctorDid,
         patientDid,
-        doctorPrivateKey,
         prescriptionData
       } = req.body;
 
       // Validate required fields
-      if (!doctorDid || !patientDid || !doctorPrivateKey || !prescriptionData) {
+      if (!doctorDid || !patientDid || !prescriptionData) {
         return res.status(400).json({
-          error: 'Missing required fields: doctorDid, patientDid, doctorPrivateKey, prescriptionData'
+          error: 'Missing required fields: doctorDid, patientDid, prescriptionData'
         });
       }
 
@@ -87,12 +86,11 @@ export function createPrescriptionRoutes(): Router {
         });
       }
 
-      // Create prescription
+      // Create prescription - the service will use the QuarkID agent for signing
       const result = await prescriptionService.createPrescription(
         doctorDid,
         patientDid,
-        prescriptionData,
-        doctorPrivateKey
+        prescriptionData
       );
 
       // Store prescription in database for lookup

@@ -2,6 +2,7 @@ import { Agent, AgentModenaResolver, IAgentResolver, IAgentStorage, DID, AgentMo
 import { VerifiableCredential } from '@quarkid/vc-core';
 // import { StatusListAgentPlugin } from '@quarkid/status-list-agent-plugin';
 import { WalletClient, Transaction, PrivateKey, Script, OP } from '@bsv/sdk';
+import { Wallet } from '@bsv/wallet-toolbox-client';
 import { MongoClient, Db, Collection } from 'mongodb';
 import { DIDDocument } from '@quarkid/did-core';
 import { AgentSecureStorage } from '@quarkid/agent';
@@ -11,6 +12,9 @@ import { BsvOverlayResolver } from '../plugins/BsvOverlayResolver';
 import { MockBsvOverlayResolver } from '../plugins/MockBsvOverlayResolver';
 import { BsvOverlayRegistryAdapter } from '../plugins/BsvOverlayRegistryAdapter';
 import { BsvWalletKMS } from '../plugins/BsvWalletKMS';
+import { ES256kVCSuite } from '../suites/ES256kVCSuite';
+import { Suite } from '@quarkid/kms-core';
+import { BbsBls2020Suite } from '@quarkid/kms-suite-bbsbls2020';
 
 /**
  * Configuration interface for QuarkID Agent with BSV overlay integration
@@ -20,6 +24,7 @@ export interface QuarkIdAgentServiceConfig {
     uri: string;
     dbName: string;
   };
+  wallet: Wallet;
   walletClient: WalletClient;
   overlayProvider?: string;
   feePerKb?: number;
@@ -40,16 +45,30 @@ export interface QuarkIdAgentServiceConfig {
  */
 export class QuarkIdAgentService {
   private config: QuarkIdAgentServiceConfig;
-  private agent?: Agent;
-  private db?: Db;
-  private walletClient: any;
-  private vcStorage?: VCStorageImpl;
+  private agent: Agent;
+  private db: Db;
+  private walletClient: WalletClient;
+  private wallet: Wallet;
+  private bsvAdapter: BsvOverlayRegistryAdapter;
   private initPromise: Promise<void>;
-  private initialized = false;
+  private isInitialized: boolean = false;
+  private bsvKms: BsvWalletKMS;
+  private resolver: IAgentResolver;
+  private dbClient: MongoClient;
+  private vcStorage: VCStorageImpl;
+
+  // Add global unhandled rejection handler to prevent crashes
+  static {
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('[QuarkIdAgentService] Unhandled Rejection at:', promise, 'reason:', reason);
+      // Prevent process exit for non-critical errors like DWN polling
+    });
+  }
 
   constructor(config: QuarkIdAgentServiceConfig) {
     this.config = config;
     this.walletClient = config.walletClient;
+    this.wallet = config.wallet;
     this.initPromise = this.initialize();
   }
 
@@ -57,7 +76,7 @@ export class QuarkIdAgentService {
    * Ensure the service is initialized before use
    */
   private async ensureInitialized(): Promise<void> {
-    if (!this.initialized) {
+    if (!this.isInitialized) {
       await this.initPromise;
     }
   }
@@ -78,20 +97,28 @@ export class QuarkIdAgentService {
       // Create BSV KMS instance using the wallet client
       const bsvKMS = new BsvWalletKMS(this.walletClient);
       console.log('[QuarkIdAgentService] BSV KMS created for wallet-based key management');
+      
+      // Set the KMS instance in ES256kVCSuite so it can use it for key creation
+      ES256kVCSuite.setKMS(bsvKMS);
+      console.log('[QuarkIdAgentService] KMS injected into ES256kVCSuite');
 
       // Create BSV overlay registry using our new BRC-100 compliant implementation
       const bsvRegistry = new BsvOverlayRegistry(
-        this.walletClient,
-        process.env.DID_TOPIC || 'quarkid-did',
-        this.config.overlayProvider || process.env.OVERLAY_PROVIDER_URL || 'https://overlay.bsvapi.com'
+        bsvKMS,
+        process.env.DID_TOPIC || 'tm_did',
+        this.config.overlayProvider || process.env.OVERLAY_PROVIDER_URL || 'http://localhost:3000',
+        this.db
       );
       
       // Create QuarkID-compatible adapters
       const didRegistry = new BsvOverlayRegistryAdapter(bsvRegistry);
-      const didResolver = new BsvOverlayResolver(bsvRegistry);
       
-      // Initialize the registry adapter with KMS
-      didRegistry.initialize({ kms: bsvKMS });
+      // Use real resolver now that we have the overlay running locally
+      const didResolver = new BsvOverlayResolver(bsvRegistry);
+      console.log('[QuarkIdAgentService] Using BsvOverlayResolver with overlay at:', this.config.overlayProvider || process.env.OVERLAY_PROVIDER_URL);
+      
+      // Initialize the registry adapter with KMS and resolver
+      didRegistry.initialize({ kms: bsvKMS, resolver: didResolver });
       
       // Initialize Status List Plugin for VC status management
       // const statusListPlugin = new StatusListAgentPlugin({
@@ -110,8 +137,7 @@ export class QuarkIdAgentService {
         agentStorage: agentStorage,
         vcStorage: this.vcStorage,
         vcProtocols: [],
-        agentPlugins: [], // Add empty plugins array
-        kms: bsvKMS // Add KMS to agent configuration
+        agentPlugins: [] // Add empty plugins array
         // plugins: [statusListPlugin] // Uncomment when type declarations are available
       });
       
@@ -143,6 +169,24 @@ export class QuarkIdAgentService {
           const agentDid = await agent.identity.createNewDID();
           console.log('[QuarkIdAgentService] Agent operational DID created:', agentDid.value);
           // The agent should handle storing this internally
+          
+          // If we're using MockBsvOverlayResolver, we need to explicitly store the DID document
+          if (didResolver && 'storeDIDDocument' in didResolver) {
+            console.log('[QuarkIdAgentService] Storing agent operational DID in mock resolver...');
+            try {
+              // Get the DID document from the agent's identity
+              // The agent should have just created this DID, so it should have the document
+              const didDoc = await agent.resolver.resolve(agentDid);
+              if (didDoc) {
+                console.log('[QuarkIdAgentService] Storing agent DID document in mock resolver');
+                (didResolver as any).storeDIDDocument(agentDid.value, didDoc);
+              } else {
+                console.error('[QuarkIdAgentService] Could not resolve agent DID document');
+              }
+            } catch (error) {
+              console.error('[QuarkIdAgentService] Error storing agent DID in mock resolver:', error);
+            }
+          }
         }
       } catch (error) {
         console.error('[QuarkIdAgentService] Error handling agent operational DID:', error);
@@ -151,7 +195,30 @@ export class QuarkIdAgentService {
       
       console.log('[QuarkIdAgentService] QuarkID Agent initialized successfully');
       this.agent = agent;
-      this.initialized = true;
+      this.isInitialized = true;
+      
+      // Register suite classes with the agent's internal KMS
+      console.log('[QuarkIdAgentService] Registering ES256k and BbsBls2020 suites with agent KMS...');
+      const internalKms = (agent as any).kms;
+      if (internalKms && internalKms.suites) {
+        internalKms.suites.set(Suite.ES256k, ES256kVCSuite);
+        internalKms.suites.set(Suite.Bbsbls2020, BbsBls2020Suite);
+        console.log('[QuarkIdAgentService] Suites registered successfully');
+      } else {
+        console.error('[QuarkIdAgentService] Unable to access agent internal KMS suites map');
+      }
+      
+      // Suppress DWN polling errors since we're not using DWN functionality
+      process.on('unhandledRejection', (reason, promise) => {
+        const errorMessage = reason?.toString() || '';
+        if (errorMessage.includes('DIDDocument has not a DWN service defined') || 
+            errorMessage.includes('Cannot read properties of null (reading \'service\')')) {
+          // Silently ignore DWN-related errors
+          return;
+        }
+        // Re-throw other unhandled rejections
+        console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+      });
       
     } catch (error) {
       console.error('[QuarkIdAgentService] Failed to initialize:', error);
@@ -185,7 +252,7 @@ export class QuarkIdAgentService {
       
       // Use the agent's registry to create a DID
       // This will internally use our BsvOverlayRegistryAdapter
-      const didResponse = await this.agent!.registry.createDID({
+      const didResponse = await this.agent.registry.createDID({
         didMethod: 'bsv',
         // For BSV, keys are managed by the wallet, so we provide empty arrays
         updateKeys: [],
@@ -339,14 +406,26 @@ export class QuarkIdAgentService {
           .writeBin(Array.from(Buffer.from('VC')))
           .writeBin(Array.from(Buffer.from(vcHash, 'hex')));
 
+        const scriptHex = script.toHex();
+        console.log('[QuarkIdAgentService] Script hex:', scriptHex);
+        console.log('[QuarkIdAgentService] Script hex length:', scriptHex.length);
+
         const action = await this.walletClient.createAction({
           description: 'Store VC hash on BSV',
           outputs: [{
-            lockingScript: script.toHex(),
-            satoshis: 0,
+            lockingScript: scriptHex,
+            satoshis: 1, // Minimal dust amount for OP_RETURN
             outputDescription: 'VC hash storage'
           }]
         });
+        console.log('[QuarkIdAgentService] createAction params:', JSON.stringify({
+          description: 'Store VC hash on BSV',
+          outputs: [{
+            lockingScript: scriptHex,
+            satoshis: 1, 
+            outputDescription: 'VC hash storage'
+          }]
+        }, null, 2));
 
         // Just log the action - actual BSV broadcast would happen here
         console.log('[QuarkIdAgentService] VC hash stored on BSV:', vcHash);

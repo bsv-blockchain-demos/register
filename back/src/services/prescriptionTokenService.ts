@@ -1,5 +1,6 @@
 import { Db } from 'mongodb';
 import crypto from 'crypto';
+import { Script, OP, Hash, Utils, PushDrop, WalletProtocol, Byte } from '@bsv/sdk';
 
 // Simplified types for now - we'll replace with real BSV overlay types later
 interface UTXO {
@@ -98,7 +99,7 @@ export class PrescriptionTokenService {
       // 3. Store token record
       const token: PrescriptionToken = {
         id: crypto.randomUUID(),
-        txid: tokenTx.id('hex'),
+        txid: tokenTx.txid,
         prescriptionVC,
         status: 'created',
         patientDid: prescriptionData.patientDid,
@@ -279,43 +280,90 @@ export class PrescriptionTokenService {
     );
   }
 
-  private async createTokenTransaction(prescriptionData: any, prescriptionVCId: string): Promise<any> {
-    // Create a BSV transaction that represents the prescription token
-    // This would use push-drop mechanics where the token can only be spent
-    // by both patient and pharmacy signatures
+  private async createTokenTransaction(prescriptionData: any, prescriptionVCId: string) {
+    console.log('[PrescriptionTokenService] Creating token transaction for prescription VC:', prescriptionVCId);
     
-    const tx: any = {
-      outputs: []
+    // Create unique serial number for the prescription token
+    const uniqueData = {
+      prescriptionVCId,
+      timestamp: Date.now(),
+      nonce: Math.random().toString(36).substring(2, 15)
+    };
+    const serialNumberBytes = Hash.sha256(JSON.stringify(uniqueData));
+    const serialNumber = Utils.toHex(serialNumberBytes);
+    
+    console.log('[PrescriptionTokenService] Generated prescription token serial number:', serialNumber);
+    
+    // Prepare the prescription VC data for PushDrop
+    const prescriptionVCData = {
+      vcId: prescriptionVCId,
+      medication: prescriptionData.medicationName,
+      dosage: prescriptionData.dosage,
+      quantity: prescriptionData.quantity,
+      instructions: prescriptionData.instructions,
+      patientDid: prescriptionData.patientDid,
+      doctorDid: prescriptionData.doctorDid
     };
     
-    // Add prescription data as OP_RETURN output
-    const prescriptionScript = this.createPrescriptionScript(prescriptionData, prescriptionVCId);
-    tx.outputs.push({
-      satoshis: 0,
-      lockingScript: prescriptionScript
+    // Build PushDrop fields - serial number and prescription VC data
+    const fields: Byte[][] = [
+      serialNumberBytes  // Use the raw bytes for the PushDrop field
+    ];
+    
+    // Protocol ID for prescription tokens - similar to DID tokens
+    const protocolID: WalletProtocol = [0, 'tm prescription'];
+    const keyID: string = serialNumber;
+    const counterparty: string = 'self';
+    
+    // Create the PushDrop locking script
+    const pushDropToken = new PushDrop(this.walletClient);
+    
+    const lock = await pushDropToken.lock(
+      fields,
+      protocolID,
+      keyID,
+      counterparty,
+      true, // forSelf
+      true, // includeSignature
+      'before' as "before" | "after"
+    );
+    
+    const lockingScript = lock.toHex();
+    
+    console.log('[PrescriptionTokenService] Creating BSV transaction with PushDrop output...');
+    
+    // Create the transaction using wallet client
+    const createActionResult = await this.walletClient.createAction({
+      description: 'Create prescription token with BSV overlay',
+      outputs: [
+        {
+          satoshis: 1,
+          lockingScript: lockingScript,
+          outputDescription: 'Prescription PushDrop Token',
+          basket: 'prescription-tokens',
+          customInstructions: JSON.stringify({
+            protocolID: protocolID,
+            counterparty: counterparty,
+            keyID: keyID,
+            fields: fields,
+            type: 'PushDrop',
+            prescriptionVCData: prescriptionVCData
+          })
+        }
+      ],
+      options: {
+        randomizeOutputs: false,
+      },
+      labels: ['prescription-token', 'create']
     });
     
-    // Add spendable token output with multi-sig conditions
-    const tokenScript = this.createTokenLockingScript(prescriptionData.patientDid);
-    tx.outputs.push({
-      satoshis: 1000,
-      lockingScript: tokenScript
-    });
+    console.log('[PrescriptionTokenService] Transaction created:', createActionResult.txid);
     
-    return tx;
-  }
-
-  private createPrescriptionScript(prescriptionData: any, prescriptionVCId: string): any {
-    // Create OP_RETURN script with prescription metadata
-    // This is where the prescription data would be embedded
-    // Implementation would depend on specific BSV script requirements
-    throw new Error('Prescription script creation not implemented');
-  }
-
-  private createTokenLockingScript(patientDid: string): any {
-    // Create locking script that requires specific conditions for spending
-    // This implements the "push-drop" mechanics
-    throw new Error('Token locking script creation not implemented');
+    return {
+      ...createActionResult,
+      serialNumber,
+      prescriptionVCData
+    };
   }
 
   private async createDispensationVC(token: PrescriptionToken, pharmacyDid: string, dispensationData: any): Promise<VerifiableCredential> {
