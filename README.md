@@ -221,6 +221,47 @@ The backend exposes RESTful APIs under `/v1/`:
 
 For detailed API documentation, see the route files in `back/src/routes/`.
 
+## Development Scripts
+
+The backend includes several useful scripts in `back/src/scripts/` for development and testing:
+
+### Database Management
+
+- **`seedActors.ts`** - Populates the database with sample actors (doctor, patient, pharmacy, insurance)
+
+  ```bash
+  npx tsx src/scripts/seedActors.ts
+  ```
+
+- **`clearActors.ts`** - Clears all actors from the database for a fresh start
+
+  ```bash
+  npx tsx src/scripts/clearActors.ts
+  ```
+
+### Testing & Debugging
+
+- **`testDirectDIDCreation.ts`** - Tests DID creation directly using the BSV overlay service
+
+  ```bash
+  npx tsx src/scripts/testDirectDIDCreation.ts
+  ```
+
+- **`testEnhancedPrescription.ts`** - Tests the complete enhanced prescription workflow with BSV token creation
+
+  ```bash
+  npx tsx src/scripts/testEnhancedPrescription.ts
+  ```
+
+### Other Utilities
+
+Additional scripts are available for testing specific features:
+
+- `checkPrescriptions.ts` - Check prescription status
+- `testActorEndpoint.ts` - Test actor API endpoints
+- `testPrescriptionAPI.ts` - Test prescription creation API
+- `testSharePrescription.ts` - Test prescription sharing workflow
+
 ## License
 
 [Add your license information here]
