@@ -29,7 +29,7 @@ This project requires extended versions of QuarkID packages that include BSV ove
 
 ```bash
 # Clone the extended QuarkID packages repository
-git clone <https://github.com/yourusername/Paquetes-NPMjs.git>
+git clone git@jonesjBSV.github.com:jonesjBSV/Paquetes-NPMjs.git
 cd Paquetes-NPMjs
 
 # Link the extended packages globally
@@ -42,9 +42,8 @@ cd ../did-registry && npm link
 ### 2. Set up BlockMed Application
 
 ```bash
-# Clone the BlockMed demo repository
-cd ~/Desktop  # or your preferred directory
-git clone <https://github.com/yourusername/Paquetes-NPMjs.git>
+# The BlockMed demo is included in the BSV extended Paquetes-NPMjs repository
+git clone git@jonesjBSV.github.com:jonesjBSV/Paquetes-NPMjs.git
 cd Paquetes-NPMjs/register
 ```
 
