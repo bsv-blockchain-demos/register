@@ -1,226 +1,226 @@
-# QuarkID BSV Prescription Management System
+# BlockMed - Blockchain Prescription Management System
 
-A comprehensive blockchain-based prescription management system using Decentralized Identifiers (DIDs) and Verifiable Credentials (VCs) on Bitcoin SV overlay network.
+A comprehensive blockchain-based prescription management system using Decentralized Identifiers (DIDs) and Verifiable Credentials (VCs) on Bitcoin SV overlay network with extended QuarkID packages.
 
 ## Overview
 
-This application provides a complete prescription workflow with three main actors:
+BlockMed demonstrates a complete prescription workflow with four main actors:
 
-- **Frontend**: React application for doctors, pharmacies, and patients to manage prescriptions
-- **Backend**: Express server handling DID operations, VC issuance, BSV token management, and DWN messaging
+- **Patients**: Receive prescriptions, share with pharmacies, confirm receipt
+- **Doctors**: Create and issue prescriptions as Verifiable Credentials
+- **Pharmacies**: Verify prescriptions, dispense medications, track status
+- **Insurance**: Receive prescription copies for coverage verification
 
-The system leverages Bitcoin SV blockchain overlay for immutable prescription tracking, preventing fraud and double-spending through a token-based system.
+The system leverages QuarkID and Bitcoin SV blockchain overlay(s) for immutable prescription tracking, preventing fraud and double-spending through a token-based system.
 
 ## Prerequisites
 
 - Node.js (v18 or newer)
 - MongoDB (v6.0 or newer)
-- npm or yarn
-- BSV wallet with funding for blockchain transactions
-- Access to BSV overlay network
-- DWN (Decentralized Web Node) endpoint
+- npm (v8 or newer)
+- Git
+- BSV overlay service running locally (<http://localhost:8080>)
+
+## Quick Start Guide
+
+### 1. Clone and Link Extended QuarkID Packages
+
+This project requires extended versions of QuarkID packages that include BSV overlay support. These must be linked locally before running the application.
+
+```bash
+# Clone the extended QuarkID packages repository
+git clone <https://github.com/yourusername/Paquetes-NPMjs.git>
+cd Paquetes-NPMjs
+
+# Link the extended packages globally
+cd packages/kms-client && npm link
+cd ../vc-core && npm link
+cd ../agent && npm link
+cd ../did-registry && npm link
+```
+
+### 2. Set up BlockMed Application
+
+```bash
+# Clone the BlockMed demo repository
+cd ~/Desktop  # or your preferred directory
+git clone <https://github.com/yourusername/Paquetes-NPMjs.git>
+cd Paquetes-NPMjs/register
+```
+
+### 3. Backend Setup
+
+```bash
+# Navigate to backend
+cd back
+
+# Install dependencies
+npm install
+
+# Link the extended QuarkID packages
+npm link @quarkid/kms-client @quarkid/vc-core @quarkid/agent @quarkid/did-registry
+
+# Create .env file
+cat > .env << EOF
+# MongoDB Configuration
+MONGO_URI=mongodb://localhost:27017/blockmed
+
+# BSV Overlay Configuration
+BSV_OVERLAY_URL=<http://localhost:8080>
+DID_TOPIC=tm_did
+VC_TOPIC=tm_vc
+
+# Wallet Configuration (optional - for testing)
+WALLET_SERVICE_URL=<http://localhost:3001>
+STORAGE_SERVICE_URL=<http://localhost:3002>
+EOF
+
+# Start MongoDB if not running
+mongod --dbpath /usr/local/var/mongodb  # Mac
+# or
+sudo systemctl start mongodb  # Linux
+
+# Run the backend in development mode
+npm run dev
+```
+
+The backend will start on <http://localhost:3000>
+
+### 4. Frontend Setup
+
+Open a new terminal window:
+
+```bash
+# Navigate to frontend (from register directory)
+cd front
+
+# Install dependencies
+npm install
+
+# Run the frontend in development mode
+npm run dev
+```
+
+The frontend will start on <http://localhost:5173>
+
+### 5. Verify BSV Overlay Service
+
+Ensure the BSV overlay service (LARS) is running and accessible:
+
+```bash
+# Check if overlay service is running
+curl <http://localhost:8080/status>
+```
+
+If not running, refer to the BSV overlay service documentation for setup.
+
+## Using the Application
+
+### 1. Initial Setup - Create Actors
+
+1. Open <http://localhost:5173> in your browser
+2. Click on "Actor Management"
+3. Create at least one actor for each role:
+   - **Patient**: Name (e.g., "John Doe"), Type: patient
+   - **Doctor**: Name (e.g., "Dr. Smith"), Type: doctor  
+   - **Pharmacy**: Name (e.g., "City Pharmacy"), Type: pharmacy
+   - **Insurance**: Name (e.g., "Health Insurance Co"), Type: insurance
+
+Each actor creation generates a DID on the BSV overlay network.
+
+### 2. Login and Test Workflows
+
+1. Go to Login page
+2. Select an actor (e.g., the doctor you created)
+3. Click "Login as [Actor Name]"
+4. You'll be redirected to the appropriate dashboard
+
+### 3. Create a Prescription (as Doctor)
+
+1. Login as a doctor
+2. Go to "Create Prescription"
+3. Select a patient from the dropdown
+4. Fill in prescription details:
+   - Medication name
+   - Dosage
+   - Frequency
+   - Duration
+   - Diagnosis
+   - Notes
+5. Submit the prescription
+
+### 4. Share with Pharmacy (as Patient)
+
+1. Login as a patient
+2. View your prescriptions
+3. Click "Share with Pharmacy"
+4. Select the pharmacy
+5. Confirm sharing
+
+### 5. Dispense Medication (as Pharmacy)
+
+1. Login as a pharmacy
+2. View shared prescriptions
+3. Click "Dispense" on a prescription
+4. Enter batch number and expiry date
+5. Confirm dispensation
 
 ## Project Structure
 
-```
+```plaintext
 register/
-├── back/             # Backend Express server
-│   ├── src/          # TypeScript source files
-│   └── package.json  # Backend dependencies
-└── front/            # Frontend React application
-    ├── src/          # TypeScript React components
-    └── package.json  # Frontend dependencies
+├── back/                    # Backend Express server
+│   ├── src/
+│   │   ├── routes/         # API endpoints
+│   │   ├── services/       # Business logic
+│   │   ├── models/         # MongoDB models
+│   │   └── plugins/        # BSV overlay integrations
+│   └── package.json
+└── front/                   # Frontend React application
+    ├── src/
+    │   ├── components/     # React components
+    │   ├── services/       # API client services
+    │   └── context/        # React context providers
+    └── package.json
 ```
 
-## Installation
+## Troubleshooting
 
-### Clone the repository
+### Common Issues
 
-```bash
-git clone https://github.com/yourusername/register.git
-cd register
-```
+1. **"Cannot find module '@quarkid/...'"**
+   - Ensure you've linked all extended QuarkID packages
+   - Try `npm ls @quarkid/agent` to verify linkage
 
-### Backend Setup
+2. **"Failed to connect to MongoDB"**
+   - Ensure MongoDB is running: `mongod --dbpath /path/to/data`
+   - Check MONGO_URI in backend .env file
 
-1. Navigate to the backend directory:
+3. **"BSV overlay service unavailable"**
+   - Verify LARS is running on port 8080
+   - Check BSV_OVERLAY_URL in backend .env
 
-```bash
-cd back
-```
+4. **"Failed to create DID"**
+   - Ensure the DID_TOPIC in .env matches LARS configuration
+   - Check backend console for detailed error messages
 
-2. Install dependencies:
+### Development Tips
 
-```bash
-npm install
-```
+- Backend runs with `tsx` for ES module compatibility
+- Frontend uses Vite for fast HMR (Hot Module Replacement)
+- Both support TypeScript with strict mode
+- Use `npm run dev` for development with auto-reload
 
-3. Create a `.env` file in the `back` directory with the following content:
+## API Documentation
 
-```
-# BSV Wallet Configuration
-MEDICAL_LICENSE_CERTIFIER=your_private_key_here
-DEFAULT_FUNDING_PUBLIC_KEY_HEX=your_funding_public_key_hex
-FEE_PER_KB=1000
+The backend exposes RESTful APIs under `/v1/`:
 
-# BSV Overlay Configuration
-DID_TOPIC=quarkid-prescription
-OVERLAY_PROVIDER_URL=https://overlay.quarkid.com
+- `/v1/actors` - Actor (DID) management
+- `/v1/prescriptions` - Prescription creation and management
+- `/v1/enhanced/prescriptions` - Token-based prescription workflow
+- `/v1/shared-prescriptions` - Prescription sharing between actors
 
-# DWN Configuration
-DWN_ENDPOINT=https://dwn.quarkid.com
-
-# MongoDB Configuration
-MONGO_URI=mongodb://localhost:27017/prescription_system
-```
-
-4. Make sure MongoDB is running locally:
-
-```bash
-# Start MongoDB if not running as a service
-mongod --dbpath /path/to/data/directory
-```
-
-5. Build and start the backend server:
-
-```bash
-npm run build
-npm start
-```
-
-For development with hot-reload:
-
-```bash
-npm run dev
-```
-
-### Frontend Setup
-
-1. Navigate to the frontend directory:
-
-```bash
-cd front
-```
-
-2. Install dependencies:
-
-```bash
-npm install
-```
-
-3. Start the development server:
-
-```bash
-npm run dev
-```
-
-## Prescription Workflow
-
-### 1. DID Creation & Actor Setup
-1. Start the backend server (port 3000) and frontend (port 5173)
-2. Navigate to **Actor Management** to create DIDs for:
-   - Patients
-   - Doctors  
-   - Pharmacies
-   - Health Insurance Providers
-3. Each actor gets a BSV-based DID stored on the blockchain overlay
-
-### 2. Prescription Process (Doctor → Patient)
-1. Doctor scans patient's QR code to verify their DID
-2. Doctor inputs prescription details (medication, dosage, diagnosis)
-3. **Prescripcion VC** is created and encrypted
-4. BSV token created with "no dispensado" status
-5. Encrypted VC sent to patient and insurance via DWN
-
-### 3. Pharmacy Dispensation (Patient → Pharmacy)
-1. Patient sends Prescripcion VC to pharmacy by scanning pharmacy QR
-2. Pharmacy verifies prescription status on BSV blockchain
-3. Pharmacy adds medication batch information
-4. **Dispensa VC** created with dispensation details
-5. Token ownership transferred, status remains "no dispensado"
-6. Encrypted Dispensa VC sent to patient via DWN
-
-### 4. Confirmation (Patient Confirms Receipt)
-1. Patient confirms medication receipt
-2. **Confirmacion VC** created with timestamp
-3. Final BSV transaction updates status to "dispensado"
-4. Confirmation VC sent to pharmacy and insurance
-5. System prevents fraud through blockchain immutability
-
-## API Endpoints
-
-### DID Management
-- `POST /v1/dids/create` - Create a new BSV DID
-- `GET /v1/dids/:did` - Resolve a DID document
-- `PUT /v1/dids/:did` - Update a DID document
-
-### Prescription Workflow
-- `POST /v1/prescriptions` - Create a new prescription VC
-- `GET /v1/prescriptions/:id` - Get prescription details
-- `POST /v1/prescriptions/:id/dispense` - Create dispensation VC
-- `POST /v1/prescriptions/:id/confirm` - Create confirmation VC
-
-### BSV Token Management
-- `POST /v1/tokens` - Create prescription token
-- `PUT /v1/tokens/:txid/transfer` - Transfer token ownership
-- `GET /v1/tokens/:txid/status` - Check token status
-
-### DWN Messaging
-- `POST /v1/dwn/send` - Send encrypted VC via DWN
-- `GET /v1/dwn/messages` - Retrieve DWN messages
-
-### Legacy Support
-- `GET /v1/:subject` - Retrieve identity record (legacy)
-- `POST /signCertificate` - Sign medical certificate (legacy)
-
-## Technologies
-
-### Frontend
-- **React 18** with TypeScript
-- **Vite** for fast development
-- **QR Code** generation and scanning
-- **Encrypted messaging** with public key cryptography
-
-### Backend  
-- **Express.js** with TypeScript
-- **MongoDB** for caching and metadata storage
-- **BSV SDK** for blockchain transactions
-- **Wallet Toolbox Client** for UTXO management
-
-### Blockchain & Identity
-- **Bitcoin SV (BSV)** overlay network for DID storage
-- **QuarkID DID Registry** for BSV-based DIDs
-- **Verifiable Credentials** (W3C standard)
-- **DWN (Decentralized Web Node)** for secure messaging
-- **Token-based** fraud prevention system
-
-### Security
-- **End-to-end encryption** for VC transmission
-- **Digital signatures** for VC authenticity
-- **Blockchain immutability** for audit trails
-- **Private key** management for actors
-
-## Development
-
-### Building the Projects
-
-Backend:
-```bash
-cd back
-npm run build
-```
-
-Frontend:
-```bash
-cd front
-npm run build
-```
-
-### Linting
-
-```bash
-npm run lint
-```
+For detailed API documentation, see the route files in `back/src/routes/`.
 
 ## License
 

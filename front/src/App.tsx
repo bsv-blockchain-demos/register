@@ -35,7 +35,7 @@ function App() {
         <nav className="w-64 bg-gray-800 border-r border-gray-700 p-4 fixed h-full overflow-y-auto">
           <div className="space-y-4">
             <div className="border-b border-gray-700 pb-4">
-              <h2 className="text-lg font-semibold">🩺 BSV Medical</h2>
+              <h2 className="text-lg font-semibold">🩺 BlockMed</h2>
               {currentUser && (
                 <div className="mt-2">
                   <p className="text-sm text-gray-400">Logged in as:</p>
