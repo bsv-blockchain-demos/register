@@ -24,12 +24,13 @@ export class DIDStorageManager {
    * @param {number} outputIndex index of the UTXO
    * @param {Base64String} serialNumber certificate serial number to store
    */
-  async storeRecord(txid: string, outputIndex: number, serialNumber: Base64String): Promise<void> {
+  async storeRecord(txid: string, outputIndex: number, serialNumber: Base64String, atomicBeef: number[]): Promise<void> {
     await this.records.insertOne({
       txid,
       outputIndex,
       serialNumber,
-      createdAt: new Date()
+      createdAt: new Date(),
+      atomicBeef
     })
   }
 
@@ -47,7 +48,7 @@ export class DIDStorageManager {
    * @param {Base64String} serialNumber - Unique certificate serial number to query by
    * @returns {Promise<LookupFormula>} - Returns matching UTXO references
    */
-  async findByCertificateSerialNumber(serialNumber: Base64String): Promise<LookupFormula> {
+  async findByCertificateSerialNumber(serialNumber: Base64String ): Promise<LookupFormula> {
     return await this.findRecordWithQuery({ serialNumber })
   }
 

@@ -43,7 +43,10 @@ export const PrescriptionForm: React.FC = () => {
     try {
       const response = await apiService.getActors();
       if (response.success && response.data) {
-        const patientActors = response.data.filter((actor: Actor) => actor.type === 'patient');
+        // Filter for patients who have DIDs
+        const patientActors = response.data.filter((actor: Actor) => 
+          actor.type === 'patient' && actor.did
+        );
         setPatients(patientActors);
       }
     } catch (error) {
@@ -66,12 +69,7 @@ export const PrescriptionForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser?.did) {
-      setError('Doctor DID not found');
-      return;
-    }
-
-    if (!currentUser.privateKey) {
-      setError('Doctor private key not found. Please ensure you are logged in with a valid doctor account.');
+      setError('Doctor DID not found. Please ensure you are logged in with a valid doctor account.');
       return;
     }
 
@@ -83,7 +81,6 @@ export const PrescriptionForm: React.FC = () => {
       const prescriptionData = {
         doctorDid: currentUser.did,
         patientDid: formData.patientDid,
-        doctorPrivateKey: currentUser.privateKey,
         prescriptionData: {
           patientName: formData.patientName,
           patientId: formData.patientDid,

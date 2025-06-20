@@ -1,8 +1,9 @@
 import { IAgentRegistry, CreateDIDRequest, CreateDIDResponse, UpdateDIDRequest, DID } from '@quarkid/agent';
-import { IKMS } from '@quarkid/kms-core';
+import { IKMS, Suite } from '@quarkid/kms-core';
 import { DIDDocument, Service, VerificationMethodTypes } from '@quarkid/did-core';
 import { BsvOverlayRegistry } from './BsvOverlayRegistry';
-import { Suite } from '@quarkid/kms-core';
+import { MockBsvOverlayResolver } from './MockBsvOverlayResolver';
+import { CreateActionResult } from '@bsv/sdk';
 
 /**
  * BSV Overlay Registry Adapter for QuarkID Agent
@@ -14,7 +15,8 @@ import { Suite } from '@quarkid/kms-core';
  */
 export class BsvOverlayRegistryAdapter extends IAgentRegistry {
   private bsvRegistry: BsvOverlayRegistry;
-  protected kms: IKMS | null = null;
+  private resolver: any = null; // Type as 'any' since it could be MockBsvOverlayResolver or BsvOverlayResolver
+  private car: CreateActionResult;
   
   constructor(bsvRegistry: BsvOverlayRegistry) {
     super();
@@ -22,12 +24,13 @@ export class BsvOverlayRegistryAdapter extends IAgentRegistry {
   }
   
   /**
-   * Initialize the registry with KMS
+   * Initialize the registry with KMS and optional resolver
    * For BSV, key management is handled by the wallet
    */
-  initialize(params: { kms: IKMS }): void {
+  initialize(params: { kms: IKMS; resolver?: any }): void {
     this.kms = params.kms;
-    console.log('[BsvOverlayRegistryAdapter] Registry initialized with KMS');
+    this.resolver = params.resolver;
+    console.log('[BsvOverlayRegistryAdapter] Registry initialized with KMS and resolver');
   }
   
   /**
@@ -35,9 +38,12 @@ export class BsvOverlayRegistryAdapter extends IAgentRegistry {
    * In our BSV implementation, key management is handled by the wallet
    */
   getKMS(): IKMS {
+    console.log('[BsvOverlayRegistryAdapter] getKMS called');
+    console.log('[BsvOverlayRegistryAdapter] KMS exists:', !!this.kms);
     if (!this.kms) {
       throw new Error('KMS not initialized. BSV keys are managed by the wallet.');
     }
+    console.log('[BsvOverlayRegistryAdapter] Returning KMS instance');
     return this.kms;
   }
   
@@ -82,14 +88,46 @@ export class BsvOverlayRegistryAdapter extends IAgentRegistry {
     console.log('[BsvOverlayRegistryAdapter] Calling bsvRegistry.createDID with publicKeyJWK...');
     
     // Create the DID on BSV overlay with the public key
-    const result = await this.bsvRegistry.createDID({
-      didDocument,
-      publicKeyJWK,
-      keyId
-    });
+    let result;
+    try {
+      console.log('[BsvOverlayRegistryAdapter] About to call bsvRegistry.createDID...');
+      console.log('[BsvOverlayRegistryAdapter] bsvRegistry instance:', this.bsvRegistry);
+      console.log('[BsvOverlayRegistryAdapter] bsvRegistry.createDID method exists:', typeof this.bsvRegistry.createDID);
+      console.log('[BsvOverlayRegistryAdapter] Actual createDID function:', this.bsvRegistry.createDID.toString().substring(0, 200));
+      
+      // Debug: Check what the bsvRegistry object actually is
+      console.log('[BsvOverlayRegistryAdapter] bsvRegistry constructor name:', this.bsvRegistry.constructor.name);
+      console.log('[BsvOverlayRegistryAdapter] bsvRegistry prototype:', Object.getPrototypeOf(this.bsvRegistry));
+      console.log('[BsvOverlayRegistryAdapter] Is bsvRegistry an instance of BsvOverlayRegistry?:', this.bsvRegistry.constructor.name === 'BsvOverlayRegistry');
+      
+      // Check if createDID is bound correctly
+      const createDIDMethod = this.bsvRegistry.createDID;
+      console.log('[BsvOverlayRegistryAdapter] createDID method is bound to:', createDIDMethod);
+      console.log('[BsvOverlayRegistryAdapter] createDID method name:', createDIDMethod.name);
+      
+      result = await this.bsvRegistry.createDID({
+        didDocument,
+        publicKeyJWK,
+        keyId
+      });
+
+      this.car = result.car;
+      
+      console.log('[BsvOverlayRegistryAdapter] Successfully called bsvRegistry.createDID');
+    } catch (error) {
+      console.error('[BsvOverlayRegistryAdapter] Error calling bsvRegistry.createDID:', error);
+      console.error('[BsvOverlayRegistryAdapter] Error stack:', error.stack);
+      throw error;
+    }
     
     console.log('[BsvOverlayRegistryAdapter] bsvRegistry result:', result);
     console.log('[BsvOverlayRegistryAdapter] Final DID document:', result.didDocument);
+    
+    // If we have a mock resolver, store the DID document for testing
+    if (this.resolver && 'storeDIDDocument' in this.resolver) {
+      console.log('[BsvOverlayRegistryAdapter] Storing DID document in mock resolver for testing');
+      this.resolver.storeDIDDocument(result.did, result.didDocument);
+    }
     
     // The registry now returns a complete DID document with verification methods
     // Store the key association in KMS
@@ -115,7 +153,7 @@ export class BsvOverlayRegistryAdapter extends IAgentRegistry {
     const didString = typeof did === 'string' ? did : did.value || did.toString();
     
     // First resolve the current document
-    const currentDoc = await this.bsvRegistry.resolveDID(didString);
+    const currentDoc = await this.bsvRegistry.resolveDID(didString, this.car);
     if (!currentDoc) {
       throw new Error('DID not found');
     }

@@ -66,20 +66,9 @@ export const ActorManagement = () => {
       if (response.success && response.data) {
         const createdActor = response.data;
         
-        // Debug: Log the response to see if privateKey is included
+        // Debug: Log the response
         console.log('Actor creation response:', response);
         console.log('Created actor data:', createdActor);
-        console.log('Private key present?', !!createdActor.privateKey);
-        
-        // Store private key in localStorage for this actor (demo purposes only)
-        if (createdActor.privateKey) {
-          const privateKeyStorage = JSON.parse(localStorage.getItem('actorPrivateKeys') || '{}');
-          privateKeyStorage[createdActor.id] = createdActor.privateKey;
-          localStorage.setItem('actorPrivateKeys', JSON.stringify(privateKeyStorage));
-          console.log(`Stored private key for actor ${createdActor.id}`);
-        } else {
-          console.warn(`No private key returned for actor ${createdActor.id}. Backend may need restart.`);
-        }
         
         // Add actor to state
         const actorWithKeys: Actor = {

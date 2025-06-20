@@ -35,21 +35,8 @@ const Login: React.FC = () => {
   };
 
   const handleActorSelection = (actor: Actor) => {
-    // Retrieve private key from localStorage for this actor
-    const privateKeyStorage = JSON.parse(localStorage.getItem('actorPrivateKeys') || '{}');
-    const privateKey = privateKeyStorage[actor.id];
-    
-    // Create actor object with private key
-    const actorWithPrivateKey = {
-      ...actor,
-      privateKey: privateKey || ''
-    };
-    
-    if (!privateKey) {
-      console.warn(`No private key found for actor ${actor.id}. Prescription creation may fail.`);
-    }
-    
-    login(actorWithPrivateKey);
+    // Login with the selected actor
+    login(actor);
     navigate('/dashboard');
   };
 
@@ -67,6 +54,8 @@ const Login: React.FC = () => {
     pharmacy: '💊',
     insurance: '🏦'
   };
+
+  const actorTypeOrder = ['patient', 'doctor', 'pharmacy', 'insurance'];
 
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
@@ -99,43 +88,52 @@ const Login: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-6">
-            {Object.entries(groupedActors).map(([type, typeActors]) => (
-              <div key={type}>
-                <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-                  <span>{actorTypeIcons[type] || '👤'}</span>
-                  <span className="capitalize">{type === 'insurance' ? 'Insurers' : type}s</span>
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {typeActors.map((actor) => (
-                    <button
-                      key={actor.id}
-                      onClick={() => handleActorSelection(actor)}
-                      className={`p-6 rounded-lg border-2 transition-all cursor-pointer border-gray-600 hover:border-gray-500 bg-gray-800 hover:bg-gray-700`}
-                    >
-                      <h3 className="text-lg font-semibold mb-2">{actor.name}</h3>
-                      {actor.did && (
-                        <p className="text-sm text-gray-400 truncate" title={actor.did}>
-                          {actor.did}
-                        </p>
-                      )}
-                      {actor.email && (
-                        <p className="text-sm text-gray-400">{actor.email}</p>
-                      )}
-                      {actor.licenseNumber && (
-                        <p className="text-sm text-gray-400">
-                          License: {actor.licenseNumber}
-                        </p>
-                      )}
-                      {actor.specialization && (
-                        <p className="text-sm text-gray-400">
-                          {actor.specialization}
-                        </p>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
+            {actorTypeOrder
+              .filter(type => groupedActors[type]) // Only show types that have actors
+              .map((type) => {
+                const typeActors = groupedActors[type];
+                const displayName = type === 'pharmacy' ? 'Pharmacist' : 
+                                  type === 'insurance' ? 'Insurer' : 
+                                  type.charAt(0).toUpperCase() + type.slice(1);
+                
+                return (
+                  <div key={type}>
+                    <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                      <span>{actorTypeIcons[type] || '👤'}</span>
+                      <span>{displayName}s</span>
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {typeActors.map((actor) => (
+                        <button
+                          key={actor.id}
+                          onClick={() => handleActorSelection(actor)}
+                          className={`p-6 rounded-lg border-2 transition-all cursor-pointer border-gray-600 hover:border-gray-500 bg-gray-800 hover:bg-gray-700`}
+                        >
+                          <h3 className="text-lg font-semibold mb-2">{actor.name}</h3>
+                          {actor.did && (
+                            <p className="text-sm text-gray-400 truncate" title={actor.did}>
+                              {actor.did}
+                            </p>
+                          )}
+                          {actor.email && (
+                            <p className="text-sm text-gray-400">{actor.email}</p>
+                          )}
+                          {actor.licenseNumber && (
+                            <p className="text-sm text-gray-400">
+                              License: {actor.licenseNumber}
+                            </p>
+                          )}
+                          {actor.specialization && (
+                            <p className="text-sm text-gray-400">
+                              {actor.specialization}
+                            </p>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         )}
       </div>

@@ -87,8 +87,8 @@ const DoctorDashboard: React.FC = () => {
   }, [currentUser, state.actors, loadEnhancedPrescriptions]);
 
   const createTestPrescription = async () => {
-    if (!currentUser?.did || !currentUser?.privateKey) {
-      alert('Doctor DID or private key not found');
+    if (!currentUser?.did) {
+      alert('Doctor DID not found');
       return;
     }
 
@@ -262,12 +262,6 @@ const DoctorDashboard: React.FC = () => {
                     {creatingTestPrescription ? 'Creating...' : 'Create Test Prescription'}
                   </button>
                 )}
-                <Link
-                  to="/patients"
-                  className="bg-gray-700 hover:bg-gray-600 px-6 py-3 rounded-lg flex items-center gap-2 transition-colors"
-                >
-                  View All Patients
-                </Link>
               </div>
             </div>
 

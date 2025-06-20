@@ -157,22 +157,20 @@ export const createDidRoutes = (quarkIdAgentService: QuarkIdAgentService): Route
   });
 
   /**
-   * GET /resolve/:did - Resolve a BSV DID
+   * GET /:did - Resolve a DID document
    * 
-   * Retrieves the current DID document for a given BSV DID by querying
-   * the overlay network. The DID parameter must be URL-encoded.
+   * Retrieves a DID document by resolving the provided DID identifier.
    * 
-   * @route GET /resolve/:did
-   * @param {string} req.params.did - URL-encoded BSV DID to resolve
-   * 
-   * @returns {Object} 200 - Success response with DID document
-   * @returns {Object} 400 - Bad request (invalid DID format)
-   * @returns {Object} 404 - DID not found
-   * @returns {Object} 500 - Internal server error
+   * @route GET /v1/dids/:did
+   * @param {string} did - The DID to resolve (URL encoded)
+   * @returns {object} 200 - DID document successfully retrieved
+   * @returns {object} 400 - Bad request (missing or invalid DID)
+   * @returns {object} 404 - DID not found
+   * @returns {object} 500 - Internal server error
    * 
    * @example
    * ```
-   * GET /resolve/did%3Amodena%3A1234...
+   * GET /v1/dids/did%3Absv%3Atm_did%3A123456789
    * 
    * Response:
    * {
@@ -180,14 +178,16 @@ export const createDidRoutes = (quarkIdAgentService: QuarkIdAgentService): Route
    *   "data": {
    *     "didDocument": {
    *       "@context": ["https://www.w3.org/ns/did/v1"],
-   *       "id": "did:modena:1234...",
-   *       "verificationMethod": [...]
+   *       "id": "did:bsv:tm_did:123456789",
+   *       "verificationMethod": [...],
+   *       "authentication": [...],
+   *       "service": [...]
    *     }
    *   }
    * }
    * ```
    */
-  router.get('/resolve/:did', async (req: Request, res: Response) => {
+  router.get('/:did', async (req: Request, res: Response) => {
     if (!quarkIdAgentService) {
       return res.status(500).json({
         status: 'error',
@@ -222,7 +222,7 @@ export const createDidRoutes = (quarkIdAgentService: QuarkIdAgentService): Route
       });
 
     } catch (error: any) {
-      console.error(`[Route /dids/resolve/:did] Error:`, error);
+      console.error(`[Route /dids/:did] Error:`, error);
       const errorMessage = error.message || 'An internal error occurred while resolving the DID.';
       
       return res.status(500).json({ 

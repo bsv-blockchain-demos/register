@@ -1,4 +1,4 @@
-import { IKMS, Suite, IJWK } from '@quarkid/kms-core';
+import { IKMS, Suite, IJWK, IVCJsonLDKeyPair } from '@quarkid/kms-core';
 import { WalletClient, PrivateKey, PublicKey, Signature } from '@bsv/sdk';
 import { Purpose, DIDCommMessage } from '@quarkid/did-core';
 import { VerifiableCredential } from '@quarkid/vc-core';
@@ -24,37 +24,67 @@ export class BsvWalletKMS implements IKMS {
   }
 
   /**
-   * Create a new key pair and return as JWK
+   * Create a new key pair and return as JWK (IKMS interface requirement)
    */
   async create(suite: Suite): Promise<{ publicKeyJWK: IJWK }> {
+    const keyPair = await this.createKeyPair(suite);
+    return { publicKeyJWK: keyPair.publicKeyJWK };
+  }
+
+  /**
+   * Create a new key pair and return the full key pair data
+   * Used internally by ES256kVCSuite
+   */
+  async createKeyPair(suite: Suite): Promise<IVCJsonLDKeyPair> {
     try {
       // Generate a new private key using BSV SDK
       const privateKey = PrivateKey.fromRandom();
       const publicKey = privateKey.toPublicKey();
       
-      // Get public key in hex format - toDER('hex') returns string when hex encoding is specified
-      const publicKeyDER = publicKey.toDER('hex');
-      // Ensure we have a string (handle the union type)
-      const publicKeyHex = typeof publicKeyDER === 'string' ? publicKeyDER : Buffer.from(publicKeyDER).toString('hex');
-      const keyId = `did:bsv:${publicKeyHex.substring(0, 16)}`;
+      // Since PublicKey extends Point, it should have x and y properties
+      // These are BigNumber objects that need to be converted to bytes
+      const xBigNum = (publicKey as any).x;
+      const yBigNum = (publicKey as any).y;
       
-      // Create JWK representation - IJWK only supports kty, crv, x, y
+      // Convert BigNumber to byte arrays (32 bytes each for secp256k1)
+      const xBytes = xBigNum.toArray('be', 32);
+      const yBytes = yBigNum.toArray('be', 32);
+      
+      // Convert to base64url for JWK
+      const xBase64 = Buffer.from(xBytes).toString('base64url');
+      const yBase64 = Buffer.from(yBytes).toString('base64url');
+      
+      // Create JWK representation
       const publicKeyJWK: IJWK = {
         kty: 'EC',
         crv: 'secp256k1',
-        x: publicKeyHex,
-        y: '' // Required by interface but not used for secp256k1
+        x: xBase64,
+        y: yBase64
       };
       
-      // Store the key pair with JWK and separate keyId
+      // Generate keyId consistently with how it's done in BsvOverlayRegistryAdapter
+      const keyId = `did:bsv:${xBase64.substring(0, 16)}`;
+      
+      // Store the key pair with JWK and keyId
       this.keyStore.set(keyId, {
         privateKey: privateKey.toWif(),
-        publicKey: publicKeyHex,
+        publicKey: publicKey.toDER('hex') as string,
         jwk: publicKeyJWK,
         keyId: keyId
       });
 
-      return { publicKeyJWK };
+      console.log('[BsvWalletKMS] Created key with ID:', keyId);
+      console.log('[BsvWalletKMS] JWK x coordinate (first 16 chars):', xBase64.substring(0, 16));
+      console.log('[BsvWalletKMS] Full JWK:', JSON.stringify(publicKeyJWK, null, 2));
+
+      // Return in the format expected by IKeyPair/IVCJsonLDKeyPair
+      return {
+        privateKey: privateKey.toWif(),
+        publicKey: publicKey.toDER('hex') as string,
+        publicKeyJWK: publicKeyJWK,
+        keyType: 'EcdsaSecp256k1VerificationKey2019',
+        suite: suite
+      };
     } catch (error) {
       throw new Error(`Failed to create key pair: ${error.message}`);
     }
@@ -102,7 +132,7 @@ export class BsvWalletKMS implements IKMS {
       const messageBuffer = Buffer.from(message, 'utf8');
       const signature = privKey.sign(Array.from(messageBuffer));
       
-      return signature.toDER('hex');
+      return signature.toDER('hex') as string;
     } catch (error) {
       throw new Error(`Failed to sign message: ${error.message}`);
     }
@@ -330,7 +360,7 @@ export class BsvWalletKMS implements IKMS {
     publicKeyHex: string;
     secret: IKeyPair;
   }): Promise<void> {
-    const keyId = key.secret.id || `did:bsv:${key.publicKeyHex.substring(0, 16)}`;
+    const keyId = key.secret.privateKey || `did:bsv:${key.publicKeyHex.substring(0, 16)}`;
     
     // Create JWK - IJWK only supports kty, crv, x, y
     const jwk: IJWK = {
@@ -353,6 +383,10 @@ export class BsvWalletKMS implements IKMS {
    * Get public keys by suite type
    */
   async getPublicKeysBySuiteType(suite: Suite): Promise<IJWK[]> {
+    console.log('[BsvWalletKMS] getPublicKeysBySuiteType called with suite:', suite);
+    console.log('[BsvWalletKMS] Current keyStore size:', this.keyStore.size);
+    console.log('[BsvWalletKMS] Available keys:', Array.from(this.keyStore.keys()));
+    
     const keys: IJWK[] = [];
     // For BSV, we only support ES256K
     if (suite === Suite.ES256k) {
@@ -360,6 +394,12 @@ export class BsvWalletKMS implements IKMS {
         keys.push(stored.jwk);
       }
     }
+    
+    console.log('[BsvWalletKMS] Returning keys:', keys.length);
+    if (keys.length > 0) {
+      console.log('[BsvWalletKMS] First key JWK:', JSON.stringify(keys[0], null, 2));
+    }
+    
     return keys;
   }
 
@@ -367,10 +407,17 @@ export class BsvWalletKMS implements IKMS {
    * Get all public keys
    */
   async getAllPublicKeys(): Promise<IJWK[]> {
+    console.log('[BsvWalletKMS] getAllPublicKeys called');
+    console.log('[BsvWalletKMS] Current keyStore size:', this.keyStore.size);
+    console.log('[BsvWalletKMS] Available keys:', Array.from(this.keyStore.keys()));
+    
     const keys: IJWK[] = [];
     for (const stored of this.keyStore.values()) {
       keys.push(stored.jwk);
     }
+    
+    console.log('[BsvWalletKMS] Returning all keys:', keys.length);
+    
     return keys;
   }
 }

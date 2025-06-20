@@ -1,3 +1,5 @@
 export { default as DIDTopicManager } from './src/DIDTopicManager.js'
 export { default as DIDLookupServiceFactory } from './src/DIDLookupServiceFactory.js'
+export { default as VCTopicManager } from './src/VCTopicManager.js'
+export { default as VCLookupServiceFactory } from './src/VCLookupServiceFactory.js'
 export * from './src/types.js'

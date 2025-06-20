@@ -3,7 +3,7 @@ import express from "express";
 import bodyParser from 'body-parser'
 import { MongoClient, Db } from "mongodb";
 import { PrivateKey, WalletClient, KeyDeriver } from '@bsv/sdk';
-import { WalletStorageManager, Services, Wallet, StorageClient } from '@bsv/wallet-toolbox-client';
+import { WalletStorageManager, Services, StorageClient, Wallet } from '@bsv/wallet-toolbox-client';
 import { createAuthMiddleware } from '@bsv/auth-express-middleware';
 import { QuarkIdActorService } from './services/quarkIdActorService';
 import { QuarkIdAgentService } from './services/quarkIdAgentService';
@@ -25,11 +25,12 @@ const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017"
 const medicalKey = process.env.MEDICAL_LICENSE_CERTIFIER
 const PORT = process.env.PORT || 3000
 const PLATFORM_FUNDING_KEY = process.env.PLATFORM_FUNDING_KEY
-const DB_NAME = process.env.DB_NAME || "LARS_lookup_services";
+const DB_NAME = process.env.APP_DB_NAME || "quarkid_prescriptions_db";
+const EXPRESS_LIMIT = process.env.EXPRESS_LIMIT || "50mb";
 const requiredEnvVars = {
   MEDICAL_LICENSE_CERTIFIER: process.env.MEDICAL_LICENSE_CERTIFIER,
-  DID_TOPIC: process.env.DID_TOPIC || 'quarkid-test',
-  VC_TOPIC: process.env.VC_TOPIC || 'quarkid-test',
+  DID_TOPIC: process.env.DID_TOPIC || 'tm_did',
+  VC_TOPIC: process.env.VC_TOPIC || 'tm_did',
   OVERLAY_PROVIDER_URL: process.env.OVERLAY_PROVIDER_URL || 'https://overlay.test.com',
   DEFAULT_FUNDING_PUBLIC_KEY_HEX: process.env.DEFAULT_FUNDING_PUBLIC_KEY_HEX,
   FEE_PER_KB: process.env.FEE_PER_KB,
@@ -78,7 +79,7 @@ const transform = (record: IdentityRecord | null) => {
   };
 };
 
-export const createWalletClient = async (key: string): Promise<WalletClient> => {
+export const createWalletClient = async (key: string): Promise<{ wallet: Wallet; walletClient: WalletClient }> => {
     const rootKey = PrivateKey.fromHex(key)
     const keyDeriver = new KeyDeriver(rootKey)
     const storage = new WalletStorageManager(keyDeriver.identityKey)
@@ -93,7 +94,7 @@ export const createWalletClient = async (key: string): Promise<WalletClient> => 
     const client = new StorageClient(wallet, walletStorageUrl)
     await storage.addWalletStorageProvider(client)
     await storage.makeAvailable()
-    return new WalletClient(wallet)
+    return { wallet, walletClient: new WalletClient(wallet) }
 }
 
 let db: Db
@@ -107,7 +108,7 @@ async function startServer() {
     app.use(bodyParser.json())
     app.use(cors())
     
-    const walletClient: WalletClient = await createWalletClient(PLATFORM_FUNDING_KEY) // Explicitly type wallet
+    const { wallet, walletClient }: { wallet: Wallet; walletClient: WalletClient } = await createWalletClient(PLATFORM_FUNDING_KEY) // Explicitly type wallet
     const auth = createAuthMiddleware({ 
       wallet: walletClient,
       allowUnauthenticated: true // Allow requests without auth for testing
@@ -133,6 +134,7 @@ async function startServer() {
         uri: process.env.MONGODB_URI || 'mongodb://localhost:27017',
         dbName: DB_NAME
       },
+      wallet: wallet,
       walletClient: walletClient,
       overlayProvider: process.env.OVERLAY_PROVIDER_URL || 'https://overlay.test.com',
       dwnUrl: process.env.DWN_URL
@@ -145,7 +147,8 @@ async function startServer() {
       {
         endpoint: process.env.OVERLAY_PROVIDER_URL || 'https://overlay.test.com',
         topic: process.env.PRESCRIPTION_TOPIC || 'prescriptions'
-      }
+      },
+      quarkIdAgentService
     );
 
     // Logging middleware to print request path and body
