@@ -1,8 +1,8 @@
 import { MongoClient } from 'mongodb';
 import 'dotenv/config';
 
-const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017";
-const DB_NAME = process.env.DB_NAME || "LARS_lookup_services";
+const mongoUri = process.env.MONGODB_URI || "mongodb://localhost:27017";
+const DB_NAME = process.env.APP_DB_NAME || "quarkid_prescriptions_db";
 
 async function clearActors() {
   const client = new MongoClient(mongoUri);

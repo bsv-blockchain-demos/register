@@ -1,5 +1,5 @@
 import { MongoClient } from 'mongodb';
-const DB_NAME = process.env.DB_NAME || "LARS_lookup_services";
+const DB_NAME = process.env.APP_DB_NAME || "quarkid_prescriptions_db";
 
 async function checkPrescriptions() {
   const client = new MongoClient('mongodb://localhost:27017');
