@@ -157,7 +157,7 @@ export const ActorManagement = () => {
 
       {state.actors.length === 0 ? (
         <div className="bg-blue-500/10 border border-blue-500 rounded-lg p-4 mb-6">
-          <h2 className="text-lg font-semibold mb-2">Welcome to BSV Medical System Setup</h2>
+          <h2 className="text-lg font-semibold mb-2">Welcome to BlockMed System Setup</h2>
           <p className="text-gray-300">
             Please create at least one actor for each role (Patient, Doctor, Pharmacy, Insurance) to start using the system.
           </p>

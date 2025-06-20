@@ -14,7 +14,7 @@ export default function Home() {
     <div>
       <div className="dashboard-welcome">
         <h1>
-          🌟 Welcome to the BSV Medical Demo
+          🌟 Welcome to the BlockMed Demo
         </h1>
         <p>
           Experience the complete lifecycle of medical prescriptions using Decentralized Identifiers (DIDs) and Verifiable Credentials (VCs) on Bitcoin SV
