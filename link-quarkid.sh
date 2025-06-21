@@ -8,8 +8,8 @@ set -e
 echo "🔗 Linking QuarkID packages for local development..."
 
 # Navigate to QuarkID packages directory
-QUARKID_PACKAGES_DIR="./Paquetes-NPMjs/packages"
-REGISTER_DIR="./Paquetes-NPMjs/register"
+QUARKID_PACKAGES_DIR="../Paquetes-NPMjs/packages"
+REGISTER_DIR="../Paquetes-NPMjs/register"
 
 # Function to link a package
 link_package() {
