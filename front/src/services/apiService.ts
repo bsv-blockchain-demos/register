@@ -251,7 +251,7 @@ class ApiService {
     patientDid: string;
     pharmacyDid: string;
   }): Promise<ApiResponse> {
-    return this.request('POST', '/v1/prescriptions/share', shareData);
+    return this.request('POST', '/v1/enhanced/prescriptions/share', shareData);
   }
 
   /**
@@ -259,6 +259,13 @@ class ApiService {
    */
   async getSharedPrescriptions(pharmacyDid: string): Promise<ApiResponse> {
     return this.request('GET', `/v1/prescriptions/shared/${encodeURIComponent(pharmacyDid)}`);
+  }
+
+  /**
+   * Get prescriptions by insurance provider name
+   */
+  async getPrescriptionsByInsuranceProvider(insuranceProvider: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/prescriptions/insurance/${encodeURIComponent(insuranceProvider)}`);
   }
 
   // Token Management API
@@ -376,6 +383,13 @@ class ApiService {
    */
   async getEnhancedPrescriptionsByPharmacy(pharmacyDid: string): Promise<ApiResponse> {
     return this.request('GET', `/v1/enhanced/prescriptions/pharmacy/${encodeURIComponent(pharmacyDid)}`);
+  }
+
+  /**
+   * Get enhanced prescriptions by insurance DID
+   */
+  async getEnhancedPrescriptionsByInsurance(insuranceDid: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/enhanced/prescriptions/insurance/${encodeURIComponent(insuranceDid)}`);
   }
 
   /**

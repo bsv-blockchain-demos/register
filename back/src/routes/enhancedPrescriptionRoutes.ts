@@ -272,6 +272,100 @@ router.get('/pharmacy/:pharmacyDid', async (req: CustomRequest, res) => {
 });
 
 /**
+ * @route GET /api/prescriptions/insurance/:insuranceDid
+ * @desc Get prescriptions by insurance DID
+ */
+router.get('/insurance/:insuranceDid', async (req: CustomRequest, res) => {
+  try {
+    if (!req.db) {
+      return res.status(500).json({ error: 'Database connection not available' });
+    }
+
+    if (!req.walletClient) {
+      return res.status(500).json({ error: 'Wallet client not available' });
+    }
+
+    if (!req.quarkIdAgentService) {
+      return res.status(500).json({ error: 'QuarkID Agent service not available' });
+    }
+
+    const { insuranceDid } = req.params;
+    const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
+      endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
+      topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
+    }, req.quarkIdAgentService);
+
+    const tokens = await tokenService.getTokensByInsurance(insuranceDid);
+
+    res.json({
+      success: true,
+      data: tokens,
+      count: tokens.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching prescriptions by insurance:', error);
+    res.status(500).json({
+      error: 'Failed to fetch prescriptions by insurance',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * @route POST /api/prescriptions/share
+ * @desc Share prescription token with a pharmacy
+ */
+router.post('/share', async (req: CustomRequest, res) => {
+  try {
+    if (!req.db) {
+      return res.status(500).json({ error: 'Database connection not available' });
+    }
+
+    if (!req.walletClient) {
+      return res.status(500).json({ error: 'Wallet client not available' });
+    }
+
+    if (!req.quarkIdAgentService) {
+      return res.status(500).json({ error: 'QuarkID Agent service not available' });
+    }
+
+    const { prescriptionId, patientDid, pharmacyDid } = req.body;
+
+    // Validate required fields
+    if (!prescriptionId || !patientDid || !pharmacyDid) {
+      return res.status(400).json({ 
+        error: 'prescriptionId, patientDid, and pharmacyDid are required' 
+      });
+    }
+
+    const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
+      endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
+      topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
+    }, req.quarkIdAgentService);
+
+    const updatedToken = await tokenService.sharePrescriptionToken(
+      prescriptionId,
+      patientDid,
+      pharmacyDid
+    );
+
+    res.json({
+      success: true,
+      message: 'Prescription shared successfully',
+      data: updatedToken
+    });
+
+  } catch (error) {
+    console.error('Error sharing prescription:', error);
+    res.status(500).json({
+      error: 'Failed to share prescription',
+      details: error.message
+    });
+  }
+});
+
+/**
  * @route POST /api/prescriptions/:tokenId/dispense
  * @desc Dispense prescription at pharmacy
  */

@@ -22,34 +22,17 @@ import enhancedPrescriptionRoutes from './routes/enhancedPrescriptionRoutes';
 
 // Environment variables
 const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017"
-const medicalKey = process.env.MEDICAL_LICENSE_CERTIFIER
 const PORT = process.env.PORT || 3000
 const PLATFORM_FUNDING_KEY = process.env.PLATFORM_FUNDING_KEY
 const DB_NAME = process.env.APP_DB_NAME || "quarkid_prescriptions_db";
 const EXPRESS_LIMIT = process.env.EXPRESS_LIMIT || "50mb";
 const requiredEnvVars = {
-  MEDICAL_LICENSE_CERTIFIER: process.env.MEDICAL_LICENSE_CERTIFIER,
   DID_TOPIC: process.env.DID_TOPIC || 'tm_did',
   VC_TOPIC: process.env.VC_TOPIC || 'tm_did',
   OVERLAY_PROVIDER_URL: process.env.OVERLAY_PROVIDER_URL || 'https://overlay.test.com',
   DEFAULT_FUNDING_PUBLIC_KEY_HEX: process.env.DEFAULT_FUNDING_PUBLIC_KEY_HEX,
   FEE_PER_KB: process.env.FEE_PER_KB,
 };
-
-if (!medicalKey) {
-  throw new Error('MEDICAL_LICENSE_CERTIFIER environment variable is required')
-}
-
-if (!requiredEnvVars.MEDICAL_LICENSE_CERTIFIER) {
-  console.error('MEDICAL_LICENSE_CERTIFIER environment variable is required');
-  process.exit(1);
-}
-
-// Validate hex string format
-if (!/^[0-9a-fA-F]{64}$/.test(requiredEnvVars.MEDICAL_LICENSE_CERTIFIER)) {
-  console.error('MEDICAL_LICENSE_CERTIFIER must be a 64-character hexadecimal string');
-  process.exit(1);
-}
 
 if (requiredEnvVars.DEFAULT_FUNDING_PUBLIC_KEY_HEX && !/^[0-9a-fA-F]{64}$/.test(requiredEnvVars.DEFAULT_FUNDING_PUBLIC_KEY_HEX)) {
   console.error('DEFAULT_FUNDING_PUBLIC_KEY_HEX must be a 64-character hexadecimal string');

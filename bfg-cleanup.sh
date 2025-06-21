@@ -42,12 +42,10 @@ cat > sensitive-patterns.txt << 'EOF'
 front/src/context/wallets.ts
 
 # API URLs with keys
-VITE_MEDICAL_LICENSE_CERTIFIER=*
 VITE_DOCTOR_KEY=*
 VITE_PATIENT_KEY=*
 VITE_PHARMACY_KEY=*
 VITE_PLATFORM_FUNDING_KEY=*
-MEDICAL_LICENSE_CERTIFIER=*
 PLATFORM_FUNDING_KEY=*
 EOF
 
@@ -88,8 +86,9 @@ echo "4. Force push tags: git push origin --force --tags"
 echo ""
 echo "⚠️  CRITICAL SECURITY STEPS:"
 echo "1. IMMEDIATELY rotate these compromised keys:"
-echo "   - Backend: MEDICAL_LICENSE_CERTIFIER and PLATFORM_FUNDING_KEY"
-echo "   - All other private keys that were in .env files"
+echo "   - Frontend: All VITE_ prefixed private keys and auth URLs"
+echo "   - Backend: PLATFORM_FUNDING_KEY"
+echo "   - MongoDB connection strings"
 echo "2. Notify all collaborators to:"
 echo "   - Delete their local copies"
 echo "   - Re-clone from the cleaned repository"

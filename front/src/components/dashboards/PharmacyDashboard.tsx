@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useApp } from '../../context/AppContext';
 import apiService from '../../services/apiService';
 import { FiPackage, FiClock, FiCheckCircle } from 'react-icons/fi';
 
@@ -32,6 +33,7 @@ interface SharedPrescription {
 
 function PharmacyDashboard() {
   const { currentUser } = useAuth();
+  const { state, dispatch } = useApp();
   const [sharedPrescriptions, setSharedPrescriptions] = useState<SharedPrescription[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPrescription, setSelectedPrescription] = useState<SharedPrescription | null>(null);
@@ -43,21 +45,109 @@ function PharmacyDashboard() {
     pharmacistNotes: ''
   });
 
+  // Load actors from backend
+  const loadActors = useCallback(async () => {
+    try {
+      const response = await apiService.getActors();
+      if (response.success && response.data) {
+        dispatch({ type: 'SET_ACTORS', payload: response.data });
+      }
+    } catch (error) {
+      console.error('Failed to load actors:', error);
+    }
+  }, [dispatch]);
+
   const loadSharedPrescriptions = useCallback(async () => {
     if (!currentUser?.did) return;
     
     try {
       setLoading(true);
-      const response = await apiService.getSharedPrescriptions(currentUser.did);
+      console.log('[PharmacyDashboard] Loading enhanced prescriptions for:', currentUser.did);
+      
+      // Use enhanced prescriptions endpoint
+      const response = await apiService.getEnhancedPrescriptionsByPharmacy(currentUser.did);
+      console.log('[PharmacyDashboard] Enhanced API response:', response);
+      
       if (response.success && response.data) {
-        setSharedPrescriptions(response.data);
+        // Transform enhanced prescription tokens to match existing shared prescription format
+        const transformedPrescriptions = response.data.map((token: {
+          id: string;
+          doctorDid: string;
+          patientDid: string;
+          createdAt: string;
+          updatedAt?: string;
+          status: string;
+          prescriptionVC?: {
+            credentialSubject?: {
+              medicationName?: string;
+              dosage?: string;
+              instructions?: string;
+              quantity?: number;
+              diagnosis?: string;
+            };
+          };
+        }) => {
+          // Extract medication data from prescriptionVC.credentialSubject
+          const credentialSubject = token.prescriptionVC?.credentialSubject || {};
+          const medicationName = credentialSubject.medicationName || 'Unknown Medication';
+          const dosage = credentialSubject.dosage || 'No dosage specified';
+          const instructions = credentialSubject.instructions || '';
+          // Note: quantity is extracted but not used in the current implementation
+          
+          // Find patient name from actors
+          const patient = state.actors?.find(a => a.did === token.patientDid);
+          const patientName = patient?.name || 'Unknown Patient';
+          
+          // Find doctor name from actors
+          const doctor = state.actors?.find(a => a.did === token.doctorDid);
+          const doctorName = doctor?.name || 'Unknown Doctor';
+          
+          return {
+            _id: token.id,
+            prescriptionId: token.id,
+            prescription: {
+              credentialSubject: {
+                id: token.patientDid,
+                prescription: {
+                  id: token.id,
+                  patientName: patientName,
+                  diagnosis: credentialSubject.diagnosis || 'No diagnosis',
+                  medicationName: medicationName,
+                  dosage: dosage,
+                  frequency: instructions,
+                  duration: '',
+                  prescribedBy: doctorName,
+                  prescribedAt: token.createdAt
+                }
+              },
+              issuer: token.doctorDid,
+              issuanceDate: token.createdAt
+            },
+            patientDid: token.patientDid,
+            pharmacyDid: currentUser.did,
+            sharedAt: token.updatedAt || token.createdAt,
+            status: token.status === 'dispensed' ? 'dispensed' : 'shared'
+          };
+        });
+        
+        console.log('[PharmacyDashboard] Transformed prescriptions:', transformedPrescriptions);
+        setSharedPrescriptions(transformedPrescriptions);
+      } else {
+        console.log('[PharmacyDashboard] No prescriptions found or error:', response);
+        setSharedPrescriptions([]);
       }
     } catch (error) {
       console.error('Error loading shared prescriptions:', error);
+      setSharedPrescriptions([]);
     } finally {
       setLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUser, state.actors]);
+
+  useEffect(() => {
+    // Load actors first
+    loadActors();
+  }, [loadActors]);
 
   useEffect(() => {
     loadSharedPrescriptions();
@@ -78,11 +168,14 @@ function PharmacyDashboard() {
     if (!selectedPrescription || !currentUser) return;
 
     try {
-      const response = await apiService.createDispensation(
+      const response = await apiService.dispenseEnhancedPrescription(
         selectedPrescription.prescriptionId,
         {
           pharmacyDid: currentUser.did || '',
-          ...dispensingForm
+          batchNumber: dispensingForm.batchNumber,
+          manufacturerInfo: dispensingForm.medicationProvided, // Using medicationProvided as manufacturer info
+          dispensedQuantity: '1', // Default quantity
+          pharmacistSignature: dispensingForm.pharmacistNotes // Using notes as signature for now
         }
       );
 

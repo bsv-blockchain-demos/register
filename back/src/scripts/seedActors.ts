@@ -13,13 +13,6 @@ interface TestActor {
 
 const testActors: TestActor[] = [
   {
-    name: 'Admin User',
-    type: 'admin',
-    email: 'admin@quarkid.com',
-    phone: '+1-555-0100',
-    address: '100 Admin Tower, Zürich, Switzerland 94025'
-  },
-  {
     name: 'Dr. Emily Johnson',
     type: 'doctor',
     email: 'emily.johnson@healthcenter.com',

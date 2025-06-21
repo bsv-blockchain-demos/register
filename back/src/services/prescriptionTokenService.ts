@@ -149,8 +149,14 @@ export class PrescriptionTokenService {
       throw new Error('Prescription token not found');
     }
 
-    if (token.status !== 'created') {
-      throw new Error(`Cannot dispense prescription in status: ${token.status}`);
+    // Allow dispensing for prescriptions that have been shared (status: dispensing)
+    if (token.status !== 'dispensing') {
+      throw new Error(`Cannot dispense prescription in status: ${token.status}. Prescription must be shared with pharmacy first.`);
+    }
+
+    // Verify the pharmacy trying to dispense is the one the prescription was shared with
+    if (token.pharmacyDid !== pharmacyDid) {
+      throw new Error('Unauthorized: This prescription was not shared with your pharmacy');
     }
 
     try {
@@ -163,7 +169,6 @@ export class PrescriptionTokenService {
         {
           $set: {
             status: 'dispensed',
-            pharmacyDid: pharmacyDid,
             'tokenState.dispensedAt': new Date(),
             dispensationVC: dispensationVC,
             updatedAt: new Date()
@@ -252,7 +257,74 @@ export class PrescriptionTokenService {
    * Get tokens by pharmacy DID
    */
   async getTokensByPharmacy(pharmacyDid: string): Promise<PrescriptionToken[]> {
-    return await this.tokensCollection.find({ pharmacyDid: pharmacyDid }).toArray();
+    return await this.tokensCollection.find({ pharmacyDid }).toArray();
+  }
+
+  /**
+   * Get tokens by insurance DID
+   */
+  async getTokensByInsurance(insuranceDid: string): Promise<PrescriptionToken[]> {
+    return await this.tokensCollection.find({ insuranceDid }).toArray();
+  }
+
+  /**
+   * Share prescription token with a pharmacy
+   * This updates the token to associate it with a pharmacy for dispensing
+   */
+  async sharePrescriptionToken(
+    tokenId: string,
+    patientDid: string,
+    pharmacyDid: string
+  ): Promise<PrescriptionToken> {
+    try {
+      // 1. Get the token
+      const token = await this.getToken(tokenId);
+      if (!token) {
+        throw new Error('Prescription token not found');
+      }
+
+      // 2. Verify the patient owns this prescription
+      if (token.patientDid !== patientDid) {
+        throw new Error('Unauthorized: Patient does not own this prescription');
+      }
+
+      // 3. Check if prescription is in a valid state for sharing
+      if (token.status !== 'created') {
+        throw new Error(`Cannot share prescription in ${token.status} status`);
+      }
+
+      // 4. Check if already shared with a pharmacy
+      if (token.pharmacyDid) {
+        throw new Error('Prescription already shared with a pharmacy');
+      }
+
+      // 5. Update token with pharmacy DID
+      const updatedToken = {
+        ...token,
+        pharmacyDid: pharmacyDid,
+        status: 'dispensing' as const,
+        updatedAt: new Date()
+      };
+
+      // 6. Update in database
+      await this.tokensCollection.updateOne(
+        { id: tokenId },
+        { 
+          $set: { 
+            pharmacyDid: pharmacyDid,
+            status: 'dispensing',
+            updatedAt: new Date()
+          } 
+        }
+      );
+
+      console.log(`[PrescriptionTokenService] Token ${tokenId} shared with pharmacy ${pharmacyDid}`);
+      return updatedToken;
+
+    } catch (error) {
+      console.error('[PrescriptionTokenService] Error sharing prescription token:', error);
+      throw error;
+    }
   }
 
   // Private helper methods

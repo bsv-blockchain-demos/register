@@ -48,7 +48,7 @@ interface DispensedPrescription extends PrescriptionCredential {
 
 const PatientDashboard: React.FC = () => {
   const { currentUser } = useAuth();
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const [prescriptions, setPrescriptions] = useState<PrescriptionCredential[]>([]);
   const [dispensedPrescriptions, setDispensedPrescriptions] = useState<DispensedPrescription[]>([]);
   const [doctors, setDoctors] = useState<Actor[]>([]);
@@ -59,17 +59,82 @@ const PatientDashboard: React.FC = () => {
   const [prescriptionToShare, setPrescriptionToShare] = useState<PrescriptionCredential | null>(null);
   const [confirmingPrescription, setConfirmingPrescription] = useState<string | null>(null);
 
+  // Load actors from backend
+  const loadActors = useCallback(async () => {
+    try {
+      const response = await apiService.getActors();
+      if (response.success && response.data) {
+        dispatch({ type: 'SET_ACTORS', payload: response.data });
+      }
+    } catch (error) {
+      console.error('Failed to load actors:', error);
+    }
+  }, [dispatch]);
+
   const loadPrescriptions = useCallback(async () => {
     if (!currentUser?.did) return;
     
     try {
       setLoading(true);
-      console.log('[PatientDashboard] Loading prescriptions for:', currentUser.did);
-      const response = await apiService.getPrescriptionsByActor(currentUser.did, 'patient');
-      console.log('[PatientDashboard] API response:', response);
+      console.log('[PatientDashboard] Loading enhanced prescriptions for:', currentUser.did);
+      
+      // Use enhanced prescriptions endpoint
+      const response = await apiService.getEnhancedPrescriptionsByPatient(currentUser.did);
+      console.log('[PatientDashboard] Enhanced API response:', response);
+      
       if (response.success && response.data) {
-        console.log('[PatientDashboard] Setting prescriptions:', response.data);
-        setPrescriptions(response.data);
+        // Transform enhanced prescription tokens to match existing prescription format
+        const transformedPrescriptions = response.data.map((token: {
+          id: string;
+          doctorDid: string;
+          patientDid: string;
+          createdAt: string;
+          status: string;
+          prescriptionVC?: {
+            credentialSubject?: {
+              medicationName?: string;
+              dosage?: string;
+              instructions?: string;
+            };
+          };
+        }) => {
+          // Extract medication data from prescriptionVC.credentialSubject
+          const credentialSubject = token.prescriptionVC?.credentialSubject || {};
+          const medicationName = credentialSubject.medicationName || 'Unknown Medication';
+          const dosage = credentialSubject.dosage || 'No dosage specified';
+          const instructions = credentialSubject.instructions || '';
+          
+          // Find doctor name from actors
+          const doctor = state.actors?.find(a => a.did === token.doctorDid);
+          const doctorName = doctor?.name || 'Unknown Doctor';
+          
+          return {
+            id: token.id,
+            issuer: token.doctorDid,
+            issuanceDate: token.createdAt,
+            credentialSubject: {
+              id: token.patientDid,
+              patientInfo: {
+                name: currentUser.name
+              },
+              prescription: {
+                id: token.id,
+                doctorName: doctorName,
+                medication: {
+                  name: medicationName,
+                  dosage: dosage,
+                  frequency: instructions,
+                  duration: ''
+                },
+                prescribedDate: token.createdAt,
+                status: token.status === 'dispensed' ? 'dispensado' : 'no dispensado',
+              }
+            }
+          };
+        });
+        
+        console.log('[PatientDashboard] Transformed prescriptions:', transformedPrescriptions);
+        setPrescriptions(transformedPrescriptions);
       } else {
         console.log('[PatientDashboard] No prescriptions found or error:', response);
         setPrescriptions([]);
@@ -80,31 +145,81 @@ const PatientDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentUser?.did]);
+  }, [currentUser?.did, currentUser?.name, state.actors]);
 
   const loadDispensedPrescriptions = useCallback(async () => {
     if (!currentUser?.did) return;
     
     try {
-      console.log('[PatientDashboard] Loading dispensed prescriptions for:', currentUser.did);
-      const response = await fetch(`http://localhost:3000/v1/prescriptions/dispensed/${currentUser.did}`, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      });
+      console.log('[PatientDashboard] Loading enhanced prescriptions for patient:', currentUser.did);
+      const response = await apiService.getEnhancedPrescriptionsByPatient(currentUser.did);
       
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data) {
-          console.log('[PatientDashboard] Dispensed prescriptions:', data.data);
-          setDispensedPrescriptions(data.data);
+      if (response.success && response.data) {
+        // Filter for dispensed and confirmed prescriptions
+        const dispensedOrConfirmed = response.data.filter((token: any) => 
+          token.status === 'dispensed' || token.status === 'confirmed'
+        );
+        
+        // Transform the enhanced prescription tokens to match the expected structure
+        const transformedPrescriptions = dispensedOrConfirmed.map((token: any) => {
+          const prescriptionVC = token.prescriptionVC || {};
+          
+          // Create a structure that matches DispensedPrescription interface
+          const transformed: DispensedPrescription = {
+            ...prescriptionVC, // This spreads the base PrescriptionCredential structure
+            id: token.id, // Override with the token ID
+            status: token.status as 'dispensed' | 'confirmed',
+            dispensation: token.dispensationVC ? {
+              _id: token.id,
+              prescriptionId: token.id,
+              pharmacyDid: token.pharmacyDid || '',
+              patientDid: token.patientDid || '',
+              medicationProvided: token.dispensationVC.credentialSubject?.medicationProvided || '',
+              batchNumber: token.dispensationVC.credentialSubject?.batchNumber,
+              expiryDate: token.dispensationVC.credentialSubject?.expiryDate,
+              pharmacistNotes: token.dispensationVC.credentialSubject?.pharmacistSignature,
+              dispensedAt: token.dispensationVC.credentialSubject?.dispensedAt || token.tokenState?.dispensedAt || new Date().toISOString(),
+              status: 'dispensed'
+            } : undefined,
+            confirmation: token.confirmationVC ? {
+              _id: token.id,
+              prescriptionId: token.id,
+              patientDid: token.patientDid || '',
+              pharmacyDid: token.pharmacyDid || '',
+              confirmationNotes: token.confirmationVC.credentialSubject?.patientSignature,
+              confirmedAt: token.confirmationVC.credentialSubject?.confirmedAt || token.tokenState?.confirmedAt || new Date().toISOString(),
+              dispensationId: token.id,
+              status: 'confirmed',
+              type: 'confirmation',
+              vcData: token.confirmationVC
+            } : undefined
+          };
+          
+          return transformed;
+        });
+        
+        console.log('[PatientDashboard] Transformed dispensed prescriptions:', transformedPrescriptions);
+        // Log the first prescription in detail to debug
+        if (transformedPrescriptions.length > 0) {
+          console.log('[PatientDashboard] First dispensed prescription details:', {
+            id: transformedPrescriptions[0].id,
+            tokenId: transformedPrescriptions[0].tokenId,
+            status: transformedPrescriptions[0].status,
+            hasConfirmation: !!transformedPrescriptions[0].confirmation,
+            confirmationVC: transformedPrescriptions[0].confirmationVC
+          });
         }
+        setDispensedPrescriptions(transformedPrescriptions);
       }
     } catch (error) {
       console.error('Failed to load dispensed prescriptions:', error);
     }
   }, [currentUser?.did]);
+
+  useEffect(() => {
+    // Load actors first
+    loadActors();
+  }, [loadActors]);
 
   useEffect(() => {
     // Get all doctors
@@ -158,7 +273,7 @@ const PatientDashboard: React.FC = () => {
     }
 
     try {
-      // Call the share prescription API
+      // Call the enhanced share prescription API
       const response = await apiService.sharePrescription({
         prescriptionId: prescriptionToShare.id || '',
         patientDid: currentUser.did || '',
@@ -172,10 +287,7 @@ const PatientDashboard: React.FC = () => {
         setPrescriptionToShare(null);
         
         // Refresh prescriptions to update UI
-        const prescriptionsResponse = await apiService.getPrescriptionsByActor(currentUser.did || '', 'patient');
-        if (prescriptionsResponse.success && prescriptionsResponse.data) {
-          setPrescriptions(prescriptionsResponse.data);
-        }
+        await loadPrescriptions();
       } else {
         alert(`Failed to share prescription: ${response.error || 'Unknown error'}`);
       }
@@ -186,37 +298,44 @@ const PatientDashboard: React.FC = () => {
   };
 
   const handleConfirmDispensation = async (prescriptionId: string) => {
-    if (!currentUser?.did) return;
+    console.log('[PatientDashboard] handleConfirmDispensation called with ID:', prescriptionId);
+    
+    if (!prescriptionId) {
+      console.error('[PatientDashboard] No prescription ID provided');
+      alert('Error: No prescription ID available');
+      return;
+    }
+    
+    if (!currentUser?.did) {
+      console.error('[PatientDashboard] No current user DID');
+      return;
+    }
     
     try {
       setConfirmingPrescription(prescriptionId);
       
-      const response = await fetch(`http://localhost:3000/v1/prescriptions/${prescriptionId}/confirmations`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          patientDid: currentUser.did,
-          confirmationNotes: 'Medication received successfully'
-        })
+      console.log('[PatientDashboard] Calling confirmEnhancedPrescription with:', {
+        prescriptionId,
+        patientSignature: 'Medication received successfully'
       });
       
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          alert('Prescription confirmation recorded successfully');
-          // Reload dispensed prescriptions to update the UI
-          loadDispensedPrescriptions();
-        }
+      const response = await apiService.confirmEnhancedPrescription(prescriptionId, {
+        patientSignature: 'Medication received successfully' // In a real app, this would be a proper digital signature
+      });
+      
+      console.log('[PatientDashboard] Confirmation response:', response);
+      
+      if (response.success) {
+        alert('Prescription confirmation recorded successfully');
+        // Reload dispensed prescriptions to update the UI
+        loadDispensedPrescriptions();
       } else {
-        const error = await response.json();
-        alert(`Failed to confirm prescription: ${error.error}`);
+        console.error('[PatientDashboard] Confirmation failed:', response);
+        alert(`Failed to confirm prescription: ${response.error || 'Unknown error'}`);
       }
     } catch (error) {
-      console.error('Error confirming prescription:', error);
-      alert('Failed to confirm prescription');
+      console.error('[PatientDashboard] Error confirming prescription:', error);
+      alert(`Failed to confirm prescription: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setConfirmingPrescription(null);
     }
@@ -298,19 +417,18 @@ const PatientDashboard: React.FC = () => {
                     {recentPrescriptions.map((prescription, index) => {
                       const doctor = doctors.find(d => d.did === prescription.issuer);
                       const prescriptionData = prescription.credentialSubject.prescription;
-                      const medication = prescriptionData.medication;
                       
                       return (
                         <div key={prescription.id || index} className="border border-gray-700 rounded-lg p-4">
                           <div className="flex justify-between items-start">
                             <div className="flex-1">
-                              <h4 className="font-medium text-white">{medication.name}</h4>
+                              <h4 className="font-medium text-white">{prescriptionData.medication.name}</h4>
                               <p className="text-gray-400 mt-1">
-                                <strong>Dosage:</strong> {medication.dosage} | 
-                                <strong> Frequency:</strong> {medication.frequency}
+                                <strong>Dosage:</strong> {prescriptionData.medication.dosage} | 
+                                <strong> Frequency:</strong> {prescriptionData.medication.frequency}
                               </p>
                               <p className="text-gray-400">
-                                <strong>Duration:</strong> {medication.duration}
+                                <strong>Duration:</strong> {prescriptionData.medication.duration}
                               </p>
                               <p className="text-sm text-gray-500 mt-2">
                                 <strong>Diagnosis:</strong> {prescriptionData.diagnosis}
@@ -324,7 +442,7 @@ const PatientDashboard: React.FC = () => {
                             </div>
                             <div className="ml-4">
                               <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                                prescriptionData.status === 'no dispensado' 
+                                prescriptionData.status === 'no dispensado'
                                   ? 'bg-yellow-500/20 text-yellow-500'
                                   : 'bg-green-500/20 text-green-500'
                               }`}>
@@ -432,22 +550,22 @@ const PatientDashboard: React.FC = () => {
                 </thead>
                 <tbody>
                   {dispensedPrescriptions.map((prescription) => {
-                    const prescriptionData = prescription.credentialSubject.prescription;
+                    const prescriptionData = prescription.credentialSubject?.prescription;
                     const doctorName = doctors.find(d => d.did === prescription.issuer)?.name || 'Unknown Doctor';
                     
                     return (
                       <tr key={prescription.id} className="border-b border-gray-800">
                         <td className="py-3 px-4">
                           <div>
-                            <p className="font-medium text-white">{prescriptionData.medication.name}</p>
-                            <p className="text-sm text-gray-400">{prescriptionData.medication.dosage}</p>
+                            <p className="font-medium text-white">{prescriptionData?.medication?.name || 'Unknown'}</p>
+                            <p className="text-sm text-gray-400">{prescriptionData?.medication?.dosage || 'N/A'}</p>
                           </div>
                         </td>
                         <td className="py-3 px-4 text-gray-300">
                           {doctorName}
                         </td>
                         <td className="py-3 px-4 text-gray-300">
-                          {prescription.dispensation ? 
+                          {prescription.dispensation?.dispensedAt ? 
                             new Date(prescription.dispensation.dispensedAt).toLocaleDateString() : 
                             'N/A'
                           }

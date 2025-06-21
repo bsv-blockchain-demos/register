@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
-import { Link } from 'react-router-dom';
 import type { PrescriptionCredential, Actor } from '../../types';
 import { PrescriptionForm } from '../PrescriptionForm';
 import { apiService } from '../../services/apiService';
@@ -28,16 +27,34 @@ interface PrescriptionToken {
   };
   createdAt: Date;
   updatedAt: Date;
+  prescriptionVC: {
+    credentialSubject: {
+      medicationName: string;
+      dosage: string;
+    };
+  };
 }
 
 const DoctorDashboard: React.FC = () => {
   const { currentUser } = useAuth();
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const [prescriptions, setPrescriptions] = useState<PrescriptionCredential[]>([]);
   const [patients, setPatients] = useState<Actor[]>([]);
   const [showPrescriptionForm, setShowPrescriptionForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [creatingTestPrescription, setCreatingTestPrescription] = useState(false);
+
+  // Load actors from backend
+  const loadActors = useCallback(async () => {
+    try {
+      const response = await apiService.getActors();
+      if (response.success && response.data) {
+        dispatch({ type: 'SET_ACTORS', payload: response.data });
+      }
+    } catch (error) {
+      console.error('Failed to load actors:', error);
+    }
+  }, [dispatch]);
 
   const loadEnhancedPrescriptions = useCallback(async () => {
     if (!currentUser?.did) return;
@@ -46,34 +63,50 @@ const DoctorDashboard: React.FC = () => {
       setLoading(true);
       const response = await apiService.getEnhancedPrescriptionsByDoctor(currentUser.did);
       if (response.success && response.data) {
+        console.log('Enhanced prescriptions response:', response.data);
+        
         // Transform enhanced prescription tokens to match existing prescription format
-        const transformedPrescriptions = response.data.map((token: PrescriptionToken) => ({
-          id: token.id,
-          issuer: token.doctorDid,
-          issuanceDate: token.createdAt,
-          credentialSubject: {
-            id: token.patientDid,
-            patientInfo: {
-              name: 'Patient' // This would come from the actual patient data
-            },
-            prescription: {
-              id: token.id,
-              medication: {
-                name: token.metadata.medicationName,
-                dosage: token.metadata.dosage
+        const transformedPrescriptions = response.data.map((token: PrescriptionToken) => {
+          // Extract medication data from prescriptionVC.credentialSubject
+          const credentialSubject = token.prescriptionVC?.credentialSubject || {};
+          const medicationName = credentialSubject.medicationName || 'Unknown Medication';
+          const dosage = credentialSubject.dosage || 'No dosage specified';
+          
+          return {
+            id: token.id,
+            issuer: token.doctorDid,
+            issuanceDate: token.createdAt,
+            credentialSubject: {
+              id: token.patientDid,
+              patientInfo: {
+                name: 'Patient' // This would come from the actual patient data
               },
-              status: token.status === 'confirmed' ? 'dispensado' : 'no dispensado'
+              prescription: {
+                id: token.id,
+                medication: {
+                  name: medicationName,
+                  dosage: dosage
+                },
+                status: token.status === 'dispensed' ? 'dispensado' : 'no dispensado'
+              }
             }
-          }
-        }));
+          };
+        });
         setPrescriptions(transformedPrescriptions);
       }
     } catch (error) {
       console.error('Failed to load enhanced prescriptions:', error);
+      // For now, just set empty prescriptions on error
+      setPrescriptions([]);
     } finally {
       setLoading(false);
     }
   }, [currentUser?.did]);
+
+  useEffect(() => {
+    // Load actors first
+    loadActors();
+  }, [loadActors]);
 
   useEffect(() => {
     // Get all patients for the form
@@ -149,9 +182,31 @@ const DoctorDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Doctor Dashboard</h1>
-          <p className="text-gray-400">Welcome, Dr. {currentUser?.name}</p>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold">Doctor Dashboard</h1>
+          <div className="flex gap-4">
+            <button
+              onClick={createTestPrescription}
+              disabled={creatingTestPrescription || patients.length === 0}
+              className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {creatingTestPrescription ? (
+                <>Loading...</>
+              ) : (
+                <>
+                  <FiFileText />
+                  Create Test Script
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => setShowPrescriptionForm(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
+            >
+              <FiPlus />
+              New Prescription
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">

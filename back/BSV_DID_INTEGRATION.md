@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides comprehensive documentation for the Bitcoin SV (BSV) overlay DID method integration within the QuarkID backend. The BSV DID method allows for creating, updating, and resolving Decentralized Identifiers (DIDs) directly on the Bitcoin SV blockchain using OP_RETURN transactions.
+This document provides comprehensive documentation for the Bitcoin SV (BSV) overlay DID method integration within the QuarkID backend. The BSV DID method allows for creating, updating, and resolving Decentralized Identifiers (DIDs) using the BSV blockchain overlay protocol with the QuarkID Agent framework.
 
 ## Table of Contents
 
@@ -20,158 +20,184 @@ This document provides comprehensive documentation for the Bitcoin SV (BSV) over
 
 ### BSV DID Method Overview
 
-The BSV overlay DID method stores DID documents directly on the Bitcoin SV blockchain using a custom overlay protocol:
+The BSV overlay DID method integrates with the QuarkID Agent to store DID documents on the Bitcoin SV blockchain using overlay protocols:
 
-- **DID Format**: `did:bsv:<topic>:<txid>:<vout>`
-- **Storage**: DID documents are embedded in `OP_RETURN` outputs of BSV transactions
-- **Identifier**: A unique P2PKH output in the same transaction serves as the on-chain identifier
-- **Resolution**: Custom overlay node service resolves DIDs from blockchain data
+- **DID Format**: `did:bsv:<topic>:<serialNumber>`
+- **Storage**: DID documents are stored using BSV overlay transactions with PushDrop pattern
+- **Resolution**: LARS (Local Authenticated Resolver Service) acts as a local development environment for a BSV blockchain overlay, indexing and serving DID documents
+- **Key Management**: Integrated with BSV Wallet KMS through QuarkID Agent
+- **Transaction Flow**: BSV Wallet posts transactions both to the blockchain and to LARS for indexing
 
 ### System Components
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Express API   │────│  BsvDidService  │────│ BSV Blockchain  │
-│   (Routes)      │    │                 │    │   (OP_RETURN)   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         │              ┌─────────────────┐              │
-         └──────────────│ WalletClient    │──────────────┘
-                        │ (UTXO/Signing)  │
+```text
+┌─────────────────┐    ┌─────────────────┐    
+│   Express API   │────│ QuarkIdAgent    │    
+│   (Routes)      │    │   Service       │    
+└─────────────────┘    └─────────────────┘    
+         │                       │             
+         │              ┌─────────────────┐
+         └──────────────│  BSV Wallet     │─────┐
+                        │  Client/KMS     │     │
+                        └─────────────────┘     │
+                                │               │
+                                │               │
+                        ┌───────▼────────┐      │
+                        │ Wallet Storage │      │
+                        │ (Babbage)      │      │
+                        └─────────────────┘      │
+                                                │
+                        ┌─────────────────┐     │
+                        │ LARS (BSV       │◄────┘
+                        │ Overlay Service)│
+                        └────────┬────────┘
+                                 │
+                        ┌────────▼────────┐
+                        │ BSV Blockchain  │
                         └─────────────────┘
 ```
 
-### Key Classes
+### Key Services
 
-- **`BsvDidService`**: Main service class handling DID operations
-- **`BsvOverlayDidRegistryService`**: Core BSV overlay protocol implementation
-- **`WalletClient`**: BSV SDK wallet for transaction signing and UTXO management
-- **`createDidRoutes`**: Express router factory for DID endpoints
+1. **QuarkIdAgentService**: Main service orchestrating DID operations through the QuarkID Agent
+2. **BsvOverlayRegistry**: Handles BSV-specific DID creation and updates
+3. **BsvOverlayResolver**: Resolves DIDs from LARS
+4. **BsvWalletKMS**: Key Management Service integrating BSV wallet with QuarkID Agent
+5. **LARS**: The BSV blockchain overlay service that:
+   - Receives DID transactions from the BSV wallet
+   - Indexes DID documents from blockchain transactions
+   - Provides lookup/resolution services for DIDs
+6. **Wallet Storage (Babbage)**: Remote storage service where the wallet maintains copies of transactions
+
+### Transaction Flow
+
+1. **DID Creation**: 
+   - QuarkID Agent creates DID document
+   - BSV Wallet creates and signs transaction
+   - Transaction posted to BSV blockchain
+   - Transaction also submitted to LARS for indexing
+   - Wallet stores copy in Babbage storage
+
+2. **DID Resolution**:
+   - Resolution request sent to LARS
+   - LARS returns indexed DID document
+   - Falls back to blockchain lookup if not indexed
 
 ## DID Format
 
 BSV DIDs follow this format:
-```
-did:bsv:<topic>:<txid>:<vout>
+
+```text
+did:bsv:<topic>:<serialNumber>
 ```
 
-### Components
-- **`topic`**: Overlay topic identifier (configured via `DID_TOPIC`)
-- **`txid`**: Bitcoin transaction hash containing the DID
-- **`vout`**: Output index of the P2PKH identifier output
+Where:
 
-### Example
-```
-did:bsv:quarkid-test:a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456:1
+- `topic`: The overlay topic (e.g., `tm_did` for DIDs, `tm_vc` for VCs)
+- `serialNumber`: Unique identifier derived from the BSV transaction
+
+Example:
+
+```text
+did:bsv:tm_did:fc54492241f95d82628f7e5bc22e5a36ddc1d558039f8ab1545d048fb18eaefa
 ```
 
 ## API Endpoints
 
-### Base URL
-All BSV DID endpoints are available at: `/v1/dids/`
+All DID operations are exposed through RESTful endpoints under `/v1/dids/`:
 
-### Authentication
-All endpoints require authentication via the `@bsv/auth-express-middleware`.
+### Create DID
 
-### Endpoints
+**POST** `/v1/dids/create`
 
-#### 1. Create DID
-Creates a new BSV DID by broadcasting a transaction to the BSV network.
+Creates a new DID on the BSV blockchain.
 
-**Endpoint:** `POST /v1/dids/create`
+**Request:**
 
-**Request Body:**
 ```json
 {
-  "didDocument": {
-    "@context": ["https://www.w3.org/ns/did/v1"],
-    "id": "",
-    "verificationMethod": [{
-      "id": "#key-1",
-      "type": "EcdsaSecp256k1VerificationKey2019",
-      "controller": "",
-      "publicKeyHex": "02a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3"
-    }],
-    "authentication": ["#key-1"]
-  },
-  "controllerPublicKeyHex": "02a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3",
-  "feePerKb": 10
+  "name": "My DID"  // Optional
 }
 ```
 
-**Success Response:**
+**Response:**
+
 ```json
 {
   "status": "success",
-  "txid": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
-  "did": "did:bsv:quarkid-test:a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456:1"
+  "data": {
+    "did": "did:bsv:tm_did:fc54492241f95d82628f7e5bc22e5a36ddc1d558039f8ab1545d048fb18eaefa"
+  }
 }
 ```
 
-#### 2. Update DID
-Updates an existing BSV DID by creating a new transaction that references the previous one.
+### Update DID
 
-**Endpoint:** `POST /v1/dids/update`
+**POST** `/v1/dids/update`
 
-**Request Body:**
+Updates an existing DID by adding verification methods or services.
+
+**Request:**
+
 ```json
 {
-  "didToUpdate": "did:bsv:quarkid-test:prev_txid:1",
-  "newDidDocument": {
-    "@context": ["https://www.w3.org/ns/did/v1"],
-    "id": "did:bsv:quarkid-test:prev_txid:1",
-    "verificationMethod": [{
-      "id": "#key-2",
-      "type": "EcdsaSecp256k1VerificationKey2019",
-      "controller": "did:bsv:quarkid-test:prev_txid:1",
-      "publicKeyHex": "03b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4"
-    }],
-    "authentication": ["#key-2"]
-  },
-  "currentBrc48TxHex": "0100000001...",
-  "currentBrc48Vout": 1,
-  "currentBrc48Satoshis": 1000,
-  "currentControllerPrivateKeyHex": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456789",
-  "feePerKb": 10
+  "did": "did:bsv:tm_did:existing_serial_number",
+  "verificationMethods": [...],  // Optional
+  "services": [...]              // Optional
 }
 ```
 
-**Success Response:**
+**Response:**
+
 ```json
 {
   "status": "success",
-  "txid": "b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456789a",
-  "did": "did:bsv:quarkid-test:b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456789a:1"
+  "data": {
+    "didDocument": {
+      "@context": ["https://www.w3.org/ns/did/v1"],
+      "id": "did:bsv:tm_did:new_serial_number",
+      "verificationMethod": [...],
+      "service": [...]
+    }
+  }
 }
 ```
 
-#### 3. Resolve DID
-Retrieves the current DID document for a given BSV DID.
+### Resolve DID
 
-**Endpoint:** `GET /v1/dids/resolve/:did`
+**GET** `/v1/dids/:did`
 
-**Parameters:**
-- `did`: The BSV DID to resolve (URL encoded)
+Retrieves a DID document by resolving the DID identifier.
 
-**Example Request:**
+**Example:**
+
+```text
+GET /v1/dids/did%3Absv%3Atm_did%3Afc54492241f95d82628f7e5bc22e5a36ddc1d558039f8ab1545d048fb18eaefa
 ```
-GET /v1/dids/resolve/did%3Absv%3Aquarkid-test%3Aa1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456%3A1
-```
 
-**Success Response:**
+**Response:**
+
 ```json
 {
   "status": "success",
-  "didDocument": {
-    "@context": ["https://www.w3.org/ns/did/v1"],
-    "id": "did:bsv:quarkid-test:a1b2c3d4e5f6789012345678901234567890abcdef123456:1",
-    "verificationMethod": [{
-      "id": "#key-1",
-      "type": "EcdsaSecp256k1VerificationKey2019",
-      "controller": "did:bsv:quarkid-test:a1b2c3d4e5f6789012345678901234567890abcdef123456:1",
-      "publicKeyHex": "02a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3"
-    }],
-    "authentication": ["#key-1"]
+  "data": {
+    "didDocument": {
+      "@context": ["https://www.w3.org/ns/did/v1"],
+      "id": "did:bsv:tm_did:fc54492241f95d82628f7e5bc22e5a36ddc1d558039f8ab1545d048fb18eaefa",
+      "verificationMethod": [{
+        "id": "did:bsv:tm_did:fc54492241f95d82628f7e5bc22e5a36ddc1d558039f8ab1545d048fb18eaefa#key-1",
+        "type": "JsonWebKey2020",
+        "controller": "did:bsv:tm_did:fc54492241f95d82628f7e5bc22e5a36ddc1d558039f8ab1545d048fb18eaefa",
+        "publicKeyJwk": {
+          "kty": "EC",
+          "crv": "secp256k1",
+          "x": "...",
+          "y": "..."
+        }
+      }],
+      "authentication": ["#key-1"],
+      "assertionMethod": ["#key-1"]
+    }
   }
 }
 ```
@@ -180,353 +206,231 @@ GET /v1/dids/resolve/did%3Absv%3Aquarkid-test%3Aa1b2c3d4e5f678901234567890123456
 
 ### Environment Variables
 
-Create a `.env` file in the project root with the following variables:
+Create a `.env` file in the backend directory:
 
-```bash
-# Required: 64-character hex private key for wallet operations
-MEDICAL_LICENSE_CERTIFIER=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-
+```env
 # BSV DID Configuration
-DID_TOPIC=quarkid-test
-OVERLAY_PROVIDER_URL=https://overlay.provider.com
+DID_TOPIC=your_topic_identifier
+OVERLAY_PROVIDER_URL=https://your-overlay-node.com
+DEFAULT_FUNDING_PUBLIC_KEY_HEX=your_64_character_hex_public_key # Optional
 
-# Optional: Database configuration
-MONGODB_URI=mongodb://localhost:27017
+# MongoDB Configuration (optional)
+MONGO_URI=mongodb://localhost:27017
+APP_DB_NAME=quarkid_dids
 
-# Optional: Server configuration
+# VC Configuration  
+VC_TOPIC=tm_vc                     # Topic for Verifiable Credentials
+VC_TOPIC_SERVICE=ls_vc             # Service topic for VC lookups
+
+# Overlay Provider URL
+OVERLAY_PROVIDER_URL=http://localhost:8080   # LARS overlay service endpoint
+
+# Server Configuration
 PORT=3000
 
-# Optional: BSV network configuration
-DEFAULT_FUNDING_PUBLIC_KEY_HEX=02a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3
-FEE_PER_KB=10
+# Wallet Storage URL
+WALLET_STORAGE_URL=https://storage.babbage.systems
+
+# Development Configuration
+MOCK_UTXOS=false
+NODE_ENV=development
 ```
 
-### Required Environment Variables
+### Required Services
 
-| Variable | Description | Format | Example |
-|----------|-------------|---------|---------|
-| `MEDICAL_LICENSE_CERTIFIER` | Private key for wallet operations | 64-character hex string | `0123456789abcdef...` |
-| `DID_TOPIC` | BSV overlay topic identifier | String | `quarkid-test` |
-| `OVERLAY_PROVIDER_URL` | BSV overlay node endpoint | URL | `https://overlay.provider.com` |
-
-### Optional Environment Variables
-
-| Variable | Description | Default | Example |
-|----------|-------------|---------|---------|
-| `MONGODB_URI` | MongoDB connection string | None | `mongodb://localhost:27017` |
-| `PORT` | HTTP server port | `3000` | `8080` |
-| `DEFAULT_FUNDING_PUBLIC_KEY_HEX` | Default funding public key | None | `02a1b2c3d4e5f6...` |
-| `FEE_PER_KB` | Transaction fee rate | `10` | `20` |
+1. **MongoDB**: For storing DID documents and agent data locally
+2. **LARS (BSV Overlay Service)**: For indexing and resolving BSV overlay data
+3. **BSV Wallet**: With sufficient funds for transaction fees
+4. **Babbage Storage**: Remote storage service for wallet transaction copies
 
 ## Installation & Setup
 
 ### Prerequisites
 
-- Node.js v18+ 
-- npm v8+
-- TypeScript v4+
-- (Optional) MongoDB v5+
+- Node.js v18+
+- MongoDB 4.4+
+- LARS overlay service running
+- BSV wallet with funds
 
 ### Installation Steps
 
-1. **Clone and navigate to the project:**
-   ```bash
-   cd /path/to/quarkID/register/back
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Configure environment variables:**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
-   ```
-
-4. **Build the project:**
-   ```bash
-   npm run build
-   # Or with TypeScript lib checking disabled:
-   npx tsc --skipLibCheck
-   ```
-
-5. **Start the server:**
-   ```bash
-   npm start
-   # Or for development:
-   npm run dev
-   ```
-
-### Verification
-
-Test that the BSV DID service is running:
+1. Clone the repository and install dependencies:
 
 ```bash
-curl -X GET http://localhost:3000/health
+cd back
+npm install
 ```
 
-Test BSV DID endpoint accessibility:
+2. Configure environment variables:
+
 ```bash
-curl -X POST http://localhost:3000/v1/dids/create \
-  -H "Content-Type: application/json" \
-  -d '{"didDocument": {"@context": ["https://www.w3.org/ns/did/v1"]}}'
+cp .env.example .env
+# Edit .env with your configuration
+```
+
+3. Start MongoDB:
+
+```bash
+# Using Docker
+docker run -d -p 27017:27017 --name mongodb mongo:latest
+
+# Or using system service
+sudo systemctl start mongodb
+```
+
+4. Start LARS overlay service:
+
+```bash
+cd ../overlay
+docker-compose up -d
+```
+
+5. Start the backend server:
+
+```bash
+npm run dev
 ```
 
 ## Usage Examples
 
-### JavaScript/Node.js Client
+### Creating a DID
 
 ```javascript
-const axios = require('axios');
+// Using fetch
+const response = await fetch('http://localhost:3000/v1/dids/create', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    name: 'Test DID'
+  })
+});
 
-const baseURL = 'http://localhost:3000/v1/dids';
-
-// Create a new DID
-async function createDID() {
-  const didDocument = {
-    "@context": ["https://www.w3.org/ns/did/v1"],
-    "id": "",
-    "verificationMethod": [{
-      "id": "#key-1",
-      "type": "EcdsaSecp256k1VerificationKey2019",
-      "controller": "",
-      "publicKeyHex": "02a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3"
-    }],
-    "authentication": ["#key-1"]
-  };
-
-  try {
-    const response = await axios.post(`${baseURL}/create`, {
-      didDocument,
-      controllerPublicKeyHex: "02a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3",
-      feePerKb: 10
-    });
-    
-    console.log('DID Created:', response.data.did);
-    return response.data;
-  } catch (error) {
-    console.error('Error creating DID:', error.response?.data || error.message);
-  }
-}
-
-// Resolve a DID
-async function resolveDID(did) {
-  try {
-    const encodedDID = encodeURIComponent(did);
-    const response = await axios.get(`${baseURL}/resolve/${encodedDID}`);
-    
-    console.log('DID Document:', response.data.didDocument);
-    return response.data;
-  } catch (error) {
-    console.error('Error resolving DID:', error.response?.data || error.message);
-  }
-}
+const result = await response.json();
+console.log('Created DID:', result.data.did);
 ```
 
-### cURL Examples
+### Resolving a DID
 
-**Create DID:**
-```bash
-curl -X POST http://localhost:3000/v1/dids/create \
-  -H "Content-Type: application/json" \
-  -d '{
-    "didDocument": {
-      "@context": ["https://www.w3.org/ns/did/v1"],
-      "id": "",
-      "verificationMethod": [{
-        "id": "#key-1",
-        "type": "EcdsaSecp256k1VerificationKey2019",
-        "controller": "",
-        "publicKeyHex": "02a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3"
-      }],
-      "authentication": ["#key-1"]
-    },
-    "controllerPublicKeyHex": "02a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3",
-    "feePerKb": 10
-  }'
-```
+```javascript
+const did = 'did:bsv:tm_did:fc54492241f95d82628f7e5bc22e5a36ddc1d558039f8ab1545d048fb18eaefa';
+const encodedDid = encodeURIComponent(did);
 
-**Resolve DID:**
-```bash
-curl -X GET "http://localhost:3000/v1/dids/resolve/did%3Absv%3Aquarkid-test%3Aa1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456%3A1"
+const response = await fetch(`http://localhost:3000/v1/dids/${encodedDid}`);
+const result = await response.json();
+console.log('DID Document:', result.data.didDocument);
 ```
 
 ## Error Handling
 
-### Common Error Responses
+### Common Errors
 
-#### Insufficient Funds
+| Error | Description | Solution |
+|-------|-------------|----------|
+| `QuarkIdAgentService not initialized` | Service not properly started | Check MongoDB connection and environment variables |
+| `Insufficient funds` | Wallet lacks BSV for fees | Fund the wallet with BSV |
+| `DID not found` | DID doesn't exist or not indexed in LARS | Verify DID exists and LARS has indexed it |
+| `Invalid DID format` | Malformed DID string | Check DID follows `did:bsv:<topic>:<serialNumber>` format |
+
+### Error Response Format
+
 ```json
 {
   "status": "error",
-  "description": "No suitable UTXOs found for transaction funding"
+  "description": "Error message describing what went wrong"
 }
 ```
-
-#### Invalid DID Format
-```json
-{
-  "status": "error", 
-  "description": "Invalid DID format provided"
-}
-```
-
-#### DID Not Found
-```json
-{
-  "status": "error",
-  "description": "DID not found"
-}
-```
-
-#### Service Unavailable
-```json
-{
-  "status": "error",
-  "description": "BsvDidService not initialized"
-}
-```
-
-### Error Categories
-
-| Status Code | Category | Description |
-|-------------|----------|-------------|
-| 400 | Bad Request | Invalid input parameters or malformed requests |
-| 404 | Not Found | DID does not exist or cannot be resolved |
-| 500 | Internal Error | Server-side errors, service unavailable |
-| 503 | Service Unavailable | External dependencies unavailable (MongoDB, BSV network) |
 
 ## Production Deployment
 
-### Infrastructure Requirements
-
-- **Compute**: 2+ CPU cores, 4GB+ RAM
-- **Storage**: 20GB+ for application, logs, and temporary files
-- **Network**: Reliable internet connection for BSV network access
-- **Database**: MongoDB instance (optional but recommended)
-
-### Production Environment Variables
-
-```bash
-# Production configuration
-NODE_ENV=production
-PORT=8080
-
-# BSV Network (Mainnet)
-OVERLAY_PROVIDER_URL=https://mainnet.overlay.provider.com
-DID_TOPIC=quarkid-production
-
-# Security: Use secure key management
-MEDICAL_LICENSE_CERTIFIER=${SECURE_PRIVATE_KEY}
-
-# Database
-MONGODB_URI=mongodb://prod-mongodb:27017/quarkid
-
-# Monitoring and logging
-LOG_LEVEL=info
-```
-
 ### Security Considerations
 
-1. **Private Key Management**:
-   - Use secure key management systems (AWS KMS, HashiCorp Vault)
-   - Never commit private keys to version control
+1. **Private Keys**:
+   - Never expose private keys in logs or responses
+   - Use secure key management services in production
    - Rotate keys regularly
 
-2. **Network Security**:
-   - Use HTTPS in production
+2. **Environment Variables**:
+   - Use secrets management (AWS Secrets Manager, Vault, etc.)
+   - Never commit `.env` files to version control
+
+3. **API Security**:
    - Implement rate limiting
-   - Configure firewalls appropriately
+   - Use API authentication for production endpoints
+   - Enable CORS only for trusted domains
 
-3. **Authentication**:
-   - Ensure BSV auth middleware is properly configured
-   - Validate all input parameters
-   - Implement proper session management
+### Deployment Checklist
 
-### Deployment Options
-
-#### Docker Deployment
-```dockerfile
-FROM node:18-alpine
-
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-
-COPY . .
-RUN npm run build
-
-EXPOSE 3000
-CMD ["npm", "start"]
-```
-
-#### PM2 Process Management
-```bash
-pm2 start dist/app.js --name "quarkid-bsv-api"
-pm2 startup
-pm2 save
-```
+- [ ] Environment variables configured securely
+- [ ] MongoDB secured with authentication
+- [ ] LARS overlay service accessible and properly configured
+- [ ] BSV wallet funded and secured
+- [ ] SSL/TLS certificates configured
+- [ ] Monitoring and logging enabled
+- [ ] Backup procedures in place
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### 1. "No suitable UTXOs found"
-**Symptom**: API returns 400 error about UTXOs
-**Solution**: Ensure the wallet has sufficient BSV and UTXOs for transaction creation
+#### 1. "QuarkIdAgentService not initialized"
 
-#### 2. "BsvDidService not initialized"
-**Symptom**: API returns 500 error about service
-**Solutions**: 
-- Check that `DID_TOPIC` and `OVERLAY_PROVIDER_URL` are set
-- Verify environment variables are properly loaded
+**Symptom**: API returns 500 error
+**Solution**:
+
+- Check MongoDB is running and accessible
+- Verify all required environment variables are set
 - Check server logs for initialization errors
 
-#### 3. "MongoDB not available"
-**Symptom**: Some features disabled, MongoDB connection errors
-**Solutions**:
-- Start MongoDB service
-- Check connection string in `MONGODB_URI`
-- Verify network connectivity to MongoDB
+#### 2. "Insufficient funds in the available inputs"
 
-#### 4. "Cannot resolve DID"
-**Symptom**: DID resolution fails
-**Solutions**:
-- Verify overlay provider URL is accessible
-- Check that the DID exists on the BSV network
-- Ensure proper URL encoding for DID parameter
+**Symptom**: DID creation fails with funding error
+**Solution**:
+
+- Ensure wallet has sufficient BSV (minimum 1001 satoshis per operation)
+- Check wallet client is properly initialized
+
+#### 3. "Cannot resolve DID"
+
+**Symptom**: DID resolution returns null or error
+**Solution**:
+
+- Verify LARS overlay service is running at OVERLAY_PROVIDER_URL
+- Check that the DID was successfully submitted to LARS
+- Ensure LARS has indexed the transaction
+- Check network connectivity between services
+
+#### 4. "Invalid topic configuration"
+
+**Symptom**: LARS rejects DID submissions
+**Solution**:
+
+- Ensure DID_TOPIC matches LARS configured topics (e.g., `tm_did`)
+- Verify LARS supports the topic by checking its configuration
 
 ### Debug Mode
 
-Enable debug logging by setting:
+Enable debug logging:
+
 ```bash
-LOG_LEVEL=debug
-DEBUG=quarkid:*
+DEBUG=quarkid:* npm run dev
 ```
 
 ### Health Checks
 
-Monitor these endpoints for service health:
-- `GET /` - Basic server response
-- `GET /v1/dids/resolve/<test-did>` - BSV service functionality
+Monitor service health:
 
-### Logs
-
-Key log locations:
-- Application logs: `console.log` output
-- BSV transaction logs: Look for `[BsvDidService]` prefixes
-- Route logs: Look for `[Route /dids/*]` prefixes
+- `GET /` - API status and service connections
+- `GET /health` - Detailed health status
 
 ---
 
 ## Support
 
-For issues and questions:
-1. Check this documentation
-2. Review server logs
-3. Verify environment configuration
-4. Test with minimal examples
+For additional support:
 
-For development support, see the main QuarkID documentation and BSV SDK documentation.
+1. Check server logs for detailed error messages
+2. Verify all services are running (MongoDB, LARS, BSV wallet)
+3. Review the main QuarkID documentation
+4. Consult BSV SDK documentation for wallet-specific issues

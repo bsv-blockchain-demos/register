@@ -19,7 +19,6 @@ This backend includes full support for Bitcoin SV (BSV) overlay DIDs, enabling c
 1. Set required environment variables:
 
    ```bash
-   MEDICAL_LICENSE_CERTIFIER=your_64_char_hex_private_key
    DID_TOPIC=your_topic_identifier
    OVERLAY_PROVIDER_URL=https://your-overlay-node.com
    ```

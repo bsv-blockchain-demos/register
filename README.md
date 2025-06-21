@@ -43,8 +43,8 @@ cd ../did-registry && npm link
 
 ```bash
 # The BlockMed demo is included in the BSV extended Paquetes-NPMjs repository
-git clone git@jonesjBSV.github.com:jonesjBSV/Paquetes-NPMjs.git
-cd Paquetes-NPMjs/register
+git clone git@github.com:sirdeggen/register.git
+cd register
 ```
 
 ### 3. Backend Setup
