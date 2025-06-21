@@ -7,7 +7,7 @@ set -e
 
 echo "🔗 Unlinking QuarkID packages..."
 
-REGISTER_DIR="/Users/jake/Desktop/quarkID/Paquetes-NPMjs/register"
+REGISTER_DIR="./Paquetes-NPMjs/register"
 
 cd "$REGISTER_DIR/back"
 

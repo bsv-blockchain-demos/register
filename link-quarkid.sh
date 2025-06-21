@@ -8,20 +8,20 @@ set -e
 echo "🔗 Linking QuarkID packages for local development..."
 
 # Navigate to QuarkID packages directory
-QUARKID_PACKAGES_DIR="/Users/jake/Desktop/quarkID/Paquetes-NPMjs/Paquetes-NPMjs/packages"
-REGISTER_DIR="/Users/jake/Desktop/quarkID/Paquetes-NPMjs/register"
+QUARKID_PACKAGES_DIR="./Paquetes-NPMjs/packages"
+REGISTER_DIR="./Paquetes-NPMjs/register"
 
 # Function to link a package
 link_package() {
     local package_dir="$1"
     local package_name="$2"
-    
+
     echo "📦 Linking $package_name..."
-    
+
     # Build the package first
     cd "$QUARKID_PACKAGES_DIR/$package_dir"
     echo "  Building $package_name..."
-    
+
     # Special handling for agent package to avoid workspace build issues
     if [ "$package_name" = "@quarkid/agent" ]; then
         echo "  Using individual build for agent package..."
@@ -32,11 +32,11 @@ link_package() {
     else
         npm run build
     fi
-    
+
     # Create global link
     echo "  Creating global link for $package_name..."
     npm link
-    
+
     echo "  ✅ $package_name linked globally"
 }
 
