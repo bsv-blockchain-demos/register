@@ -50,20 +50,35 @@ link_package() {
     echo "  Installing dependencies for $package_name..."
     npm install --legacy-peer-deps
 
+    # Link any previously built local packages
+    echo "  Linking local @quarkid dependencies..."
+    if [ "$package_name" != "@quarkid/kms-core" ]; then
+        npm link @quarkid/kms-core 2>/dev/null || true
+    fi
+    if [ "$package_name" != "@quarkid/kms-client" ] && [ "$package_name" != "@quarkid/kms-core" ]; then
+        npm link @quarkid/kms-client 2>/dev/null || true
+    fi
+    if [ "$package_name" != "@quarkid/vc-core" ] && [ "$package_name" != "@quarkid/kms-core" ] && [ "$package_name" != "@quarkid/kms-client" ]; then
+        npm link @quarkid/vc-core 2>/dev/null || true
+    fi
+    if [ "$package_name" != "@quarkid/did-core" ] && [ "$package_name" != "@quarkid/kms-core" ] && [ "$package_name" != "@quarkid/kms-client" ] && [ "$package_name" != "@quarkid/vc-core" ]; then
+        npm link @quarkid/did-core 2>/dev/null || true
+    fi
+    if [ "$package_name" != "@quarkid/did-registry" ] && [ "$package_name" != "@quarkid/did-core" ]; then
+        npm link @quarkid/did-registry 2>/dev/null || true
+    fi
+
     echo "  Building $package_name..."
 
-    # Special handling for agent package
-    if [ "$package_name" = "@quarkid/agent" ]; then
-      echo "  Using individual build for agent package..."
-      if ! npm run build 2>/dev/null; then
-        echo "  Standard build failed, attempting build with transpileOnly..."
-        npx tsc --transpileOnly --project tsconfig.build.json || npx tsc --transpileOnly || true
-      fi
-    else
-      if ! npm run build 2>/dev/null; then
-        echo "  Standard build failed, attempting build with transpileOnly..."
-        npx tsc --transpileOnly --project tsconfig.build.json || npx tsc --transpileOnly || true
-      fi
+    # Try to build, fallback to transpile-only if needed
+    if ! npm run build 2>/dev/null; then
+        echo "  Standard build failed, attempting transpile-only build..."
+        # Find tsconfig file
+        if [ -f "tsconfig.build.json" ]; then
+            npx tsc --project tsconfig.build.json --skipLibCheck --noEmit false || true
+        else
+            npx tsc --skipLibCheck --noEmit false || true
+        fi
     fi
 
     # Create global link
