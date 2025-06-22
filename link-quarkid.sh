@@ -7,11 +7,32 @@ set -e
 
 echo "🔗 Linking QuarkID packages for local development..."
 
-# Corrected path definitions (script is at root of REGISTER_DIR)
-REGISTER_DIR="$(pwd)"
-QUARKID_PACKAGES_DIR="$(cd ../Paquetes-NPMjs/packages && pwd)"
+# Get absolute paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REGISTER_DIR="$(realpath "$SCRIPT_DIR")"
 
-# Verify directory paths (optional but recommended)
+# Look for Paquetes-NPMjs repo in parent directory
+PARENT_DIR="$(dirname "$REGISTER_DIR")"
+PAQUETES_REPO_DIR="$PARENT_DIR/Paquetes-NPMjs"
+
+# Check if the repository exists
+if [ ! -d "$PAQUETES_REPO_DIR" ]; then
+    echo "❌ Error: Paquetes-NPMjs repository not found at $PAQUETES_REPO_DIR"
+    echo "Please ensure the jonesjBSV/Paquetes-NPMjs repository is cloned in the parent directory"
+    echo "Run: cd $PARENT_DIR && git clone git@github.com:jonesjBSV/Paquetes-NPMjs.git"
+    exit 1
+fi
+
+# Get absolute path to packages directory
+QUARKID_PACKAGES_DIR="$(realpath "$PAQUETES_REPO_DIR/packages")"
+
+# Verify the packages directory exists
+if [ ! -d "$QUARKID_PACKAGES_DIR" ]; then
+    echo "❌ Error: Packages directory not found at $QUARKID_PACKAGES_DIR"
+    exit 1
+fi
+
+# Verify directory paths
 echo "🔍 Register directory: $REGISTER_DIR"
 echo "🔍 QuarkID packages directory: $QUARKID_PACKAGES_DIR"
 
