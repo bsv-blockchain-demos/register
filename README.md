@@ -16,108 +16,118 @@ The system leverages QuarkID and Bitcoin SV blockchain overlay(s) for immutable 
 ## Prerequisites
 
 - Node.js (v18 or newer)
-- MongoDB (v6.0 or newer)
+- MongoDB (v6.0 or newer) - Can be run via Docker
 - npm (v8 or newer)
 - Git
-- BSV overlay service running locally (<http://localhost:8080>)
+- BSV overlay service (LARS) - Included in the project
 
-## Quick Start Guide
+## Quick Start
 
-### 1. Clone and Link Extended QuarkID Packages
-
-This project requires extended versions of QuarkID packages that include BSV overlay support. These must be linked locally before running the application.
+The easiest way to get started is using the included Makefile:
 
 ```bash
-# Clone the extended QuarkID packages repository
-git clone git@jonesjBSV.github.com:jonesjBSV/Paquetes-NPMjs.git
-cd Paquetes-NPMjs
-
-# Link the extended packages globally
-cd packages/kms-client && npm link
-cd ../vc-core && npm link
-cd ../agent && npm link
-cd ../did-registry && npm link
-```
-
-### 2. Set up BlockMed Application
-
-```bash
-# The BlockMed demo is included in the BSV extended Paquetes-NPMjs repository
+# Clone the repository
 git clone git@github.com:sirdeggen/register.git
 cd register
+
+# Complete setup and run all services with one command
+make quickstart
 ```
 
-### 3. Backend Setup
+This will:
+
+1. Set up environment files
+2. Install all dependencies
+3. Link local QuarkID packages
+4. Start all services (Frontend, Backend, and Overlay)
+
+## Manual Setup Guide
+
+If you prefer to set up components individually:
+
+### 1. Environment Setup
 
 ```bash
-# Navigate to backend
-cd back
+# Create environment files from examples
+make setup-env
 
-# Install dependencies
-npm install
+# Or manually create .env files in back/ and front/ directories
+```
 
-# Link the extended QuarkID packages
-npm link @quarkid/kms-client @quarkid/vc-core @quarkid/agent @quarkid/did-registry
+### 2. Install Dependencies
 
-# Create .env file
-cat > .env << EOF
-# MongoDB Configuration
-MONGO_URI=mongodb://localhost:27017/blockmed
+```bash
+# Install all dependencies for frontend, backend, and overlay
+make install
 
-# BSV Overlay Configuration
-BSV_OVERLAY_URL=<http://localhost:8080>
-DID_TOPIC=tm_did
-VC_TOPIC=tm_vc
+# Or install individually
+make install-frontend
+make install-backend
+make install-overlay
+```
 
-# Wallet Configuration (optional - for testing)
-WALLET_SERVICE_URL=<http://localhost:3001>
-STORAGE_SERVICE_URL=<http://localhost:3002>
-EOF
+### 3. Link Extended QuarkID Packages
 
-# Start MongoDB if not running
+The project uses extended versions of QuarkID packages with BSV overlay support:
+
+```bash
+# Link local QuarkID packages
+make link-quarkid
+```
+
+### 4. MongoDB Setup
+
+```bash
+# Start MongoDB using Docker (if you have the BSV QuarkID project)
+make mongo-start
+
+# Or run MongoDB locally
 mongod --dbpath /usr/local/var/mongodb  # Mac
-# or
 sudo systemctl start mongodb  # Linux
-
-# Run the backend in development mode
-npm run dev
 ```
 
-The backend will start on <http://localhost:3000>
-
-### 4. Frontend Setup
-
-Open a new terminal window:
+### 5. Run Services
 
 ```bash
-# Navigate to frontend (from register directory)
-cd front
+# Run all services concurrently
+make run
 
-# Install dependencies
-npm install
+# Or run services individually in separate terminals
+make run-frontend  # Runs on http://localhost:5174
+make run-backend   # Runs on http://localhost:3000
+make run-overlay   # Runs on http://localhost:8080
 
-# Run the frontend in development mode
-npm run dev
+# Run only frontend and backend (no overlay)
+make run-app
 ```
 
-The frontend will start on <http://localhost:5173>
-
-### 5. Verify BSV Overlay Service
-
-Ensure the BSV overlay service (LARS) is running and accessible:
+## Development Workflow
 
 ```bash
-# Check if overlay service is running
-curl <http://localhost:8080/status>
-```
+# Start in development mode with hot reload
+make dev
 
-If not running, refer to the BSV overlay service documentation for setup.
+# Check service status
+make status
+
+# Build all components
+make build
+
+# Run linters
+make lint
+
+# Clean project (remove node_modules and build artifacts)
+make clean
+
+# Deep clean (also unlinks QuarkID packages)
+make deep-clean
+```
 
 ## Using the Application
 
 ### 1. Initial Setup - Create Actors
 
-1. Open <http://localhost:5173> in your browser
+1. Open <http://localhost:5174> in your browser
 2. Click on "Actor Management"
 3. Create at least one actor for each role:
    - **Patient**: Name (e.g., "John Doe"), Type: patient
@@ -168,6 +178,7 @@ Each actor creation generates a DID on the BSV overlay network.
 
 ```plaintext
 register/
+├── Makefile                 # Automation for setup and running
 ├── back/                    # Backend Express server
 │   ├── src/
 │   │   ├── routes/         # API endpoints
@@ -175,12 +186,53 @@ register/
 │   │   ├── models/         # MongoDB models
 │   │   └── plugins/        # BSV overlay integrations
 │   └── package.json
-└── front/                   # Frontend React application
-    ├── src/
-    │   ├── components/     # React components
-    │   ├── services/       # API client services
-    │   └── context/        # React context providers
+├── front/                   # Frontend React application
+│   ├── src/
+│   │   ├── components/     # React components
+│   │   ├── services/       # API client services
+│   │   └── context/        # React context providers
+│   └── package.json
+└── overlay/                 # BSV overlay service (LARS)
+    ├── services/           # Overlay service implementations
     └── package.json
+```
+
+## Makefile Commands Reference
+
+```bash
+make help                    # Show all available commands
+
+# Quick Start
+make quickstart             # Complete setup and run
+make                        # Install, link, and run
+
+# Service Control
+make run                    # Run all services
+make run-app               # Run frontend and backend only
+make run-frontend          # Run frontend only
+make run-backend           # Run backend only
+make run-overlay           # Run overlay service only
+make status                # Check service status
+
+# Setup & Build
+make install               # Install all dependencies
+make link-quarkid          # Link QuarkID packages
+make build                 # Build all components
+make setup-env             # Setup environment files
+
+# Cleanup
+make clean                 # Remove node_modules and builds
+make deep-clean            # Clean and unlink packages
+make unlink-quarkid        # Unlink QuarkID packages
+
+# MongoDB
+make mongo-start           # Start MongoDB container
+make mongo-stop            # Stop MongoDB container
+
+# Development
+make dev                   # Development mode
+make lint                  # Run linters
+make test                  # Run tests
 ```
 
 ## Troubleshooting
@@ -188,16 +240,16 @@ register/
 ### Common Issues
 
 1. **"Cannot find module '@quarkid/...'"**
-   - Ensure you've linked all extended QuarkID packages
-   - Try `npm ls @quarkid/agent` to verify linkage
+   - Run `make link-quarkid` to link extended packages
+   - Verify linkage: `npm ls @quarkid/agent`
 
 2. **"Failed to connect to MongoDB"**
-   - Ensure MongoDB is running: `mongod --dbpath /path/to/data`
+   - Ensure MongoDB is running: `make mongo-start`
    - Check MONGO_URI in backend .env file
 
 3. **"BSV overlay service unavailable"**
-   - Verify LARS is running on port 8080
-   - Check BSV_OVERLAY_URL in backend .env
+   - Run `make status` to check services
+   - Ensure overlay is running: `make run-overlay`
 
 4. **"Failed to create DID"**
    - Ensure the DID_TOPIC in .env matches LARS configuration
@@ -208,7 +260,7 @@ register/
 - Backend runs with `tsx` for ES module compatibility
 - Frontend uses Vite for fast HMR (Hot Module Replacement)
 - Both support TypeScript with strict mode
-- Use `npm run dev` for development with auto-reload
+- Services run concurrently with proper signal handling
 
 ## API Documentation
 
