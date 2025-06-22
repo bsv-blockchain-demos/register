@@ -24,8 +24,11 @@ link_package() {
 
     # Navigate and build the package
     cd "$QUARKID_PACKAGES_DIR/$package_dir"
+
+    # Install dependencies with legacy peer deps
     echo "  Installing dependencies for $package_name..."
     npm install --legacy-peer-deps
+
     echo "  Building $package_name..."
 
     # Special handling for agent package
