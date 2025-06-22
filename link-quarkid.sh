@@ -9,7 +9,7 @@ echo "🔗 Linking QuarkID packages for local development..."
 
 # Corrected path definitions (script is at root of REGISTER_DIR)
 REGISTER_DIR="$(pwd)"
-QUARKID_PACKAGES_DIR="$(cd ../Paquetes-NPMjs/packages && pwd)"
+QUARKID_PACKAGES_DIR="$(cd ../Paquetes-NPMjs/Paquetes-NPMjs/packages && pwd)"
 
 # Verify directory paths (optional but recommended)
 echo "🔍 Register directory: $REGISTER_DIR"
@@ -47,9 +47,19 @@ link_package() {
 echo ""
 echo "=== Step 1: Building and linking QuarkID packages globally ==="
 
-# Link core packages
+# Link core packages in dependency order
+# First, link the KMS packages (no dependencies)
+link_package "kms/core" "@quarkid/kms-core"
+link_package "kms/client" "@quarkid/kms-client"
+
+# Then link VC core (depends on kms-core)
+link_package "vc/core" "@quarkid/vc-core"
+
+# Then link DID packages
 link_package "did/core" "@quarkid/did-core"
 link_package "did/registry" "@quarkid/did-registry"
+
+# Finally link agent (depends on kms-core, kms-client, vc-core)
 link_package "agent/core" "@quarkid/agent"
 
 echo ""
@@ -59,6 +69,9 @@ echo "=== Step 2: Linking QuarkID packages in register app ==="
 cd "$REGISTER_DIR"
 
 echo "📦 Linking QuarkID core packages to register app..."
+npm link @quarkid/kms-core
+npm link @quarkid/kms-client
+npm link @quarkid/vc-core
 npm link @quarkid/did-core
 npm link @quarkid/did-registry
 npm link @quarkid/agent
@@ -75,5 +88,5 @@ echo "  3. Run 'npm run build' in QuarkID packages after making changes."
 echo ""
 echo "🧹 To unlink packages (for production readiness):"
 echo "  cd $REGISTER_DIR"
-echo "  npm unlink @quarkid/did-core @quarkid/did-registry @quarkid/agent"
+echo "  npm unlink @quarkid/kms-core @quarkid/kms-client @quarkid/vc-core @quarkid/did-core @quarkid/did-registry @quarkid/agent"
 echo "  npm install"

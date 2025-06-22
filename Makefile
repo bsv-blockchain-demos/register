@@ -61,6 +61,10 @@ link-quarkid:
 	else \
 		echo "$(GREEN)✓ Paquetes-NPMjs already exists$(NC)"; \
 	fi
+	@# Install dependencies in Paquetes-NPMjs
+	@echo "$(BLUE)📦 Installing dependencies in Paquetes-NPMjs...$(NC)"
+	@cd ../Paquetes-NPMjs && npm install --legacy-peer-deps
+	@echo "$(GREEN)✅ Paquetes-NPMjs dependencies installed$(NC)"
 	@chmod +x link-quarkid.sh
 	@./link-quarkid.sh
 	@echo "$(GREEN)✅ QuarkID packages linked$(NC)"
