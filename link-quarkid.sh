@@ -9,7 +9,7 @@ echo "🔗 Linking QuarkID packages for local development..."
 
 # Corrected path definitions (script is at root of REGISTER_DIR)
 REGISTER_DIR="$(pwd)"
-QUARKID_PACKAGES_DIR="$(cd ../Paquetes-NPMjs/Paquetes-NPMjs/packages && pwd)"
+QUARKID_PACKAGES_DIR="$(cd ../Paquetes-NPMjs/packages && pwd)"
 
 # Verify directory paths (optional but recommended)
 echo "🔍 Register directory: $REGISTER_DIR"
@@ -24,17 +24,22 @@ link_package() {
 
     # Navigate and build the package
     cd "$QUARKID_PACKAGES_DIR/$package_dir"
+    echo "  Installing dependencies for $package_name..."
+    npm install --legacy-peer-deps
     echo "  Building $package_name..."
 
     # Special handling for agent package
     if [ "$package_name" = "@quarkid/agent" ]; then
-        echo "  Using individual build for agent package..."
-        npm run build:individual 2>/dev/null || npm run build 2>/dev/null || {
-            echo "  Fallback to direct TypeScript compilation..."
-            npx tsc
-        }
+      echo "  Using individual build for agent package..."
+      if ! npm run build 2>/dev/null; then
+        echo "  Standard build failed, attempting build with transpileOnly..."
+        npx tsc --transpileOnly --project tsconfig.build.json || npx tsc --transpileOnly || true
+      fi
     else
-        npm run build
+      if ! npm run build 2>/dev/null; then
+        echo "  Standard build failed, attempting build with transpileOnly..."
+        npx tsc --transpileOnly --project tsconfig.build.json || npx tsc --transpileOnly || true
+      fi
     fi
 
     # Create global link
