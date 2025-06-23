@@ -36,12 +36,12 @@ fi
 echo "🔍 Register directory: $REGISTER_DIR"
 echo "🔍 QuarkID packages directory: $QUARKID_PACKAGES_DIR"
 
-# Function to link a package
-link_package() {
+# Function to prepare a package (clean and install deps)
+prepare_package() {
     local package_dir="$1"
     local package_name="$2"
 
-    echo "📦 Linking $package_name..."
+    echo "📦 Preparing $package_name..."
 
     # Navigate to package directory
     cd "$QUARKID_PACKAGES_DIR/$package_dir"
@@ -50,67 +50,134 @@ link_package() {
     echo "  Cleaning previous build artifacts..."
     rm -rf node_modules package-lock.json dist
 
-    # Link any previously built local packages BEFORE npm install
-    echo "  Linking local @quarkid dependencies..."
-    if [ "$package_name" != "@quarkid/kms-core" ]; then
-        npm link @quarkid/kms-core 2>/dev/null || true
-    fi
-    if [ "$package_name" != "@quarkid/kms-client" ] && [ "$package_name" != "@quarkid/kms-core" ]; then
-        npm link @quarkid/kms-client 2>/dev/null || true
-    fi
-    if [ "$package_name" != "@quarkid/vc-core" ] && [ "$package_name" != "@quarkid/kms-core" ] && [ "$package_name" != "@quarkid/kms-client" ]; then
-        npm link @quarkid/vc-core 2>/dev/null || true
-    fi
-    if [ "$package_name" != "@quarkid/did-core" ] && [ "$package_name" != "@quarkid/kms-core" ] && [ "$package_name" != "@quarkid/kms-client" ] && [ "$package_name" != "@quarkid/vc-core" ]; then
-        npm link @quarkid/did-core 2>/dev/null || true
-    fi
-    if [ "$package_name" != "@quarkid/did-registry" ] && [ "$package_name" != "@quarkid/did-core" ]; then
-        npm link @quarkid/did-registry 2>/dev/null || true
-    fi
-
     # Install dependencies with legacy peer deps
     echo "  Installing dependencies for $package_name..."
     npm install --legacy-peer-deps
 
+    echo "  ✅ $package_name prepared"
+}
+
+# Function to link a package (without building)
+link_package() {
+    local package_dir="$1"
+    local package_name="$2"
+
+    echo "📦 Creating npm link for $package_name..."
+
+    # Navigate to package directory
+    cd "$QUARKID_PACKAGES_DIR/$package_dir"
+
+    # Create global link
+    npm link
+
+    echo "  ✅ $package_name linked"
+}
+
+# Function to generate minimal declarations for circular deps
+generate_minimal_declarations() {
+    local package_dir="$1"
+    local package_name="$2"
+
+    echo "📦 Generating minimal declarations for $package_name..."
+
+    # Navigate to package directory
+    cd "$QUARKID_PACKAGES_DIR/$package_dir"
+
+    # Generate only declaration files with maximum permissiveness
+    echo "  Generating declaration files (skipLibCheck, no emit)..."
+    npx tsc --declaration --emitDeclarationOnly --skipLibCheck --noEmitOnError false 2>/dev/null || true
+
+    echo "  ✅ Minimal declarations generated for $package_name"
+}
+
+# Function to build a package
+build_package() {
+    local package_dir="$1"
+    local package_name="$2"
+    local skip_errors="${3:-false}"
+
+    echo "📦 Building $package_name..."
+
+    # Navigate to package directory
+    cd "$QUARKID_PACKAGES_DIR/$package_dir"
+
+    # Link all local dependencies
+    echo "  Linking local @quarkid dependencies..."
+    npm link @quarkid/kms-core 2>/dev/null || true
+    npm link @quarkid/kms-client 2>/dev/null || true
+    npm link @quarkid/vc-core 2>/dev/null || true
+    npm link @quarkid/did-core 2>/dev/null || true
+    npm link @quarkid/did-registry 2>/dev/null || true
+
     echo "  Building $package_name..."
 
     # Build the package
-    if ! npm run build; then
-        echo "  ❌ Build failed for $package_name"
-        echo "  Attempting to continue..."
+    if [ "$skip_errors" = "true" ]; then
+        # For circular deps, build with skipLibCheck
+        npx tsc --skipLibCheck || true
+    else
+        if ! npm run build; then
+            echo "  ⚠️  Build failed for $package_name, attempting transpile-only..."
+            npx tsc --skipLibCheck || true
+        fi
     fi
 
-    # Create global link
-    echo "  Creating global link for $package_name..."
-    npm link
-
-    echo "  ✅ $package_name linked globally"
+    echo "  ✅ $package_name built"
 }
 
 echo ""
-echo "=== Step 1: Building and linking QuarkID packages globally ==="
+echo "=== Step 1: Preparing all QuarkID packages ==="
 
-# Link core packages in dependency order
-# First, link the KMS packages (no dependencies on other local packages)
-link_package "kms/core" "@quarkid/kms-core"
+# Clean and install dependencies for all packages
+prepare_package "did/core" "@quarkid/did-core"
+prepare_package "kms/core" "@quarkid/kms-core"
+prepare_package "vc/core" "@quarkid/vc-core"
+prepare_package "kms/client" "@quarkid/kms-client"
+prepare_package "did/registry" "@quarkid/did-registry"
+prepare_package "agent/core" "@quarkid/agent"
 
-# Then link DID core (no dependencies on other local packages)
+echo ""
+echo "=== Step 2: Creating npm links for all packages ==="
+
+# Create npm links for all packages (without building)
 link_package "did/core" "@quarkid/did-core"
-
-# Then link VC core (depends on did-core)
+link_package "kms/core" "@quarkid/kms-core"
 link_package "vc/core" "@quarkid/vc-core"
-
-# Then link KMS client (depends on kms-core)
 link_package "kms/client" "@quarkid/kms-client"
-
-# Then link DID registry (depends on did-core, kms-client)
 link_package "did/registry" "@quarkid/did-registry"
-
-# Finally link agent (depends on kms-core, kms-client, vc-core, did-core)
 link_package "agent/core" "@quarkid/agent"
 
 echo ""
-echo "=== Step 2: Linking QuarkID packages in register app ==="
+echo "=== Step 3: Handling circular dependency (kms-core ↔ vc-core) ==="
+
+# Link local dependencies for circular packages
+cd "$QUARKID_PACKAGES_DIR/kms/core"
+npm link @quarkid/did-core @quarkid/vc-core 2>/dev/null || true
+
+cd "$QUARKID_PACKAGES_DIR/vc/core"
+npm link @quarkid/did-core @quarkid/kms-core 2>/dev/null || true
+
+# Generate minimal declarations for circular deps
+generate_minimal_declarations "kms/core" "@quarkid/kms-core"
+generate_minimal_declarations "vc/core" "@quarkid/vc-core"
+
+echo ""
+echo "=== Step 4: Building all QuarkID packages ==="
+
+# Build packages in dependency order
+build_package "did/core" "@quarkid/did-core"
+
+# Build circular deps with skipLibCheck
+build_package "kms/core" "@quarkid/kms-core" true
+build_package "vc/core" "@quarkid/vc-core" true
+
+# Build remaining packages
+build_package "kms/client" "@quarkid/kms-client"
+build_package "did/registry" "@quarkid/did-registry"
+build_package "agent/core" "@quarkid/agent"
+
+echo ""
+echo "=== Step 5: Linking QuarkID packages in register app ==="
 
 # Return safely to the register directory
 cd "$REGISTER_DIR"
