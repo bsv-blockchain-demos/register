@@ -24,13 +24,13 @@
     "express": "^5.1.0",
     "mongodb": "^6.16.0",
     "node-fetch": "^2.7.0",
-    "semver": "^7.7.2",
     "typescript": "^5.8.3",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.23",
     "@types/node-fetch": "^2.6.11",
+    "semver": "^7.7.2",
     "tsx": "^4.19.4"
   }
 }

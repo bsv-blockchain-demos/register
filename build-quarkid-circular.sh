@@ -152,6 +152,28 @@ npm run build || npx tsc --skipLibCheck
 # Build agent
 echo "Building @quarkid/agent..."
 cd "$QUARKID_PACKAGES_DIR/agent/core"
+
+# Apply ECDSA support modifications
+echo "📝 Applying ECDSA support modifications to @quarkid/agent..."
+if [ -f "src/vc/vc.ts" ]; then
+  # Restore from backup if it exists
+  if [ -f "src/vc/vc.ts.backup" ]; then
+    cp src/vc/vc.ts.backup src/vc/vc.ts
+    echo "Restored from backup"
+  else
+    # Create backup
+    cp src/vc/vc.ts src/vc/vc.ts.backup
+  fi
+  
+  # Make the modifications more carefully
+  # 1. First, add EcdsaSecp256k1VerificationKey2019 to the filter
+  sed -i '' 's/x\.type == "Bls12381G1Key2020"/x.type == "Bls12381G1Key2020" || x.type == "EcdsaSecp256k1VerificationKey2019"/' src/vc/vc.ts
+  
+  echo "✅ ECDSA support modifications applied"
+else
+  echo "⚠️  Warning: src/vc/vc.ts not found"
+fi
+
 npm link @quarkid/did-core
 npm link @quarkid/kms-core
 npm link @quarkid/kms-client

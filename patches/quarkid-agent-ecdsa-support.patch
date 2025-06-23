@@ -1,0 +1,73 @@
+--- a/packages/agent/core/src/vc/vc.ts
++++ b/packages/agent/core/src/vc/vc.ts
+@@ -193,6 +193,25 @@ export class VC {
+         return await this.resolver.resolve(keyReference);
+     }
+ 
++    private findMatchingKey(didDocument: DIDDocument, publicKeys: IJWK[], keyType: string): any {
++        const validPublicKeys = didDocument.verificationMethod.filter(x => x.type === keyType);
++        
++        if (keyType === "Bls12381G1Key2020") {
++            const validKeys = validPublicKeys as VerificationMethodJwk[];
++            return validKeys.find(didDocKey =>
++                publicKeys.some(kmsKey =>
++                    didDocKey.publicKeyJwk?.x === kmsKey.x &&
++                    didDocKey.publicKeyJwk?.y === kmsKey.y));
++        } else if (keyType === "EcdsaSecp256k1VerificationKey2019") {
++            return validPublicKeys.find(didDocKey =>
++                publicKeys.some(kmsKey => {
++                    // For ECDSA keys, we may need to match on different properties
++                    return didDocKey.publicKeyHex || didDocKey.publicKeyBase58;
++                }));
++        }
++        return null;
++    }
++
+     /**
+      * Creates and signs a Verifiable Credential
+      * @param VCType The type for the Verifiable Credential
+@@ -219,18 +238,29 @@ export class VC {
+ 
+         const didDocument = await this.resolver.resolve(opts.did || this.identity.getOperationalDID());
+ 
+-        const validPublicKeys = didDocument.verificationMethod.filter(x => x.type == "Bls12381G1Key2020") as VerificationMethodJwk[];
++        // Try to find matching BLS keys first
++        let firstValidPbk = this.findMatchingKey(didDocument, publicKeys, "Bls12381G1Key2020");
++        let keyType = "Bls12381G1Key2020";
+ 
+-        //Comienzo a comparar las claves que estan en el DID Document con las que tiene el KMS hasta encontrar un match
+-        const firstValidPbk = validPublicKeys.find(didDocKey =>
+-            publicKeys.some(kmsKey =>
+-                didDocKey.publicKeyJwk.x == kmsKey.x &&
+-                didDocKey.publicKeyJwk.y == kmsKey.y));
++        // If no BLS keys found, try ECDSA keys
++        if (!firstValidPbk) {
++            firstValidPbk = this.findMatchingKey(didDocument, publicKeys, "EcdsaSecp256k1VerificationKey2019");
++            keyType = "EcdsaSecp256k1VerificationKey2019";
++        }
+ 
+         // Si el DID Document no contiene la clave, el agente no debería firmar ya que hay un error.
+         if (!firstValidPbk) {
+-            throw Error("There aren't public keys valid to use based on Issuer DID Document and KMS secrets");
++            console.error('[VC] No matching keys found. DID Document verification methods:', 
++                didDocument.verificationMethod.map(vm => ({ id: vm.id, type: vm.type })));
++            console.error('[VC] Available KMS public keys:', publicKeys);
++            throw new Error("There aren't public keys valid to use based on Issuer DID Document and KMS secrets");
++        }
++
++        // Select the appropriate suite based on the key type
++        let suite = Suite.Bbsbls2020;
++        if (keyType === "EcdsaSecp256k1VerificationKey2019") {
++            suite = Suite.EcdsaSecp256k1Signature2019;
+         }
+ 
+         await this.onBeforeSigningVC.trigger({ vc: opts.credential, issuerDID: opts.did });
+@@ -243,7 +273,7 @@ export class VC {
+         }
+ 
+         // Si contiene la clave, se procede a la firma
+-        const vc = await this.kms.signVC(Suite.Bbsbls2020,
++        const vc = await this.kms.signVC(suite,
+             opts.credential,
+             this.identity.getOperationalDID().value,
+             firstValidPbk.id,
