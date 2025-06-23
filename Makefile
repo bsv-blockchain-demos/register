@@ -65,7 +65,7 @@ link-quarkid:
 	@echo "$(BLUE)📦 Installing dependencies in Paquetes-NPMjs...$(NC)"
 	@cd ../Paquetes-NPMjs && npm install --legacy-peer-deps
 	@echo "$(GREEN)✅ Paquetes-NPMjs dependencies installed$(NC)"
-	@chmod +x build-qarkid-circular.sh
+	@chmod +x build-quarkid-circular.sh
 	@./build-quarkid-circular.sh
 	@echo "$(GREEN)✅ QuarkID packages linked$(NC)"
 
