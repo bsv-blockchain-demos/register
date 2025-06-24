@@ -21,7 +21,7 @@ OVERLAY_NODE_MODULES := $(OVERLAY_DIR)/node_modules
 
 # Default target
 .PHONY: all
-all: install link-quarkid run
+all: install setup-local-development run
 
 # Install all dependencies
 .PHONY: install
@@ -50,8 +50,8 @@ install-overlay:
 	@echo "$(GREEN)✅ Overlay dependencies installed$(NC)"
 
 # Link QuarkID packages
-.PHONY: link-quarkid
-link-quarkid:
+.PHONY: setup-local-development
+setup-local-development:
 	@echo "$(BLUE)🔗 Linking local QuarkID packages...$(NC)"
 	@# Check if Paquetes-NPMjs exists in parent directory
 	@if [ ! -d "../Paquetes-NPMjs" ]; then \
@@ -65,8 +65,8 @@ link-quarkid:
 	@echo "$(BLUE)📦 Installing dependencies in Paquetes-NPMjs...$(NC)"
 	@cd ../Paquetes-NPMjs && npm install --legacy-peer-deps
 	@echo "$(GREEN)✅ Paquetes-NPMjs dependencies installed$(NC)"
-	@chmod +x build-quarkid-circular.sh
-	@./build-quarkid-circular.sh
+	@chmod +x setup-local-development.sh
+	@./setup-local-development.sh
 	@echo "$(GREEN)✅ QuarkID packages linked$(NC)"
 
 # Unlink QuarkID packages
