@@ -164,7 +164,7 @@ setup-env:
 
 # Quick start - full setup and run
 .PHONY: quickstart
-quickstart: setup-env install link-quarkid run
+quickstart: install build-quarkid setup-env run
 
 # Development mode - watch for changes
 .PHONY: dev
