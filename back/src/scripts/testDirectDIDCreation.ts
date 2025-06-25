@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { MongoClient, Db } from 'mongodb';
 import fetch from 'node-fetch';
-import { DIDStorageManager } from '../../../overlay/backend/src/DIDStorageManager';
 import DIDLookupServiceFactory from '../../../overlay/backend/src/DIDLookupServiceFactory';
 import dotenv from 'dotenv';
 import path from 'path';
