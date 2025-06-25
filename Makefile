@@ -147,12 +147,12 @@ clean:
 setup-env:
 	@echo "$(BLUE)⚙️  Setting up environment files...$(NC)"
 	@if [ ! -f $(BACKEND_DIR)/.env ]; then \
-		cp $(BACKEND_DIR)/.env.example $(BACKEND_DIR)/.env 2>/dev/null || echo "$(YELLOW)⚠️  No .env.example found in backend$(NC)"; \
+		cp $(BACKEND_DIR)/env.example $(BACKEND_DIR)/.env 2>/dev/null || echo "$(YELLOW)⚠️  No .env.example found in backend$(NC)"; \
 	else \
 		echo "$(GREEN)✓ Backend .env already exists$(NC)"; \
 	fi
 	@if [ ! -f $(FRONTEND_DIR)/.env ]; then \
-		cp $(FRONTEND_DIR)/.env.example $(FRONTEND_DIR)/.env 2>/dev/null || echo "$(YELLOW)⚠️  No .env.example found in frontend$(NC)"; \
+		cp $(FRONTEND_DIR)/env.example $(FRONTEND_DIR)/.env 2>/dev/null || echo "$(YELLOW)⚠️  No .env.example found in frontend$(NC)"; \
 	else \
 		echo "$(GREEN)✓ Frontend .env already exists$(NC)"; \
 	fi
