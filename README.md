@@ -11,21 +11,23 @@ BlockMed demonstrates a complete prescription workflow with four main actors:
 - **Pharmacies**: Verify prescriptions, dispense medications, track status
 - **Insurance**: Receive prescription copies for coverage verification
 
-The system leverages QuarkID and Bitcoin SV blockchain overlay(s) for immutable prescription tracking, preventing fraud and double-spending through a token-based system.
+The system leverages QuarkID and Bitcoin SV for immutable prescription tracking, preventing fraud and double-spending through a token-based system.
 
 ## Prerequisites
 
 - Node.js (v18 or newer)
-- MongoDB (v6.0 or newer) - Can be run via Docker
+- Docker (v20 or newer)
 - npm (v8 or newer)
 - Git
-- BSV overlay service (LARS) - Included in the project
+- (Optional) [Metanet Desktop](https://metanet.bsvb.tech/) (for funding the PLATFORM_FUNDING_KEY)
 
 ## Quick Start
 
-The easiest way to get started is using the included Makefile:
+The easiest way to get started is using the included Makefile, Metanet Desktop, Docker:
 
 ```bash
+# Make sure you have Metanet Desktop, Docker, and Node.js installed
+
 # Clone the repository
 git clone git@github.com:sirdeggen/register.git
 cd register
@@ -36,66 +38,53 @@ make quickstart
 
 This will:
 
-1. Set up environment files
-2. Install all dependencies
-3. Link local QuarkID packages
+1. Install all dependencies
+2. Build the extended version of QuarkID
+3. Setup the environment (including keys and funding)
 4. Start all services (Frontend, Backend, and Overlay)
 
 ## Manual Setup Guide
 
 If you prefer to set up components individually:
 
-### 1. Environment Setup
+
+### 1. Install Dependencies
 
 ```bash
-# Create environment files from examples
-make setup-env
-
-# Or manually create .env files in back/ and front/ directories
-```
-
-### 2. Install Dependencies
-
-```bash
-# Install all dependencies for frontend, backend, and overlay
+# Install all dependencies for QuarkID, frontend, backend, and overlay
 make install
 
 # Or install individually
+make install-quarkid
 make install-frontend
 make install-backend
 make install-overlay
 ```
 
-### 3. Link Extended QuarkID Packages
-
-The project uses extended versions of QuarkID packages with BSV overlay support:
+### 2. Build QuarkID
 
 ```bash
-# Link local QuarkID packages
-make link-quarkid
+# Build QuarkID
+make build-quarkid
 ```
 
-### 4. MongoDB Setup
+### 3. Environment Setup
 
 ```bash
-# Start MongoDB using Docker (if you have the BSV QuarkID project)
-make mongo-start
-
-# Or run MongoDB locally
-mongod --dbpath /usr/local/var/mongodb  # Mac
-sudo systemctl start mongodb  # Linux
+# Create environment files from examples
+make setup-env
 ```
 
-### 5. Run Services
+### 4. Run Services
 
 ```bash
 # Run all services concurrently
 make run
 
 # Or run services individually in separate terminals
-make run-frontend  # Runs on http://localhost:5174
-make run-backend   # Runs on http://localhost:3000
 make run-overlay   # Runs on http://localhost:8080
+make run-backend   # Runs on http://localhost:3000
+make run-frontend  # Runs on http://localhost:5174
 
 # Run only frontend and backend (no overlay)
 make run-app
@@ -118,16 +107,20 @@ make lint
 
 # Clean project (remove node_modules and build artifacts)
 make clean
-
-# Deep clean (also unlinks QuarkID packages)
-make deep-clean
 ```
 
 ## Using the Application
 
 ### 1. Initial Setup - Create Actors
 
-1. Open <http://localhost:5174> in your browser
+```bash
+# From the register root directory
+npx tsx back/src/scripts/seedActors.ts
+```
+
+or manually:
+
+1. Open <http://localhost:5173> in your browser
 2. Click on "Actor Management"
 3. Create at least one actor for each role:
    - **Patient**: Name (e.g., "John Doe"), Type: patient
@@ -139,40 +132,51 @@ Each actor creation generates a DID on the BSV overlay network.
 
 ### 2. Login and Test Workflows
 
-1. Go to Login page
+1. Go to <http://localhost:5173> in your browser
 2. Select an actor (e.g., the doctor you created)
-3. Click "Login as [Actor Name]"
-4. You'll be redirected to the appropriate dashboard
+3. You'll be redirected to the appropriate dashboard
 
 ### 3. Create a Prescription (as Doctor)
 
-1. Login as a doctor
-2. Go to "Create Prescription"
-3. Select a patient from the dropdown
-4. Fill in prescription details:
+1. Go to <http://localhost:5173> in your browser
+2. Select a doctor
+3. You'll be redirected to the appropriate dashboard
+4. If you used the seedActors.ts script, you can select the green "Create Test Prescription" button to automatically create a prescription for John Doe. Otherwise, you can create a prescription manually:
+5. Select a patient from the dropdown
+6. Fill in prescription details:
    - Medication name
    - Dosage
    - Frequency
    - Duration
    - Diagnosis
    - Notes
-5. Submit the prescription
+7. Submit the prescription
 
 ### 4. Share with Pharmacy (as Patient)
 
-1. Login as a patient
-2. View your prescriptions
-3. Click "Share with Pharmacy"
-4. Select the pharmacy
-5. Confirm sharing
+1. Go to <http://localhost:5173> in your browser
+2. Select the patient you created the prescription for
+3. You'll be redirected to the appropriate dashboard
+4. Click "Share with Pharmacy" next to the prescription you created in the table at the bottom of the page
+5. Select the pharmacy
+6. Confirm sharing
 
 ### 5. Dispense Medication (as Pharmacy)
 
-1. Login as a pharmacy
-2. View shared prescriptions
-3. Click "Dispense" on a prescription
-4. Enter batch number and expiry date
-5. Confirm dispensation
+1. Go to <http://localhost:5173> in your browser
+2. Select the pharmacy you shared the prescription with
+3. You'll be redirected to the appropriate dashboard
+4. Click "Dispense" on the prescription you shared with the pharmacy
+5. Enter batch number (e.g., 1234567890), expiry date (e.g., 2025-01-01), and pharmacy note (e.g., "Dispensed by City Pharmacy")
+6. Confirm dispensation
+
+### 6. Confirm Medication Received (as Patient)
+
+1. Go to <http://localhost:5173> in your browser
+2. Select the patient you created the prescription for
+3. You'll be redirected to the appropriate dashboard
+4. Click "Confirm" beside the prescription the patient received
+5. Confirm the medication received
 
 ## Project Structure
 
@@ -239,13 +243,11 @@ make test                  # Run tests
 
 ### Common Issues
 
-1. **"Cannot find module '@quarkid/...'"**
-   - Run `make link-quarkid` to link extended packages
-   - Verify linkage: `npm ls @quarkid/agent`
+1. **"back doesn't start'"**
+   - Run `make setup-env` to setup the environment
 
 2. **"Failed to connect to MongoDB"**
-   - Ensure MongoDB is running: `make mongo-start`
-   - Check MONGO_URI in backend .env file
+   - Ensure overlay is running: `make run-overlay`
 
 3. **"BSV overlay service unavailable"**
    - Run `make status` to check services
@@ -291,6 +293,12 @@ The backend includes several useful scripts in `back/src/scripts/` for developme
   npx tsx src/scripts/clearActors.ts
   ```
 
+- **`clearPrescriptions.ts`** - Clears all prescriptions from the database for a fresh start
+
+  ```bash
+  npx tsx src/scripts/clearPrescriptions.ts
+  ```
+
 ### Testing & Debugging
 
 - **`testDirectDIDCreation.ts`** - Tests DID creation directly using the BSV overlay service
@@ -313,7 +321,3 @@ Additional scripts are available for testing specific features:
 - `testActorEndpoint.ts` - Test actor API endpoints
 - `testPrescriptionAPI.ts` - Test prescription creation API
 - `testSharePrescription.ts` - Test prescription sharing workflow
-
-## License
-
-[Add your license information here]
