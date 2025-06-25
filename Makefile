@@ -156,7 +156,7 @@ setup-env:
 	else \
 		echo "$(GREEN)✓ Frontend .env already exists$(NC)"; \
 	fi
-@# Generate keys and update .env using TypeScript
+	@echo "$(BLUE) Generate keys and update .env using TypeScript...$(NC)"
 	@echo "$(BLUE)🔑 Generating BSV keys...$(NC)"
 	@cd $(BACKEND_DIR) && npx tsx src/scripts/generate-keys.ts
 	@echo "$(GREEN)✅ Environment files setup complete$(NC)"
