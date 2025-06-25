@@ -20,14 +20,14 @@ async function generateKeys(): Promise<void> {
     console.log(`PLATFORM_FUNDING_KEY: ${platformKeyHex}`);
     
     // Update .env file
-    const envPath = path.join(__dirname, '../back/.env');
+    const envPath = path.join(__dirname, '../../.env');
     let envContent = '';
     
     if (fs.existsSync(envPath)) {
       envContent = fs.readFileSync(envPath, 'utf8');
     } else {
       // Read from env.example if .env doesn't exist
-      const examplePath = path.join(__dirname, '../back/env.example');
+      const examplePath = path.join(__dirname, '../../env.example');
       if (fs.existsSync(examplePath)) {
         envContent = fs.readFileSync(examplePath, 'utf8');
       } else {
