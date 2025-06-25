@@ -12,7 +12,7 @@ NC := \033[0m # No Color
 FRONTEND_DIR := front
 BACKEND_DIR := back
 OVERLAY_DIR := overlay
-QUARKID_PACKAGES_DIR := /Users/jake/Desktop/quarkID/Paquetes-NPMjs/Paquetes-NPMjs/packages
+QUARKID_PACKAGES_DIR := ../Paquetes-NPMjs/packages
 
 # Check if node_modules exist
 FRONTEND_NODE_MODULES := $(FRONTEND_DIR)/node_modules
@@ -21,38 +21,18 @@ OVERLAY_NODE_MODULES := $(OVERLAY_DIR)/node_modules
 
 # Default target
 .PHONY: all
-all: install setup-local-development run
+all: install run
+
 
 # Install all dependencies
 .PHONY: install
-install: install-frontend install-backend install-overlay
+install: install-quarkid install-frontend install-backend install-overlay
 	@echo "$(GREEN)✅ All dependencies installed successfully!$(NC)"
 
-# Install frontend dependencies
-.PHONY: install-frontend
-install-frontend:
-	@echo "$(BLUE)📦 Installing frontend dependencies...$(NC)"
-	@cd $(FRONTEND_DIR) && npm install
-	@echo "$(GREEN)✅ Frontend dependencies installed$(NC)"
-
-# Install backend dependencies
-.PHONY: install-backend
-install-backend:
-	@echo "$(BLUE)📦 Installing backend dependencies...$(NC)"
-	@cd $(BACKEND_DIR) && npm install
-	@echo "$(GREEN)✅ Backend dependencies installed$(NC)"
-
-# Install overlay dependencies
-.PHONY: install-overlay
-install-overlay:
-	@echo "$(BLUE)📦 Installing overlay service dependencies...$(NC)"
-	@cd $(OVERLAY_DIR) && npm install
-	@echo "$(GREEN)✅ Overlay dependencies installed$(NC)"
-
 # Link QuarkID packages
-.PHONY: setup-local-development
-setup-local-development:
-	@echo "$(BLUE)🔗 Linking local QuarkID packages...$(NC)"
+.PHONY: install-quarkid
+install-quarkid:
+	@echo "$(BLUE)🔗 Installing QuarkID dependencies...$(NC)"
 	@# Check if Paquetes-NPMjs exists in parent directory
 	@if [ ! -d "../Paquetes-NPMjs" ]; then \
 		echo "$(YELLOW)📦 Paquetes-NPMjs not found. Cloning from repository...$(NC)"; \
@@ -61,21 +41,31 @@ setup-local-development:
 	else \
 		echo "$(GREEN)✓ Paquetes-NPMjs already exists$(NC)"; \
 	fi
-	@# Install dependencies in Paquetes-NPMjs
-	@echo "$(BLUE)📦 Installing dependencies in Paquetes-NPMjs...$(NC)"
-	@cd ../Paquetes-NPMjs && npm install --legacy-peer-deps
-	@echo "$(GREEN)✅ Paquetes-NPMjs dependencies installed$(NC)"
-	@chmod +x setup-local-development.sh
-	@./setup-local-development.sh
-	@echo "$(GREEN)✅ QuarkID packages linked$(NC)"
+	@# Install QuarkID dependencies
+	@echo "$(BLUE)📦 Installing QuarkID dependencies...$(NC)"
+	@cd ../Paquetes-NPMjs && yarn install
+	@echo "$(GREEN)✅ QuarkID dependencies installed$(NC)"
 
-# Unlink QuarkID packages
-.PHONY: unlink-quarkid
-unlink-quarkid:
-	@echo "$(YELLOW)🔓 Unlinking QuarkID packages...$(NC)"
-	@chmod +x unlink-quarkid.sh
-	@./unlink-quarkid.sh
-	@echo "$(GREEN)✅ QuarkID packages unlinked$(NC)"
+# Install frontend dependencies
+.PHONY: install-frontend
+install-frontend:
+	@echo "$(BLUE)📦 Installing frontend dependencies...$(NC)"
+	@cd $(FRONTEND_DIR) && yarn install
+	@echo "$(GREEN)✅ Frontend dependencies installed$(NC)"
+
+# Install backend dependencies
+.PHONY: install-backend
+install-backend:
+	@echo "$(BLUE)📦 Installing backend dependencies...$(NC)"
+	@cd $(BACKEND_DIR) && yarn install
+	@echo "$(GREEN)✅ Backend dependencies installed$(NC)"
+
+# Install overlay dependencies
+.PHONY: install-overlay
+install-overlay:
+	@echo "$(BLUE)📦 Installing overlay service dependencies...$(NC)"
+	@cd $(OVERLAY_DIR) && yarn install
+	@echo "$(GREEN)✅ Overlay dependencies installed$(NC)"
 
 # Run all services concurrently
 .PHONY: run
@@ -111,8 +101,15 @@ run-app:
 
 # Build all components
 .PHONY: build
-build: build-frontend build-backend build-overlay
+build: build-quarkidbuild-frontend build-backend build-overlay
 	@echo "$(GREEN)✅ All components built successfully!$(NC)"
+
+# Build QuarkID
+.PHONY: build-quarkid
+build-quarkid:
+	@echo "$(BLUE)🔨 Building QuarkID...$(NC)"
+	@cd ../Paquetes-NPMjs && yarn workspaces run build
+	@echo "$(GREEN)✅ QuarkID built$(NC)"
 
 # Build frontend
 .PHONY: build-frontend
@@ -139,14 +136,11 @@ build-overlay:
 .PHONY: clean
 clean:
 	@echo "$(YELLOW)🧹 Cleaning project...$(NC)"
+	@cd ../Paquetes-NPMjs && npm run clean && cd ../register
 	@rm -rf $(FRONTEND_NODE_MODULES) $(BACKEND_NODE_MODULES) $(OVERLAY_NODE_MODULES)
 	@rm -rf $(FRONTEND_DIR)/dist $(BACKEND_DIR)/dist
 	@echo "$(GREEN)✅ Project cleaned$(NC)"
 
-# Deep clean including unlink
-.PHONY: deep-clean
-deep-clean: unlink-quarkid clean
-	@echo "$(GREEN)✅ Deep clean completed$(NC)"
 
 # Setup environment files
 .PHONY: setup-env
@@ -170,7 +164,7 @@ quickstart: setup-env install link-quarkid run
 
 # Development mode - watch for changes
 .PHONY: dev
-dev: link-quarkid
+dev: 
 	@echo "$(BLUE)👀 Starting in development mode with hot reload...$(NC)"
 	@$(MAKE) run
 
@@ -178,8 +172,8 @@ dev: link-quarkid
 .PHONY: status
 status:
 	@echo "$(BLUE)📊 Checking service status...$(NC)"
-	@echo -n "Frontend (port 5174): "
-	@curl -s http://localhost:5174 > /dev/null && echo "$(GREEN)✅ Running$(NC)" || echo "$(RED)❌ Not running$(NC)"
+	@echo -n "Frontend (port 5173): "
+	@curl -s http://localhost:5173 > /dev/null && echo "$(GREEN)✅ Running$(NC)" || echo "$(RED)❌ Not running$(NC)"
 	@echo -n "Backend (port 3000): "
 	@curl -s http://localhost:3000 > /dev/null && echo "$(GREEN)✅ Running$(NC)" || echo "$(RED)❌ Not running$(NC)"
 	@echo -n "Overlay (port 8080): "
@@ -190,6 +184,8 @@ status:
 lint:
 	@echo "$(BLUE)🔍 Running linters...$(NC)"
 	@cd $(FRONTEND_DIR) && npm run lint || echo "$(YELLOW)⚠️  Frontend lint warnings$(NC)"
+	@cd $(BACKEND_DIR) && npm run lint || echo "$(YELLOW)⚠️  Backend lint warnings$(NC)"
+	@cd $(OVERLAY_DIR) && npm run lint || echo "$(YELLOW)⚠️  Overlay lint warnings$(NC)"
 	@echo "$(GREEN)✅ Linting complete$(NC)"
 
 # Run tests
@@ -198,19 +194,20 @@ test:
 	@echo "$(BLUE)🧪 Running tests...$(NC)"
 	@cd $(BACKEND_DIR) && npm test 2>/dev/null || echo "$(YELLOW)⚠️  No backend tests configured$(NC)"
 	@cd $(FRONTEND_DIR) && npm test 2>/dev/null || echo "$(YELLOW)⚠️  No frontend tests configured$(NC)"
+	@cd $(OVERLAY_DIR) && npm test 2>/dev/null || echo "$(YELLOW)⚠️  No overlay tests configured$(NC)"
 
-# MongoDB Docker helpers
-.PHONY: mongo-start
-mongo-start:
-	@echo "$(BLUE)🐳 Starting MongoDB container...$(NC)"
-	@cd /Users/jake/Desktop/quarkID/bsv-quarkID/local-data && docker-compose up -d
-	@echo "$(GREEN)✅ MongoDB started on port 27017$(NC)"
+# OverlayDocker helpers
+.PHONY: overlay-start
+overlay-start:
+	@echo "$(BLUE)🐳 Starting Overlay (LARS) container...$(NC)"
+	@cd $(OVERLAY_DIR) && docker-compose up -d
+	@echo "$(GREEN)✅ Overlay (LARS) started on port 8080$(NC)"
 
-.PHONY: mongo-stop
-mongo-stop:
-	@echo "$(YELLOW)🛑 Stopping MongoDB container...$(NC)"
-	@cd /Users/jake/Desktop/quarkID/bsv-quarkID/local-data && docker-compose down
-	@echo "$(GREEN)✅ MongoDB stopped$(NC)"
+.PHONY: overlay-stop
+overlay-stop:
+	@echo "$(YELLOW)🛑 Stopping Overlay (LARS) container...$(NC)"
+	@cd $(OVERLAY_DIR) && docker-compose down
+	@echo "$(GREEN)✅ Overlay (LARS) stopped$(NC)"
 
 # Help command
 .PHONY: help
@@ -220,16 +217,15 @@ help:
 	@echo ""
 	@echo "$(GREEN)Quick Start:$(NC)"
 	@echo "  make quickstart    - Complete setup and run all services"
-	@echo "  make               - Install deps, link packages, and run services"
+	@echo "  make               - Install deps, build QuarkID, and run services"
 	@echo ""
 	@echo "$(GREEN)Individual Commands:$(NC)"
 	@echo "  make install       - Install all dependencies"
-	@echo "  make link-quarkid  - Link local QuarkID packages"
+	@echo "  make install-quarkid  - Install QuarkID dependencies"
 	@echo "  make run           - Run all services concurrently"
 	@echo "  make run-app       - Run only frontend and backend"
 	@echo "  make build         - Build all components"
 	@echo "  make clean         - Remove node_modules and build artifacts"
-	@echo "  make deep-clean    - Clean and unlink QuarkID packages"
 	@echo ""
 	@echo "$(GREEN)Service Control:$(NC)"
 	@echo "  make run-frontend  - Run only frontend (port 5174)"
@@ -237,9 +233,9 @@ help:
 	@echo "  make run-overlay   - Run only overlay service (port 8080)"
 	@echo "  make status        - Check if services are running"
 	@echo ""
-	@echo "$(GREEN)MongoDB:$(NC)"
-	@echo "  make mongo-start   - Start MongoDB Docker container"
-	@echo "  make mongo-stop    - Stop MongoDB Docker container"
+	@echo "$(GREEN)Overlay (LARS):$(NC)"
+	@echo "  make overlay-start   - Start Overlay (LARS) Docker containers"
+	@echo "  make overlay-stop    - Stop Overlay (LARS) Docker containers"
 	@echo ""
 	@echo "$(GREEN)Development:$(NC)"
 	@echo "  make dev           - Start in development mode"
