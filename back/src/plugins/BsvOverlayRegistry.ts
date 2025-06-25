@@ -233,7 +233,7 @@ export class BsvOverlayRegistry {
         console.log('[BsvOverlayRegistry] Adding verification method with provided key...');
         const verificationMethod = {
           id: keyId,
-          type: VerificationMethodTypes.EcdsaSecp256k1VerificationKey2019,
+          type: VerificationMethodTypes.JsonWebKey2020,
           controller: did,
           publicKeyJwk: publicKeyJWK
         };
@@ -246,7 +246,7 @@ export class BsvOverlayRegistry {
         // Fallback to default if keyId not provided
         const verificationMethod = {
           id: `${did}#key-1`,
-          type: VerificationMethodTypes.EcdsaSecp256k1VerificationKey2019,
+          type: VerificationMethodTypes.JsonWebKey2020,
           controller: did,
           publicKeyJwk: publicKeyJWK
         };

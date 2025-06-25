@@ -2,7 +2,6 @@ import { IAgentRegistry, CreateDIDRequest, CreateDIDResponse, UpdateDIDRequest, 
 import { IKMS, Suite } from '@quarkid/kms-core';
 import { DIDDocument, Service, VerificationMethodTypes } from '@quarkid/did-core';
 import { BsvOverlayRegistry } from './BsvOverlayRegistry';
-import { MockBsvOverlayResolver } from './MockBsvOverlayResolver';
 import { CreateActionResult } from '@bsv/sdk';
 
 /**
@@ -28,8 +27,28 @@ export class BsvOverlayRegistryAdapter extends IAgentRegistry {
    * For BSV, key management is handled by the wallet
    */
   initialize(params: { kms: IKMS; resolver?: any }): void {
+    console.log('[BsvOverlayRegistryAdapter] initialize called with params:', {
+      kmsExists: !!params.kms,
+      kmsType: params.kms?.constructor?.name,
+      resolverExists: !!params.resolver
+    });
+    
+    // Only initialize if we don't already have a BsvWalletKMS
+    if (this.kms && this.kms.constructor.name === 'BsvWalletKMS') {
+      console.log('[BsvOverlayRegistryAdapter] Already initialized with BsvWalletKMS, skipping re-initialization');
+      return;
+    }
+    
     this.kms = params.kms;
     this.resolver = params.resolver;
+    
+    console.log('[BsvOverlayRegistryAdapter] KMS assigned:', {
+      kmsExists: !!this.kms,
+      kmsType: this.kms?.constructor?.name,
+      keyStoreExists: !!(this.kms as any)?.keyStore,
+      keyStoreSize: (this.kms as any)?.keyStore?.size
+    });
+    
     console.log('[BsvOverlayRegistryAdapter] Registry initialized with KMS and resolver');
   }
   
@@ -64,8 +83,22 @@ export class BsvOverlayRegistryAdapter extends IAgentRegistry {
     const keyResult = await this.kms.create(Suite.ES256k);
     const publicKeyJWK = keyResult.publicKeyJWK;
     
-    // Reconstruct the keyId from the public key (matching the pattern used in BsvWalletKMS)
+    // Create the keyId that will be used in the verification method
     const keyId = `did:bsv:${publicKeyJWK.x.substring(0, 16)}`;
+    
+    console.log('[BsvOverlayRegistryAdapter] Created key with ID:', keyId);
+    console.log('[BsvOverlayRegistryAdapter] KMS keyStore size after key creation:', (this.kms as any)?.keyStore?.size || 'undefined');
+    
+    // Safety check for KMS
+    if (!this.kms) {
+      console.error('[BsvOverlayRegistryAdapter] ERROR: KMS is undefined after key creation!');
+      throw new Error('KMS is undefined after key creation. This should not happen.');
+    }
+    
+    if (!(this.kms as any).keyStore) {
+      console.error('[BsvOverlayRegistryAdapter] ERROR: KMS keyStore is undefined!');
+      throw new Error('KMS keyStore is undefined. This should not happen.');
+    }
     
     // Create a basic DID document structure
     const didDocument: DIDDocument = {
@@ -130,9 +163,10 @@ export class BsvOverlayRegistryAdapter extends IAgentRegistry {
     }
     
     // The registry now returns a complete DID document with verification methods
-    // Store the key association in KMS
-    // The KMS should already have the key stored from the create() call
+    // The key should already be stored in the KMS from the create() call above
     console.log('[BsvOverlayRegistryAdapter] Key pair created and associated with DID:', result.did);
+    console.log('[BsvOverlayRegistryAdapter] Final KMS keyStore size:', (this.kms as any)?.keyStore?.size || 'undefined');
+    console.log('[BsvOverlayRegistryAdapter] KMS available keys:', Array.from((this.kms as any)?.keyStore?.keys() || []));
     
     console.log('[BsvOverlayRegistryAdapter] Returning CreateDIDResponse with did:', result.did);
     

@@ -27,7 +27,9 @@ export class BsvWalletKMS implements IKMS {
    * Create a new key pair and return as JWK (IKMS interface requirement)
    */
   async create(suite: Suite): Promise<{ publicKeyJWK: IJWK }> {
+    console.log('[BsvWalletKMS] create called with suite:', suite);
     const keyPair = await this.createKeyPair(suite);
+    console.log('[BsvWalletKMS] create completed, keyStore size now:', this.keyStore.size);
     return { publicKeyJWK: keyPair.publicKeyJWK };
   }
 
@@ -386,6 +388,11 @@ export class BsvWalletKMS implements IKMS {
     console.log('[BsvWalletKMS] getPublicKeysBySuiteType called with suite:', suite);
     console.log('[BsvWalletKMS] Current keyStore size:', this.keyStore.size);
     console.log('[BsvWalletKMS] Available keys:', Array.from(this.keyStore.keys()));
+    console.log('[BsvWalletKMS] KeyStore entries:', Array.from(this.keyStore.entries()).map(([key, value]) => ({
+      keyId: key,
+      jwk: value.jwk,
+      publicKey: value.publicKey
+    })));
     
     const keys: IJWK[] = [];
     // For BSV, we only support ES256K

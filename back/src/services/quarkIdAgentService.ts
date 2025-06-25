@@ -94,21 +94,22 @@ export class QuarkIdAgentService {
       await mongoClient.connect();
       this.db = mongoClient.db(this.config.mongodb.dbName);
 
-      // Create BSV KMS instance using the wallet client
+      // Create a single BsvWalletKMS instance that will be shared
       const bsvKMS = new BsvWalletKMS(this.walletClient);
-      console.log('[QuarkIdAgentService] BSV KMS created for wallet-based key management');
+      console.log('[QuarkIdAgentService] Created shared BsvWalletKMS instance');
       
       // Set the KMS instance in ES256kVCSuite so it can use it for key creation
       ES256kVCSuite.setKMS(bsvKMS);
       console.log('[QuarkIdAgentService] KMS injected into ES256kVCSuite');
-
-      // Create BSV overlay registry using our new BRC-100 compliant implementation
+      
+      // Create BSV overlay registry with our custom KMS
       const bsvRegistry = new BsvOverlayRegistry(
         bsvKMS,
         process.env.DID_TOPIC || 'tm_did',
-        this.config.overlayProvider || process.env.OVERLAY_PROVIDER_URL || 'http://localhost:3000',
+        this.config.overlayProvider || process.env.OVERLAY_PROVIDER_URL || 'http://localhost:8080',
         this.db
       );
+      console.log('[QuarkIdAgentService] Created BsvOverlayRegistry with shared KMS');
       
       // Create QuarkID-compatible adapters
       const didRegistry = new BsvOverlayRegistryAdapter(bsvRegistry);
@@ -117,8 +118,9 @@ export class QuarkIdAgentService {
       const didResolver = new BsvOverlayResolver(bsvRegistry);
       console.log('[QuarkIdAgentService] Using BsvOverlayResolver with overlay at:', this.config.overlayProvider || process.env.OVERLAY_PROVIDER_URL);
       
-      // Initialize the registry adapter with KMS and resolver
+      // Initialize the registry adapter with the same KMS instance
       didRegistry.initialize({ kms: bsvKMS, resolver: didResolver });
+      console.log('[QuarkIdAgentService] Initialized registry adapter with shared KMS');
       
       // Initialize Status List Plugin for VC status management
       // const statusListPlugin = new StatusListAgentPlugin({
@@ -130,6 +132,7 @@ export class QuarkIdAgentService {
       const agentStorage = new AgentStorageImpl(this.db.collection('agent_storage'));
       this.vcStorage = new VCStorageImpl(this.db.collection('vc_storage'));
       
+      // Create the agent with our custom KMS
       const agent = new Agent({
         didDocumentResolver: didResolver,
         didDocumentRegistry: didRegistry,
@@ -141,8 +144,35 @@ export class QuarkIdAgentService {
         // plugins: [statusListPlugin] // Uncomment when type declarations are available
       });
       
+      // Replace the agent's default KMS with our BsvWalletKMS
+      (agent as any).kms = bsvKMS;
+      console.log('[QuarkIdAgentService] Replaced agent KMS with BsvWalletKMS');
+      console.log('[QuarkIdAgentService] Agent KMS type:', (agent as any).kms.constructor.name);
+      console.log('[QuarkIdAgentService] BsvWalletKMS type:', bsvKMS.constructor.name);
+      console.log('[QuarkIdAgentService] BsvWalletKMS keyStore size after replacement:', (bsvKMS as any).keyStore.size);
+      
+      // Also replace the KMS in the agent's identity module
+      if ((agent as any).identity && (agent as any).identity.kms) {
+        (agent as any).identity.kms = bsvKMS;
+        console.log('[QuarkIdAgentService] Replaced agent identity KMS with BsvWalletKMS');
+      }
+      
+      // Clear the VC module so it gets recreated with the new KMS
+      (agent as any)._vc = null;
+      console.log('[QuarkIdAgentService] Cleared VC module to force recreation with new KMS');
+      
       // Initialize the agent
       await agent.initialize();
+      
+      // After initialization, check if the KMS replacement is still in place
+      console.log('[QuarkIdAgentService] After initialization - Agent KMS type:', (agent as any).kms.constructor.name);
+      console.log('[QuarkIdAgentService] After initialization - BsvWalletKMS keyStore size:', (bsvKMS as any).keyStore.size);
+      
+      // Check if the VC module is using the correct KMS
+      if ((agent as any)._vc && (agent as any)._vc.kms) {
+        console.log('[QuarkIdAgentService] VC module KMS type:', (agent as any)._vc.kms.constructor.name);
+        console.log('[QuarkIdAgentService] VC module KMS === BsvWalletKMS:', (agent as any)._vc.kms === bsvKMS);
+      }
       
       // Handle operational DID for the agent
       // The agent needs its own DID to access the VC module
@@ -197,16 +227,12 @@ export class QuarkIdAgentService {
       this.agent = agent;
       this.isInitialized = true;
       
-      // Register suite classes with the agent's internal KMS
-      console.log('[QuarkIdAgentService] Registering ES256k and BbsBls2020 suites with agent KMS...');
-      const internalKms = (agent as any).kms;
-      if (internalKms && internalKms.suites) {
-        internalKms.suites.set(Suite.ES256k, ES256kVCSuite);
-        internalKms.suites.set(Suite.Bbsbls2020, BbsBls2020Suite);
-        console.log('[QuarkIdAgentService] Suites registered successfully');
-      } else {
-        console.error('[QuarkIdAgentService] Unable to access agent internal KMS suites map');
-      }
+      // Store the BsvWalletKMS instance for later use
+      this.bsvKms = bsvKMS;
+      
+      // Note: BsvWalletKMS handles ES256k keys natively, so we don't need to register suites
+      // The agent will use our BsvWalletKMS for all key operations
+      console.log('[QuarkIdAgentService] BsvWalletKMS is ready for ES256k operations');
       
       // Suppress DWN polling errors since we're not using DWN functionality
       process.on('unhandledRejection', (reason, promise) => {
@@ -245,6 +271,8 @@ export class QuarkIdAgentService {
       console.log('[QuarkIdAgentService] Creating DID through QuarkID Agent...');
       console.log('[QuarkIdAgentService] Agent initialized:', !!this.agent);
       console.log('[QuarkIdAgentService] Agent registry available:', !!this.agent?.registry);
+      console.log('[QuarkIdAgentService] Agent KMS type:', (this.agent as any).kms.constructor.name);
+      console.log('[QuarkIdAgentService] BsvWalletKMS keyStore size before DID creation:', (this.bsvKms as any).keyStore.size);
       
       if (!this.agent || !this.agent.registry) {
         throw new Error('Agent or registry not properly initialized');
@@ -263,6 +291,7 @@ export class QuarkIdAgentService {
       
       console.log('[QuarkIdAgentService] DID Response:', didResponse);
       console.log(`[QuarkIdAgentService] DID created: ${didResponse.did}`);
+      console.log('[QuarkIdAgentService] BsvWalletKMS keyStore size after DID creation:', (this.bsvKms as any).keyStore.size);
       
       if (!didResponse.did) {
         throw new Error('DID creation returned empty DID');
@@ -347,6 +376,18 @@ export class QuarkIdAgentService {
     await this.ensureInitialized();
     
     try {
+      console.log('[QuarkIdAgentService] issueVC called with issuer DID:', issuerDid);
+      console.log('[QuarkIdAgentService] Agent KMS type:', (this.agent as any).kms.constructor.name);
+      console.log('[QuarkIdAgentService] BsvWalletKMS keyStore size:', (this.bsvKms as any).keyStore.size);
+      console.log('[QuarkIdAgentService] BsvWalletKMS available keys:', Array.from((this.bsvKms as any).keyStore.keys()));
+      
+      // Debug: Show the actual key entries in the KMS
+      console.log('[QuarkIdAgentService] KMS key entries:', Array.from((this.bsvKms as any).keyStore.entries()).map(([keyId, value]) => ({
+        keyId,
+        publicKeyX: value.jwk.x,
+        publicKeyY: value.jwk.y
+      })));
+      
       const issuanceDate = new Date();
       const expirationDate = new Date();
       expirationDate.setMonth(expirationDate.getMonth() + 6);
@@ -387,6 +428,11 @@ export class QuarkIdAgentService {
           console.error('[QuarkIdAgentService] ERROR: Issuer DID document has no verificationMethod!');
         } else {
           console.log('[QuarkIdAgentService] Issuer verification methods:', issuerDidDocument.verificationMethod);
+          console.log('[QuarkIdAgentService] Verification method IDs:', issuerDidDocument.verificationMethod.map(vm => vm.id));
+          console.log('[QuarkIdAgentService] Verification method public keys:', issuerDidDocument.verificationMethod.map(vm => ({
+            id: vm.id,
+            publicKeyJwk: vm.publicKeyJwk
+          })));
         }
       } catch (debugError) {
         console.error('[QuarkIdAgentService] Error resolving issuer DID for debugging:', debugError);
