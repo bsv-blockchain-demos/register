@@ -29,7 +29,6 @@ all: install run
 install: install-quarkid build-quarkid install-frontend install-backend install-overlay
 	@echo "$(GREEN)✅ All dependencies installed successfully!$(NC)"
 
-# Link QuarkID packages
 .PHONY: install-quarkid
 install-quarkid:
 	@echo "$(BLUE)🔗 Installing QuarkID dependencies...$(NC)"
