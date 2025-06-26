@@ -26,7 +26,7 @@ all: install run
 
 # Install all dependencies
 .PHONY: install
-install: install-quarkid install-frontend install-backend install-overlay
+install: install-quarkid build-quarkid install-frontend install-backend install-overlay
 	@echo "$(GREEN)✅ All dependencies installed successfully!$(NC)"
 
 # Link QuarkID packages
@@ -159,12 +159,13 @@ setup-env:
 	@echo "$(BLUE) Generate keys and update .env using TypeScript...$(NC)"
 	@echo "$(BLUE)🔑 Generating BSV keys...$(NC)"
 	@cd $(BACKEND_DIR) && npx tsx src/scripts/generate-keys.ts
+	@echo "$(BLUE)💰 Funding PLATFORM_FUNDING_KEY...$(NC)"
+	@cd $(BACKEND_DIR) && npx tsx src/scripts/fund-platform.ts
 	@echo "$(GREEN)✅ Environment files setup complete$(NC)"
-	@echo "$(YELLOW)💡 Don't forget to fund your platform address with: npx fund-metanet <address> <amount>$(NC)"
 
 # Quick start - full setup and run
 .PHONY: quickstart
-quickstart: install build-quarkid setup-env run
+quickstart: install setup-env run
 
 # Development mode - watch for changes
 .PHONY: dev

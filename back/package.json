@@ -5,7 +5,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/app.js",
-    "dev": "tsx src/app.ts"
+    "dev": "tsx src/app.ts",
+    "fund-platform": "ts-node ../scripts/fund-platform.ts"
   },
   "dependencies": {
     "@bsv/auth-express-middleware": "^1.1.2",
@@ -38,6 +39,7 @@
     "@types/node": "^22.15.23",
     "@types/node-fetch": "^2.6.11",
     "semver": "^7.7.2",
+    "ts-node": "^10.9.1",
     "tsx": "^4.19.4"
   }
 }
