@@ -22,6 +22,7 @@
     "@quarkid/dwn-scheduler": "file:../../Paquetes-NPMjs/packages/dwn/scheduler",
     "@quarkid/kms-client": "^1.0.1",
     "@quarkid/kms-core": "file:../../Paquetes-NPMjs/packages/kms/core",
+    "@quarkid/kms-suite-vc-es256k": "file:../../Paquetes-NPMjs/packages/kms/suite/vc/es256k",
     "@quarkid/kms-storage-vault": "^1.0.1",
     "@quarkid/vc-core": "file:../../Paquetes-NPMjs/packages/vc/core",
     "@quarkid/vc-verifier": "^1.0.1",

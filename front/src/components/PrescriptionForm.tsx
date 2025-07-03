@@ -79,23 +79,18 @@ export const PrescriptionForm: React.FC = () => {
 
     try {
       const prescriptionData = {
-        doctorDid: currentUser.did,
         patientDid: formData.patientDid,
-        prescriptionData: {
-          patientName: formData.patientName,
-          patientId: formData.patientDid,
-          patientAge: formData.patientAge,
-          insuranceProvider: formData.insuranceProvider,
-          diagnosis: formData.diagnosis,
-          medicationName: formData.medicationName,
-          dosage: formData.dosage,
-          frequency: formData.frequency,
-          duration: formData.duration,
-          instructions: formData.instructions
-        }
+        doctorDid: currentUser.did,
+        medicationName: formData.medicationName,
+        dosage: formData.dosage,
+        quantity: "1", // You might want to add a quantity field to the form
+        instructions: `${formData.frequency} for ${formData.duration}. ${formData.instructions}`,
+        diagnosisCode: formData.diagnosis,
+        insuranceDid: formData.insuranceProvider || undefined,
+        expiryHours: "720" // 30 days default
       };
 
-      const response = await apiService.createPrescription(prescriptionData);
+      const response = await apiService.createEnhancedPrescription(prescriptionData);
       
       if (response.success) {
         setSuccess('Prescription created successfully!');

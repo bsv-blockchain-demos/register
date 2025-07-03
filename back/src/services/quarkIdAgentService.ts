@@ -12,7 +12,7 @@ import { BsvOverlayResolver } from '../plugins/BsvOverlayResolver';
 import { MockBsvOverlayResolver } from '../plugins/MockBsvOverlayResolver';
 import { BsvOverlayRegistryAdapter } from '../plugins/BsvOverlayRegistryAdapter';
 import { BsvWalletKMS } from '../plugins/BsvWalletKMS';
-import { ES256kVCSuite } from '../suites/ES256kVCSuite';
+import { ES256kVCSuite } from '../../../../Paquetes-NPMjs/packages/kms/suite/vc/es256k/src/ES256kVCSuite';
 import { Suite } from '@quarkid/kms-core';
 import { BbsBls2020Suite } from '@quarkid/kms-suite-bbsbls2020';
 
@@ -362,6 +362,31 @@ export class QuarkIdAgentService {
   }
 
   /**
+   * Ensure there are keys in the KMS for VC signing
+   */
+  private async ensureKMSKeys(): Promise<void> {
+    console.log('[QuarkIdAgentService] Ensuring KMS has keys for VC signing...');
+    
+    const keyStoreSize = (this.bsvKms as any).keyStore.size;
+    console.log('[QuarkIdAgentService] Current KMS keyStore size:', keyStoreSize);
+    
+    if (keyStoreSize === 0) {
+      console.log('[QuarkIdAgentService] No keys found in KMS, creating a new ES256k key...');
+      try {
+        // Create a new ES256k key
+        const keyResult = await this.bsvKms.create(Suite.ES256k);
+        console.log('[QuarkIdAgentService] Created new ES256k key:', keyResult.publicKeyJWK);
+        console.log('[QuarkIdAgentService] New KMS keyStore size:', (this.bsvKms as any).keyStore.size);
+      } catch (error) {
+        console.error('[QuarkIdAgentService] Error creating KMS key:', error);
+        throw new Error(`Failed to create KMS key: ${error.message}`);
+      }
+    } else {
+      console.log('[QuarkIdAgentService] KMS already has keys, proceeding with VC signing');
+    }
+  }
+
+  /**
    * Issue VC using QuarkID Agent's vc methods
    * The Agent handles BRC-100 signing internally
    */
@@ -382,11 +407,34 @@ export class QuarkIdAgentService {
       console.log('[QuarkIdAgentService] BsvWalletKMS available keys:', Array.from((this.bsvKms as any).keyStore.keys()));
       
       // Debug: Show the actual key entries in the KMS
-      console.log('[QuarkIdAgentService] KMS key entries:', Array.from((this.bsvKms as any).keyStore.entries()).map(([keyId, value]) => ({
+      console.log('[QuarkIdAgentService] KMS key entries:', Array.from((this.bsvKms as any).keyStore.entries() as Iterable<[string, any]>).map(([keyId, value]) => ({
         keyId,
         publicKeyX: value.jwk.x,
         publicKeyY: value.jwk.y
       })));
+      
+      // Ensure we have keys in the KMS
+      await this.ensureKMSKeys();
+      
+      // CRITICAL: Force KMS replacement before VC signing
+      console.log('[QuarkIdAgentService] Forcing KMS replacement before VC signing...');
+      (this.agent as any).kms = this.bsvKms;
+      
+      // Also replace KMS in identity module
+      if ((this.agent as any).identity) {
+        (this.agent as any).identity.kms = this.bsvKms;
+        console.log('[QuarkIdAgentService] Replaced identity KMS');
+      }
+      
+      // Also replace KMS in VC module
+      if ((this.agent as any)._vc) {
+        (this.agent as any)._vc.kms = this.bsvKms;
+        console.log('[QuarkIdAgentService] Replaced VC module KMS');
+      }
+      
+      // Verify KMS replacement
+      console.log('[QuarkIdAgentService] After replacement - Agent KMS type:', (this.agent as any).kms.constructor.name);
+      console.log('[QuarkIdAgentService] After replacement - Agent KMS === BsvWalletKMS:', (this.agent as any).kms === this.bsvKms);
       
       const issuanceDate = new Date();
       const expirationDate = new Date();
