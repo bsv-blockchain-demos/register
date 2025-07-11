@@ -87,6 +87,106 @@ class ApiService {
     }
   }
 
+  // VC Token API (New Unified System)
+
+  /**
+   * Create a VC Token using the new unified system
+   */
+  async createVCToken(params: {
+    issuerDid: string;
+    subjectDid: string;
+    credentialType: string;
+    claims: any;
+    metadata?: {
+      description?: string;
+      customData?: any;
+    };
+    validFrom?: string;
+    validUntil?: string;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/vc-tokens/create', params);
+  }
+
+  /**
+   * Create a prescription using the new unified system (simplified)
+   */
+  async createVCTokenPrescription(params: {
+    doctorDid: string;
+    patientDid: string;
+    medicationName: string;
+    dosage: string;
+    quantity: number;
+    instructions: string;
+    diagnosisCode?: string;
+    insuranceDid?: string;
+    expiryDays?: number;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/vc-tokens/prescription/create', params);
+  }
+
+  /**
+   * Transfer a VC Token to new owner
+   */
+  async transferVCToken(params: {
+    tokenId: string;
+    fromDid: string;
+    toDid: string;
+    metadata?: any;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/vc-tokens/transfer', params);
+  }
+
+  /**
+   * Finalize a VC Token (mark as completed)
+   */
+  async finalizeVCToken(params: {
+    tokenId: string;
+    finalizerDid: string;
+    metadata?: any;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/vc-tokens/finalize', params);
+  }
+
+  /**
+   * Get a specific VC Token
+   */
+  async getVCToken(tokenId: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/vc-tokens/${tokenId}`);
+  }
+
+  /**
+   * List VC Tokens with filters
+   */
+  async listVCTokens(filter?: {
+    issuerDid?: string;
+    subjectDid?: string;
+    currentOwnerDid?: string;
+    type?: string;
+    status?: string;
+  }): Promise<ApiResponse> {
+    const params = new URLSearchParams();
+    if (filter) {
+      Object.entries(filter).forEach(([key, value]) => {
+        if (value) params.append(key, value);
+      });
+    }
+    return this.request('GET', `/v1/vc-tokens/list?${params}`);
+  }
+
+  /**
+   * Verify a VC Token
+   */
+  async verifyVCToken(tokenId: string): Promise<ApiResponse> {
+    return this.request('POST', `/v1/vc-tokens/verify/${tokenId}`);
+  }
+
+  /**
+   * Get VC Token statistics
+   */
+  async getVCTokenStats(): Promise<ApiResponse> {
+    return this.request('GET', '/v1/vc-tokens/stats/summary');
+  }
+
   // Actor Management API
 
   /**

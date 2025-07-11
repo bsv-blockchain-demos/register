@@ -8,6 +8,7 @@ import { createAuthMiddleware } from '@bsv/auth-express-middleware';
 import { QuarkIdActorService } from './services/quarkIdActorService';
 import { QuarkIdAgentService } from './services/quarkIdAgentService';
 import { PrescriptionTokenService } from './services/prescriptionTokenService';
+import { VCTokenService } from './services/vcTokenService';
 import cors from 'cors'
 import { createDidRoutes } from './routes/didRoutes';
 import { createVcRoutes } from './routes/vcRoutes';
@@ -17,6 +18,7 @@ import { createPrescriptionRoutes } from './routes/prescriptionRoutes';
 import { createRegisterRoutes } from './routes/registerRoutes';
 import { createTokenRoutes } from './routes/tokenRoutes';
 import { createDWNRoutes } from './routes/dwnRoutes';
+import { createVCTokenRoutes } from './routes/vcTokenRoutes';
 import enhancedActorRoutes from './routes/enhancedActorRoutes';
 import enhancedPrescriptionRoutes from './routes/enhancedPrescriptionRoutes';
 
@@ -84,6 +86,7 @@ let db: Db
 let quarkIdActorService: QuarkIdActorService
 let quarkIdAgentService: QuarkIdAgentService
 let prescriptionTokenService: PrescriptionTokenService
+let vcTokenService: VCTokenService
 
 async function startServer() {
     const app = express();
@@ -134,6 +137,13 @@ async function startServer() {
       quarkIdAgentService
     );
 
+    // Initialize consolidated VC Token Service
+    vcTokenService = new VCTokenService(
+      db,
+      walletClient,
+      quarkIdAgentService
+    );
+
     // Logging middleware to print request path and body
     app.use((req, res, next) => {
         console.log(`[${req.method}] ${req.path} ${JSON.stringify(req?.body || '')}`);
@@ -161,6 +171,7 @@ async function startServer() {
         req.quarkIdActorService = quarkIdActorService
         req.quarkIdAgentService = quarkIdAgentService
         req.prescriptionTokenService = prescriptionTokenService
+        req.vcTokenService = vcTokenService
         next();
     })
 
@@ -174,6 +185,7 @@ async function startServer() {
         walletClient: !!walletClient ? 'connected' : 'not connected',
         quarkIdAgentService: !!quarkIdAgentService ? 'connected' : 'not connected',
         prescriptionTokenService: !!prescriptionTokenService ? 'connected' : 'not connected',
+        vcTokenService: !!vcTokenService ? 'connected' : 'not connected',
         endpoints: {
           actors: '/v1/actors (GET, POST)',
           prescriptions: '/v1/prescriptions (GET, POST)',
@@ -181,6 +193,7 @@ async function startServer() {
           dwn: '/v1/dwn/messages (GET, POST)',
           dids: '/v1/dids (GET, POST)',
           vcs: '/v1/vcs/* (VC operations)',
+          vcTokens: '/v1/vc-tokens/* (Consolidated VC Token operations)',
           auth: '/.well-known/auth (POST)'
         },
         vcEndpoints: {
@@ -195,6 +208,17 @@ async function startServer() {
           note: 'Enhanced BSV overlay routes for full token integration',
           actors: '/v1/enhanced/actors/* (CRUD operations with BSV DIDs)',
           prescriptions: '/v1/enhanced/prescriptions/* (Token-based prescription lifecycle)'
+        },
+        vcTokenEndpoints: {
+          create: '/v1/vc-tokens/create (POST) - Create VC with BSV token atomically',
+          transfer: '/v1/vc-tokens/transfer (POST) - Transfer token ownership',
+          finalize: '/v1/vc-tokens/finalize (POST) - Mark token as used/completed',
+          get: '/v1/vc-tokens/:tokenId (GET) - Get specific token',
+          list: '/v1/vc-tokens/list (GET) - List tokens with filters',
+          verify: '/v1/vc-tokens/verify/:tokenId (POST) - Verify token',
+          stats: '/v1/vc-tokens/stats/summary (GET) - Get statistics',
+          prescriptionCreate: '/v1/vc-tokens/prescription/create (POST) - Create prescription token',
+          prescriptionDispense: '/v1/vc-tokens/prescription/dispense (POST) - Transfer to pharmacy'
         }
       });
     });
@@ -204,6 +228,7 @@ async function startServer() {
     app.use('/v1/actors', createActorRoutes());
     app.use('/v1/prescriptions', createPrescriptionRoutes());
     app.use('/v1/tokens', createTokenRoutes());
+    app.use('/v1/vc-tokens', createVCTokenRoutes(vcTokenService));
     app.use('/v1/dwn', createDWNRoutes());
     app.use('/v1/status', createStatusRoutes(db));
     app.use('/register', createRegisterRoutes(db));
@@ -233,7 +258,8 @@ async function startServer() {
         mongodb: !!db ? 'connected' : 'not connected',
         walletClient: !!walletClient ? 'connected' : 'not connected',
         quarkIdAgentService: !!quarkIdAgentService ? 'connected' : 'not connected',
-        prescriptionTokenService: !!prescriptionTokenService ? 'connected' : 'not connected'
+        prescriptionTokenService: !!prescriptionTokenService ? 'connected' : 'not connected',
+        vcTokenService: !!vcTokenService ? 'connected' : 'not connected'
       });
     });
 

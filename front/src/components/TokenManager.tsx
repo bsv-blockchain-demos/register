@@ -1,25 +1,89 @@
 // src/components/TokenManager.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { tokenService } from '../services/tokenService';
+import { apiService } from '../services/apiService';
 import { qrService } from '../services/qrService';
-import type { BSVToken } from '../types';
+
+// New VCToken interface
+interface VCToken {
+  id: string;
+  vcId: string;
+  txid: string;
+  vout: number;
+  status: 'active' | 'transferred' | 'finalized';
+  vc: any;
+  issuerDid: string;
+  subjectDid: string;
+  currentOwnerDid: string;
+  metadata: {
+    type: string;
+    description: string;
+    customData?: any;
+  };
+  tokenState: {
+    createdAt: Date;
+    updatedAt: Date;
+    transferHistory: Array<{
+      from: string;
+      to: string;
+      timestamp: Date;
+      txid?: string;
+    }>;
+    finalizedAt?: Date;
+  };
+}
 
 const TokenManager: React.FC = () => {
-  const { state, dispatch, getCurrentTokens } = useApp();
-  const [selectedToken, setSelectedToken] = useState<BSVToken | null>(null);
+  const { state, dispatch } = useApp();
+  const [selectedVCToken, setSelectedVCToken] = useState<VCToken | null>(null);
+  const [vcTokens, setVCTokens] = useState<VCToken[]>([]);
   const [transferForm, setTransferForm] = useState({
-    recipientDid: '',
-    amount: 0
+    recipientDid: ''
   });
   const [isTransferring, setIsTransferring] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [tokenQRCodes, setTokenQRCodes] = useState<Record<string, string>>({});
   const [showStats, setShowStats] = useState(true);
+  const [stats, setStats] = useState<any>({});
 
-  const currentTokens = getCurrentTokens();
-  const allTokens = state.tokens;
+  // Load VC tokens for current actor
+  useEffect(() => {
+    if (state.currentActor?.did) {
+      loadVCTokens();
+      loadStats();
+    }
+  }, [state.currentActor]);
 
-  const handleTransferToken = async (token: BSVToken) => {
+  const loadVCTokens = async () => {
+    if (!state.currentActor?.did) return;
+    
+    setIsLoading(true);
+    try {
+      const response = await apiService.listVCTokens({
+        currentOwnerDid: state.currentActor.did
+      });
+      if (response.success && response.data) {
+        setVCTokens(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load VC tokens:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      const response = await apiService.getVCTokenStats();
+      if (response.success && response.data) {
+        setStats(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load stats:', error);
+    }
+  };
+
+  const handleTransferVCToken = async (token: VCToken) => {
     if (!state.currentActor) {
       alert('Please select an actor first');
       return;
@@ -38,72 +102,83 @@ const TokenManager: React.FC = () => {
 
     setIsTransferring(true);
     try {
-      const transferredToken = await tokenService.transferToken(token, transferForm.recipientDid);
-      dispatch({ type: 'UPDATE_TOKEN', payload: transferredToken });
-
-      // Reset form
-      setTransferForm({
-        recipientDid: '',
-        amount: 0
+      const response = await apiService.transferVCToken({
+        tokenId: token.id,
+        fromDid: state.currentActor.did!,
+        toDid: transferForm.recipientDid,
+        metadata: {
+          transferredAt: new Date().toISOString(),
+          recipientName: recipient.name
+        }
       });
-      setSelectedToken(null);
 
-      alert(`Token transferred successfully to ${recipient.name}`);
+      if (response.success) {
+        // Reload tokens to reflect changes
+        await loadVCTokens();
+        
+        // Reset form
+        setTransferForm({ recipientDid: '' });
+        setSelectedVCToken(null);
+
+        alert(`VC Token transferred successfully to ${recipient.name}`);
+      } else {
+        throw new Error(response.error || 'Transfer failed');
+      }
     } catch (error) {
-      console.error('Token transfer failed:', error);
-      alert('Failed to transfer token');
+      console.error('VC Token transfer failed:', error);
+      alert('Failed to transfer VC token');
     } finally {
       setIsTransferring(false);
     }
   };
 
-  const generateTokenQR = async (token: BSVToken) => {
+  const generateVCTokenQR = async (token: VCToken) => {
     if (!state.currentActor) {
       alert('Please select an actor first');
       return;
     }
 
     try {
-      const qrCode = await qrService.generateTokenQR(token, state.currentActor.did);
-      setTokenQRCodes(prev => ({ ...prev, [`${token.txid}:${token.vout}`]: qrCode }));
+      // For now, create a simple QR with token ID - you can enhance this later
+      const qrData = {
+        tokenId: token.id,
+        vcId: token.vcId,
+        currentOwner: token.currentOwnerDid,
+        type: token.metadata.type
+      };
+      const qrCode = await qrService.generateQR(JSON.stringify(qrData));
+      setTokenQRCodes(prev => ({ ...prev, [token.id]: qrCode }));
     } catch (error) {
       console.error('QR generation failed:', error);
       alert('Failed to generate QR code');
     }
   };
 
-  const getTokenStats = () => {
-    const stats = tokenService.getTokenStats(allTokens);
-    return stats;
-  };
-
-  const formatBSVAmount = (satoshis: number): string => {
-    return (satoshis / 100000000).toFixed(8) + ' BSV';
-  };
-
-  const getStatusColor = (status: BSVToken['status']): string => {
+  const getVCTokenStatusColor = (status: VCToken['status']): string => {
     switch (status) {
       case 'active': return 'green';
-      case 'pending': return 'orange';
-      case 'completed': return 'blue';
-      case 'expired': return 'red';
+      case 'transferred': return 'orange';
+      case 'finalized': return 'blue';
       default: return 'gray';
     }
   };
 
-  const getTokenTypeIcon = (metadata?: BSVToken['metadata']): string => {
-    if (metadata?.prescriptionId) return '💊';
-    if (metadata?.type === 'payment') return '💰';
-    return '🪙';
+  const getVCTokenTypeIcon = (type: string): string => {
+    if (type === 'PrescriptionCredential') return '💊';
+    if (type === 'PaymentCredential') return '💰';
+    if (type === 'IdentityCredential') return '🆔';
+    return '🎫';
   };
 
-  const stats = getTokenStats();
+  const formatDate = (dateString: string | Date): string => {
+    return new Date(dateString).toLocaleDateString();
+  };
 
   return (
     <div className="token-manager">
       <div className="page-header">
-        <h2>🪙 BSV Token Manager</h2>
-        <p>Monitor and manage Bitcoin SV tokens for medical prescriptions</p>
+        <h2>🎫 VC Token Manager</h2>
+        <p>Monitor and manage Verifiable Credential tokens with BSV integration</p>
       </div>
 
       {!state.currentActor && (
@@ -116,11 +191,11 @@ const TokenManager: React.FC = () => {
         </div>
       )}
 
-      {/* Token Statistics */}
+      {/* VC Token Statistics */}
       {showStats && (
         <div className="stats-section">
           <div className="stats-header">
-            <h3>📊 Token Statistics</h3>
+            <h3>📊 VC Token Statistics</h3>
             <button 
               className="toggle-button"
               onClick={() => setShowStats(!showStats)}
@@ -131,52 +206,57 @@ const TokenManager: React.FC = () => {
           
           <div className="stats-grid">
             <div className="stat-card">
-              <div className="stat-icon">🪙</div>
-              <div className="stat-value">{stats.total}</div>
-              <div className="stat-label">Total Tokens</div>
+              <div className="stat-icon">🎫</div>
+              <div className="stat-value">{stats.total || 0}</div>
+              <div className="stat-label">Total VC Tokens</div>
             </div>
             <div className="stat-card">
               <div className="stat-icon">✅</div>
-              <div className="stat-value">{stats.active}</div>
+              <div className="stat-value">{stats.byStatus?.active || 0}</div>
               <div className="stat-label">Active</div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon">⏳</div>
-              <div className="stat-value">{stats.pending}</div>
-              <div className="stat-label">Pending</div>
+              <div className="stat-icon">🔄</div>
+              <div className="stat-value">{stats.byStatus?.transferred || 0}</div>
+              <div className="stat-label">Transferred</div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon">💰</div>
-              <div className="stat-value">{formatBSVAmount(stats.totalValue)}</div>
-              <div className="stat-label">Total Value</div>
+              <div className="stat-icon">✅</div>
+              <div className="stat-value">{stats.byStatus?.finalized || 0}</div>
+              <div className="stat-label">Finalized</div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Current Actor Tokens */}
+      {/* Current Actor VC Tokens */}
       {state.currentActor && (
         <div className="user-tokens-section">
-          <h3>💼 Your Tokens</h3>
-          {currentTokens.length === 0 ? (
+          <h3>💼 Your VC Tokens</h3>
+          {isLoading ? (
+            <div className="loading-state">
+              <div className="loading-icon">⏳</div>
+              <p>Loading your VC tokens...</p>
+            </div>
+          ) : vcTokens.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-icon">🪙</div>
-              <h4>No Tokens</h4>
-              <p>You don't have any tokens yet. Create a prescription to generate tokens.</p>
+              <div className="empty-icon">🎫</div>
+              <h4>No VC Tokens</h4>
+              <p>You don't have any VC tokens yet. Create a prescription to generate tokens.</p>
             </div>
           ) : (
             <div className="tokens-grid">
-              {currentTokens.map(token => (
-                <div key={`${token.txid}:${token.vout}`} className="token-card">
+              {vcTokens.map(token => (
+                <div key={token.id} className="token-card">
                   <div className="token-header">
                     <div className="token-icon">
-                      {getTokenTypeIcon(token.metadata)}
+                      {getVCTokenTypeIcon(token.metadata.type)}
                     </div>
                     <div className="token-info">
-                      <h4>Token #{token.txid.slice(-6)}</h4>
+                      <h4>VC Token #{token.id.slice(-6)}</h4>
                       <span 
                         className="status-badge"
-                        style={{ backgroundColor: getStatusColor(token.status) }}
+                        style={{ backgroundColor: getVCTokenStatusColor(token.status) }}
                       >
                         {token.status}
                       </span>
@@ -185,43 +265,46 @@ const TokenManager: React.FC = () => {
 
                   <div className="token-details">
                     <div className="detail-row">
-                      <span className="label">Value:</span>
-                      <span className="value">{formatBSVAmount(token.value)}</span>
+                      <span className="label">Type:</span>
+                      <span className="value">{token.metadata.type}</span>
                     </div>
                     <div className="detail-row">
-                      <span className="label">TXID:</span>
+                      <span className="label">Description:</span>
+                      <span className="value">{token.metadata.description}</span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="label">VC ID:</span>
+                      <span className="value txid-value">{token.vcId}</span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="label">BSV TXID:</span>
                       <span className="value txid-value">{token.txid}</span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="label">Output:</span>
-                      <span className="value">{token.vout}</span>
                     </div>
                     <div className="detail-row">
                       <span className="label">Created:</span>
                       <span className="value">
-                        {new Date(token.createdAt).toLocaleDateString()}
+                        {formatDate(token.tokenState.createdAt)}
+                      </span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="label">Current Owner:</span>
+                      <span className="value">
+                        {state.actors.find(a => a.did === token.currentOwnerDid)?.name || 'Unknown'}
                       </span>
                     </div>
 
-                    {token.metadata?.prescriptionId && (
-                      <div className="detail-row">
-                        <span className="label">Prescription:</span>
-                        <span className="value">#{token.metadata.prescriptionId.slice(-6)}</span>
-                      </div>
-                    )}
-
-                    {token.transferHistory && token.transferHistory.length > 0 && (
+                    {token.tokenState.transferHistory && token.tokenState.transferHistory.length > 0 && (
                       <div className="transfer-history">
                         <h5>📜 Transfer History</h5>
                         <div className="history-list">
-                          {token.transferHistory.slice(-3).map((transfer, index) => (
+                          {token.tokenState.transferHistory.slice(-3).map((transfer, index) => (
                             <div key={index} className="history-item">
                               <span className="transfer-date">
-                                {new Date(transfer.timestamp).toLocaleDateString()}
+                                {formatDate(transfer.timestamp)}
                               </span>
                               <span className="transfer-arrow">→</span>
                               <span className="transfer-to">
-                                {state.actors.find(a => a.did === transfer.toDid)?.name || 'Unknown'}
+                                {state.actors.find(a => a.did === transfer.to)?.name || 'Unknown'}
                               </span>
                             </div>
                           ))}
@@ -233,29 +316,29 @@ const TokenManager: React.FC = () => {
                   <div className="token-actions">
                     <button
                       className="action-button transfer"
-                      onClick={() => setSelectedToken(token)}
-                      disabled={token.status !== 'active'}
+                      onClick={() => setSelectedVCToken(token)}
+                      disabled={token.status === 'finalized'}
                     >
                       🔄 Transfer
                     </button>
                     <button
                       className="action-button qr"
-                      onClick={() => generateTokenQR(token)}
+                      onClick={() => generateVCTokenQR(token)}
                     >
                       📱 QR Code
                     </button>
                   </div>
 
-                  {tokenQRCodes[`${token.txid}:${token.vout}`] && (
+                  {tokenQRCodes[token.id] && (
                     <div className="token-qr-section">
-                      <h5>📱 Token QR Code</h5>
+                      <h5>📱 VC Token QR Code</h5>
                       <img 
-                        src={tokenQRCodes[`${token.txid}:${token.vout}`]} 
-                        alt={`QR code for token ${token.txid}`}
+                        src={tokenQRCodes[token.id]} 
+                        alt={`QR code for VC token ${token.id}`}
                         className="qr-code-image"
                       />
                       <p className="qr-help">
-                        Scan to transfer this token
+                        Scan to view or transfer this VC token
                       </p>
                     </div>
                   )}
@@ -266,58 +349,16 @@ const TokenManager: React.FC = () => {
         </div>
       )}
 
-      {/* All Network Tokens */}
-      <div className="all-tokens-section">
-        <h3>🌐 All Network Tokens</h3>
-        <p>All tokens created in the medical prescription demo</p>
-        
-        {allTokens.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">🌐</div>
-            <h4>No Network Tokens</h4>
-            <p>No tokens have been created yet in the system</p>
-          </div>
-        ) : (
-          <div className="network-tokens-list">
-            {allTokens.map(token => (
-              <div key={`${token.txid}:${token.vout}`} className="network-token-row">
-                <div className="network-token-icon">
-                  {getTokenTypeIcon(token.metadata)}
-                </div>
-                <div className="network-token-info">
-                  <div className="network-token-id">#{token.txid.slice(-6)}</div>
-                  <div className="network-token-meta">
-                    {formatBSVAmount(token.value)} • {token.status}
-                  </div>
-                </div>
-                <div className="network-token-owner">
-                  <div className="owner-label">Owner:</div>
-                  <div className="owner-name">
-                    {state.actors.find(a => a.did === token.unlockableBy)?.name || 'Unknown'}
-                  </div>
-                </div>
-                <div className="network-token-prescription">
-                  {token.metadata?.prescriptionId && (
-                    <div className="prescription-link">
-                      💊 Prescription #{token.metadata.prescriptionId.slice(-6)}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       {/* Transfer Modal */}
-      {selectedToken && (
+      {selectedVCToken && (
         <div className="transfer-modal-overlay">
           <div className="transfer-modal">
             <div className="modal-header">
-              <h3>🔄 Transfer Token</h3>
+              <h3>🔄 Transfer VC Token</h3>
               <button 
                 className="close-button"
-                onClick={() => setSelectedToken(null)}
+                onClick={() => setSelectedVCToken(null)}
               >
                 ✕
               </button>
@@ -325,19 +366,19 @@ const TokenManager: React.FC = () => {
 
             <div className="modal-content">
               <div className="token-summary">
-                <h4>Token Details</h4>
+                <h4>VC Token Details</h4>
                 <div className="summary-grid">
                   <div className="summary-item">
                     <span className="label">Token ID:</span>
-                    <span className="value">#{selectedToken.txid.slice(-6)}</span>
+                    <span className="value">#{selectedVCToken.id.slice(-6)}</span>
                   </div>
                   <div className="summary-item">
-                    <span className="label">Value:</span>
-                    <span className="value">{formatBSVAmount(selectedToken.value)}</span>
+                    <span className="label">Type:</span>
+                    <span className="value">{selectedVCToken.metadata.type}</span>
                   </div>
                   <div className="summary-item">
                     <span className="label">Status:</span>
-                    <span className="value">{selectedToken.status}</span>
+                    <span className="value">{selectedVCToken.status}</span>
                   </div>
                 </div>
               </div>
@@ -360,34 +401,22 @@ const TokenManager: React.FC = () => {
                       ))}
                   </select>
                 </div>
-
-                <div className="estimated-fees">
-                  <h5>📊 Transaction Estimate</h5>
-                  <div className="fee-item">
-                    <span>Network Fee:</span>
-                    <span>{formatBSVAmount(tokenService.estimateTransactionFee())}</span>
-                  </div>
-                  <div className="fee-item">
-                    <span>You'll Receive:</span>
-                    <span>{formatBSVAmount(selectedToken.value - tokenService.estimateTransactionFee())}</span>
-                  </div>
-                </div>
               </div>
             </div>
 
             <div className="modal-actions">
               <button
                 className="secondary-button"
-                onClick={() => setSelectedToken(null)}
+                onClick={() => setSelectedVCToken(null)}
               >
                 Cancel
               </button>
               <button
                 className="primary-button"
-                onClick={() => handleTransferToken(selectedToken)}
+                onClick={() => handleTransferVCToken(selectedVCToken)}
                 disabled={isTransferring || !transferForm.recipientDid}
               >
-                {isTransferring ? '⏳ Transferring...' : '🔄 Transfer Token'}
+                {isTransferring ? '⏳ Transferring...' : '🔄 Transfer VC Token'}
               </button>
             </div>
           </div>
@@ -396,29 +425,30 @@ const TokenManager: React.FC = () => {
 
       {/* Info Section */}
       <div className="info-section">
-        <h3>ℹ️ About BSV Tokens</h3>
+        <h3>ℹ️ About VC Tokens</h3>
         <div className="info-content">
           <p>
-            BSV tokens in this demo represent prescription ownership and transfer rights on the Bitcoin SV blockchain. 
-            Each prescription is tokenized as a unique digital asset that can be securely transferred between actors.
+            VC Tokens combine Verifiable Credentials with BSV blockchain tokens, creating a unified system for 
+            prescription ownership and transfer rights. Each prescription is both a verifiable credential and 
+            a blockchain token that can be securely transferred between actors.
           </p>
           
           <div className="info-features">
             <div className="feature-item">
               <span className="feature-icon">🔒</span>
-              <span className="feature-text">Cryptographically secured on BSV blockchain</span>
+              <span className="feature-text">Cryptographically secured with W3C VCs and BSV blockchain</span>
             </div>
             <div className="feature-item">
               <span className="feature-icon">🔄</span>
-              <span className="feature-text">Transferable between authorized actors</span>
+              <span className="feature-text">Atomic operations ensure VC and token consistency</span>
             </div>
             <div className="feature-item">
               <span className="feature-icon">📊</span>
-              <span className="feature-text">Full transaction history and provenance</span>
+              <span className="feature-text">Full transaction history and verifiable provenance</span>
             </div>
             <div className="feature-item">
               <span className="feature-icon">⚡</span>
-              <span className="feature-text">Fast and low-cost microtransactions</span>
+              <span className="feature-text">Simplified single-step creation and management</span>
             </div>
           </div>
         </div>

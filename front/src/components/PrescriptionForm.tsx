@@ -79,21 +79,21 @@ export const PrescriptionForm: React.FC = () => {
 
     try {
       const prescriptionData = {
-        patientDid: formData.patientDid,
         doctorDid: currentUser.did,
+        patientDid: formData.patientDid,
         medicationName: formData.medicationName,
         dosage: formData.dosage,
-        quantity: "1", // You might want to add a quantity field to the form
+        quantity: 1, // Convert to number
         instructions: `${formData.frequency} for ${formData.duration}. ${formData.instructions}`,
         diagnosisCode: formData.diagnosis,
         insuranceDid: formData.insuranceProvider || undefined,
-        expiryHours: "720" // 30 days default
+        expiryDays: 30 // 30 days default
       };
 
-      const response = await apiService.createEnhancedPrescription(prescriptionData);
+      const response = await apiService.createVCTokenPrescription(prescriptionData);
       
       if (response.success) {
-        setSuccess('Prescription created successfully!');
+        setSuccess(`Prescription VC Token created successfully! Token ID: ${response.data?.id}`);
         // Reset form
         setFormData({
           patientDid: '',
