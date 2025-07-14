@@ -6,6 +6,8 @@ import { ActorService } from '../services/ActorService';
 import { QuarkIdAgentService } from '../services/quarkIdAgentService';
 import { PrescriptionTokenService } from '../services/prescriptionTokenService';
 import { VCTokenService } from '../services/vcTokenService';
+import { InsuranceFraudPreventionService } from '../services/InsuranceFraudPreventionService';
+import { KMSClient } from '@quarkid/kms-client';
 
 /**
  * Extended Express Request interface with QuarkID services
@@ -17,6 +19,10 @@ export interface QuarkIdRequest extends Express.Request {
   quarkIdAgentService?: QuarkIdAgentService;
   prescriptionTokenService?: PrescriptionTokenService;
   vcTokenService?: VCTokenService;
+  fraudPreventionService?: InsuranceFraudPreventionService;
+  kmsClient?: KMSClient;
+  actorRole?: string;
+  actorDid?: string;
 }
 
 /**

@@ -6,7 +6,10 @@
     "build": "tsc",
     "start": "node dist/app.js",
     "dev": "tsx src/app.ts",
-    "fund-platform": "ts-node ../scripts/fund-platform.ts"
+    "fund-platform": "ts-node ../scripts/fund-platform.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@bsv/auth-express-middleware": "^1.1.2",
@@ -38,9 +41,13 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "^22.15.23",
     "@types/node-fetch": "^2.6.11",
+    "jest": "^30.0.4",
+    "mongodb-memory-server": "^10.1.4",
     "semver": "^7.7.2",
+    "ts-jest": "^29.4.0",
     "ts-node": "^10.9.1",
     "tsx": "^4.19.4"
   }
