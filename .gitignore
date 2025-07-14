@@ -59,3 +59,12 @@ temp/
 # BSV specific
 *.beef
 *.woc
+
+# AI context files
+activeContext.md
+CLAUDE.md
+progress.md
+projectBriefing.md
+projectBrief.md
+tasks.md
+isolation_rules/
