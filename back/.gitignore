@@ -111,3 +111,10 @@ node_modules/
 
 # Top level docs
 docs
+
+# AI context files
+activeContext.md
+CLAUDE.md
+progress.md
+projectBriefing.md
+tasks.md
