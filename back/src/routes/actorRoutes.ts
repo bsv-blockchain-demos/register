@@ -1,441 +1,240 @@
 import { Router, Request, Response } from 'express';
-import { PrivateKey, WalletClient } from '@bsv/sdk';
-import { Db } from 'mongodb';
-import crypto from 'crypto';
-
-// Extend Request interface to include our custom properties
-interface CustomRequest extends Request {
-  walletClient?: WalletClient;
-  db?: Db;
-  body: any;
-  params: any;
-  query: any;
-  quarkIdAgentService?: any;
-}
+import { 
+  CreateActorRequest, 
+  UpdateActorRequest,
+  ActorResponse, 
+  ActorListResponse, 
+  ActorStatsResponse,
+  ActorFilter,
+  ApiError
+} from '../types/common';
 
 /**
- * Actor interface for the prescription system
- */
-interface Actor {
-  id: string;
-  did?: string;
-  name: string;
-  type: 'patient' | 'doctor' | 'pharmacy' | 'insurance';
-  email?: string;
-  phone?: string;
-  address?: string;
-  publicKey?: string;
-  privateKey?: string; // Only stored temporarily for demo purposes
-  licenseNumber?: string; // For doctors and pharmacies
-  specialization?: string; // For doctors
-  insuranceProvider?: string; // For patients
-  createdAt: Date;
-  updatedAt: Date;
-  isActive: boolean;
-}
-
-/**
- * Create actor management routes
+ * Refactored Actor Routes with business logic properly delegated to services
+ * 
+ * This is a clean, focused router that handles HTTP concerns only:
+ * - Request validation and parsing
+ * - Response formatting
+ * - Error handling
+ * - Status codes
+ * 
+ * All business logic is delegated to the ActorService
  */
 export function createActorRoutes(): Router {
   const router = Router();
 
   /**
-   * POST /actors - Create a new actor with DID
-   * Body: {
-   *   name: string,
-   *   type: 'patient' | 'doctor' | 'pharmacy' | 'insurance',
-   *   email?: string,
-   *   phone?: string,
-   *   address?: string,
-   *   licenseNumber?: string,
-   *   specialization?: string,
-   *   insuranceProvider?: string,
-   *   identityKey?: string
-   * }
+   * POST /actors - Create a new actor
    */
-  router.post('/', async (req: CustomRequest, res: Response) => {
-    console.log('[ActorRoutes] POST /actors called');
-    console.log('[ActorRoutes] Request body:', JSON.stringify(req.body, null, 2));
-    
+  router.post('/', async (req: Request, res: Response) => {
     try {
-      const {
-        name,
-        type,
-        email,
-        phone,
-        address,
-        licenseNumber,
-        specialization,
-        insuranceProvider,
-        identityKey
-      } = req.body;
-
-      // Validate required fields
-      if (!name || !type) {
+      console.log('[ActorRoutes] POST /actors called');
+      
+      const actorData: CreateActorRequest = req.body;
+      
+      // Basic validation
+      if (!actorData.name || !actorData.type) {
         return res.status(400).json({
+          success: false,
           error: 'Missing required fields: name, type'
-        });
+        } as ApiError);
       }
 
-      if (!['patient', 'doctor', 'pharmacy', 'insurance'].includes(type)) {
-        return res.status(400).json({
-          error: 'Invalid actor type. Must be: patient, doctor, pharmacy, or insurance'
-        });
-      }
-
-      if (!req.db) {
+      if (!req.quarkIdActorService) {
         return res.status(503).json({
-          error: 'Database not available'
-        });
+          success: false,
+          error: 'Actor service not available'
+        } as ApiError);
       }
 
-      // Generate identityKey if not provided - ensures valid controllerPublicKeyHex for BSV DID creation
-      let finalIdentityKey = identityKey;
-      let privateKey = '';
+      // Delegate to service
+      const actor = await req.quarkIdActorService.createActor(actorData);
       
-      if (!finalIdentityKey) {
-        try {
-          // Generate a new private/public key pair for this actor
-          const actorPrivateKey = PrivateKey.fromRandom();
-          privateKey = actorPrivateKey.toHex();
-          finalIdentityKey = actorPrivateKey.toPublicKey().toString();
-          console.log(`[ActorRoutes] Generated new key pair for actor ${name}`);
-          console.log(`[ActorRoutes] Public key: ${finalIdentityKey}`);
-        } catch (error) {
-          console.error(`[ActorRoutes] Error generating key pair for actor:`, error);
-          return res.status(500).json({
-            error: 'Failed to generate identity key pair for actor'
-          });
-        }
-      }
-
-      // Create DID document for the actor
-      const didDocument = {
-        '@context': ['https://www.w3.org/ns/did/v1'],
-        id: '', // Will be set after DID creation
-        verificationMethod: [{
-          id: '#key-1',
-          type: 'EcdsaSecp256k1VerificationKey2019',
-          controller: '',
-          publicKeyHex: finalIdentityKey
-        }],
-        authentication: ['#key-1'],
-        assertionMethod: ['#key-1']
-      };
-
-      console.log(`[ActorRoutes] Creating actor: ${name} (${type})`);
-      
-      let did = '';
-      
-      if (type === 'patient' || type === 'doctor' || type === 'pharmacy' || type === 'insurance') {
-        // For medical actors, generate a BSV DID using QuarkIdAgentService
-        const quarkIdAgentService = req.quarkIdAgentService;
-        console.log('[ActorRoutes] QuarkIdAgentService available:', !!quarkIdAgentService);
-        
-        if (!quarkIdAgentService) {
-          console.error('[ActorRoutes] QuarkIdAgentService not found in request');
-          return res.status(500).json({ error: 'QuarkIdAgentService not available' });
-        }
-
-        // Create DID using QuarkID Agent
-        try {
-          console.log('[ActorRoutes] Calling quarkIdAgentService.createDID()...');
-          console.log('[ActorRoutes] quarkIdAgentService type:', typeof quarkIdAgentService);
-          console.log('[ActorRoutes] quarkIdAgentService.createDID type:', typeof quarkIdAgentService.createDID);
-          
-          did = await quarkIdAgentService.createDID();
-          console.log(`[ActorRoutes] Created BSV DID for ${name}: ${did}`);
-          
-          if (!did) {
-            console.error('[ActorRoutes] DID creation returned empty result');
-            throw new Error('DID creation returned empty result');
-          }
-          
-          // Update the DID document with the generated DID
-          didDocument.id = did;
-          didDocument.verificationMethod[0].controller = did;
-          didDocument.verificationMethod[0].id = `${did}#key-1`;
-        } catch (didError) {
-          console.error('[ActorRoutes] Error creating DID:', didError);
-          console.error('[ActorRoutes] Stack trace:', (didError as Error).stack);
-          // Continue without DID for now to see what's happening
-          console.warn('[ActorRoutes] Continuing without DID due to error');
-        }
-      } else {
-        // For other actors, use key-based DID
-        did = `did:key:${finalIdentityKey}`;
-        didDocument.id = did;
-        didDocument.verificationMethod[0].controller = did;
-        didDocument.verificationMethod[0].id = `${did}#key-1`;
-      }
-
-      // Create actor
-      const actor: Actor = {
-        id: crypto.randomUUID(),
-        did,
-        name,
-        type,
-        email,
-        phone,
-        address,
-        publicKey: finalIdentityKey,
-        privateKey, // Store private key for demo purposes
-        licenseNumber,
-        specialization,
-        insuranceProvider,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        isActive: true
-      };
-
-      // Store actor in database
-      await req.db.collection('actors').insertOne(actor);
-
-      // Store DID document if created
-      if (did) {
-        await req.db.collection('did_documents').insertOne({
-          did,
-          document: didDocument,
-          actorId: actor.id,
-          createdAt: new Date()
-        });
-      }
-
-      console.log(`[ActorRoutes] Actor created: ${actor.id} (${type})`);
-
-      // Return created actor
-      console.log(`[ActorRoutes] Actor created successfully: ${actor.name} (${actor.type})`);
-      console.log(`[ActorRoutes] Actor ID: ${actor.id}`);
-      console.log(`[ActorRoutes] Actor DID: ${actor.did || 'No DID generated'}`);
-      
-      // For demo purposes, include private key in response
-      // In production, this should NEVER be done
-      const responseActor = {
-        ...actor,
-        privateKey: actor.privateKey
-      };
+      console.log('[ActorRoutes] Actor created successfully:', actor.id);
       
       res.status(201).json({
         success: true,
-        data: responseActor,
-        warning: 'Private key included for demo purposes only. Never expose private keys in production!'
-      });
+        data: actor,
+        message: 'Actor created successfully'
+      } as ActorResponse);
 
     } catch (error) {
       console.error('[ActorRoutes] Error creating actor:', error);
       res.status(500).json({
+        success: false,
         error: 'Failed to create actor',
         details: error.message
-      });
+      } as ApiError);
     }
   });
 
   /**
-   * GET /actors - Get all actors
-   * Query params:
-   *   - type?: string - Filter by actor type
-   *   - active?: boolean - Filter by active status
+   * GET /actors - Get all actors with optional filtering
    */
-  router.get('/', async (req: CustomRequest, res: Response) => {
-    console.log('[ActorRoutes] GET /actors - Start');
+  router.get('/', async (req: Request, res: Response) => {
     try {
-      const { type, active } = req.query;
-      console.log('[ActorRoutes] Query params:', { type, active });
-
-      if (!req.db) {
-        console.log('[ActorRoutes] ERROR: Database not available on request object');
-        return res.status(503).json({
-          error: 'Database not available'
-        });
-      }
-
-      console.log('[ActorRoutes] Database connection available');
-      let query: any = {};
-
-      if (type) {
-        query.type = type;
-      }
-
-      if (active !== undefined) {
-        query.isActive = active === 'true';
-      }
-
-      console.log('[ActorRoutes] MongoDB query:', query);
+      console.log('[ActorRoutes] GET /actors called');
       
-      const actors = await req.db
-        .collection('actors')
-        .find(query, { projection: { privateKey: 0 } }) // Exclude private keys
-        .sort({ createdAt: -1 })
-        .toArray();
+      if (!req.quarkIdActorService) {
+        return res.status(503).json({
+          success: false,
+          error: 'Actor service not available'
+        } as ApiError);
+      }
 
+      // Parse query parameters
+      const { type, status, active, limit = '100', offset = '0' } = req.query;
+      
+      const filter: ActorFilter = {};
+      if (type) filter.type = type as any;
+      if (status) filter.status = status as any;
+      if (active !== undefined) filter.isActive = active === 'true';
+
+      // Delegate to service
+      const actors = await req.quarkIdActorService.getActors(
+        filter,
+        parseInt(limit as string),
+        parseInt(offset as string)
+      );
+      
       console.log('[ActorRoutes] Found actors:', actors.length);
       
-      const response = {
+      res.json({
         success: true,
         data: actors,
         count: actors.length
-      };
-      
-      console.log('[ActorRoutes] Sending response:', JSON.stringify(response).substring(0, 200) + '...');
-      res.json(response);
+      } as ActorListResponse);
 
     } catch (error) {
       console.error('[ActorRoutes] Error retrieving actors:', error);
       res.status(500).json({
+        success: false,
         error: 'Failed to retrieve actors',
         details: error.message
-      });
+      } as ApiError);
     }
   });
 
   /**
    * GET /actors/:id - Get specific actor by ID
    */
-  router.get('/:id', async (req: CustomRequest, res: Response) => {
+  router.get('/:id', async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
 
-      if (!req.db) {
+      if (!req.quarkIdActorService) {
         return res.status(503).json({
-          error: 'Database not available'
-        });
+          success: false,
+          error: 'Actor service not available'
+        } as ApiError);
       }
 
-      const actor = await req.db
-        .collection('actors')
-        .findOne(
-          { id },
-          { projection: { privateKey: 0 } } // Exclude private key
-        );
+      // Delegate to service
+      const actor = await req.quarkIdActorService.getActorById(id);
 
       if (!actor) {
         return res.status(404).json({
+          success: false,
           error: 'Actor not found'
-        });
+        } as ApiError);
       }
 
       res.json({
         success: true,
         data: actor
-      });
+      } as ActorResponse);
 
     } catch (error) {
       console.error('[ActorRoutes] Error retrieving actor:', error);
       res.status(500).json({
+        success: false,
         error: 'Failed to retrieve actor',
         details: error.message
-      });
+      } as ApiError);
     }
   });
 
   /**
    * PUT /actors/:id - Update actor information
    */
-  router.put('/:id', async (req: CustomRequest, res: Response) => {
+  router.put('/:id', async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const updateData = { ...req.body };
+      const updateData: UpdateActorRequest = req.body;
 
-      // Remove fields that shouldn't be updated
-      delete updateData.id;
-      delete updateData.did;
-      delete updateData.privateKey;
-      delete updateData.publicKey;
-      delete updateData.createdAt;
-
-      // Add updated timestamp
-      updateData.updatedAt = new Date();
-
-      if (!req.db) {
+      if (!req.quarkIdActorService) {
         return res.status(503).json({
-          error: 'Database not available'
-        });
+          success: false,
+          error: 'Actor service not available'
+        } as ApiError);
       }
 
-      const result = await req.db
-        .collection('actors')
-        .updateOne(
-          { id },
-          { $set: updateData }
-        );
+      // Delegate to service
+      const updatedActor = await req.quarkIdActorService.updateActor(id, updateData);
 
-      if (result.matchedCount === 0) {
+      if (!updatedActor) {
         return res.status(404).json({
+          success: false,
           error: 'Actor not found'
-        });
+        } as ApiError);
       }
 
-      // Get updated actor
-      const updatedActor = await req.db
-        .collection('actors')
-        .findOne(
-          { id },
-          { projection: { privateKey: 0 } }
-        );
-
-      console.log(`[ActorRoutes] Actor updated: ${id}`);
+      console.log('[ActorRoutes] Actor updated:', id);
 
       res.json({
         success: true,
         data: updatedActor,
         message: 'Actor updated successfully'
-      });
+      } as ActorResponse);
 
     } catch (error) {
       console.error('[ActorRoutes] Error updating actor:', error);
       res.status(500).json({
+        success: false,
         error: 'Failed to update actor',
         details: error.message
-      });
+      } as ApiError);
     }
   });
 
   /**
    * DELETE /actors/:id - Delete an actor by ID
    */
-  router.delete('/:id', async (req: CustomRequest, res: Response) => {
-    console.log('[ActorRoutes] DELETE /actors/:id - Start');
+  router.delete('/:id', async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      console.log('[ActorRoutes] Deleting actor with id:', id);
 
-      if (!req.db) {
-        console.log('[ActorRoutes] ERROR: Database not available');
+      if (!req.quarkIdActorService) {
         return res.status(503).json({
-          error: 'Database not available'
-        });
+          success: false,
+          error: 'Actor service not available'
+        } as ApiError);
       }
 
-      // First check if the actor exists
-      const actor = await req.db
-        .collection('actors')
-        .findOne({ id });
-
+      // Get actor first to return info in response
+      const actor = await req.quarkIdActorService.getActorById(id);
+      
       if (!actor) {
-        console.log('[ActorRoutes] Actor not found:', id);
         return res.status(404).json({
+          success: false,
           error: 'Actor not found'
-        });
+        } as ApiError);
       }
 
-      // Delete the actor
-      const result = await req.db
-        .collection('actors')
-        .deleteOne({ id });
+      // Delegate to service
+      const deleted = await req.quarkIdActorService.deleteActor(id);
 
-      console.log('[ActorRoutes] Delete result:', result);
-
-      if (result.deletedCount === 0) {
+      if (!deleted) {
         return res.status(500).json({
+          success: false,
           error: 'Failed to delete actor'
-        });
+        } as ApiError);
       }
 
       res.json({
         success: true,
         message: `Actor ${actor.name} (${actor.type}) deleted successfully`,
-        deletedActor: {
+        data: {
           id: actor.id,
           name: actor.name,
           type: actor.type,
@@ -446,145 +245,97 @@ export function createActorRoutes(): Router {
     } catch (error) {
       console.error('[ActorRoutes] Error deleting actor:', error);
       res.status(500).json({
+        success: false,
         error: 'Failed to delete actor',
         details: error.message
-      });
+      } as ApiError);
     }
   });
 
   /**
    * GET /actors/did/:did - Get actor by DID
    */
-  router.get('/did/:did', async (req: CustomRequest, res: Response) => {
+  router.get('/did/:did', async (req: Request, res: Response) => {
     try {
       const { did } = req.params;
 
-      if (!req.db) {
+      if (!req.quarkIdActorService) {
         return res.status(503).json({
-          error: 'Database not available'
-        });
+          success: false,
+          error: 'Actor service not available'
+        } as ApiError);
       }
 
-      const actor = await req.db
-        .collection('actors')
-        .findOne(
-          { did },
-          { projection: { privateKey: 0 } }
-        );
+      // Delegate to service
+      const actor = await req.quarkIdActorService.getActorByDid(did);
 
       if (!actor) {
         return res.status(404).json({
+          success: false,
           error: 'Actor not found for this DID'
-        });
+        } as ApiError);
       }
 
       res.json({
         success: true,
         data: actor
-      });
+      } as ActorResponse);
 
     } catch (error) {
       console.error('[ActorRoutes] Error retrieving actor by DID:', error);
       res.status(500).json({
+        success: false,
         error: 'Failed to retrieve actor',
         details: error.message
-      });
-    }
-  });
-
-  /**
-   * POST /actors/:id/credentials - Get credentials for actor (private key, etc.)
-   * This endpoint requires special authorization and is only for testing
-   */
-  router.post('/:id/credentials', async (req: CustomRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      const { purpose } = req.body; // 'signing', 'testing', etc.
-
-      if (!purpose) {
-        return res.status(400).json({
-          error: 'Missing required field: purpose'
-        });
-      }
-
-      if (!req.db) {
-        return res.status(503).json({
-          error: 'Database not available'
-        });
-      }
-
-      const actor = await req.db
-        .collection('actors')
-        .findOne({ id });
-
-      if (!actor) {
-        return res.status(404).json({
-          error: 'Actor not found'
-        });
-      }
-
-      // Return credentials (in production, this would require proper authorization)
-      res.json({
-        success: true,
-        data: {
-          did: actor.did,
-          publicKey: actor.publicKey,
-          privateKey: actor.privateKey, // Only for demo purposes
-          purpose
-        },
-        warning: 'This endpoint is for testing only. In production, private keys should never be exposed via API.'
-      });
-
-    } catch (error) {
-      console.error('[ActorRoutes] Error retrieving credentials:', error);
-      res.status(500).json({
-        error: 'Failed to retrieve credentials',
-        details: error.message
-      });
+      } as ApiError);
     }
   });
 
   /**
    * GET /actors/stats/summary - Get actor statistics
    */
-  router.get('/stats/summary', async (req: CustomRequest, res: Response) => {
+  router.get('/stats/summary', async (req: Request, res: Response) => {
     try {
-      if (!req.db) {
+      if (!req.quarkIdActorService) {
         return res.status(503).json({
-          error: 'Database not available'
-        });
+          success: false,
+          error: 'Actor service not available'
+        } as ApiError);
       }
 
-      const totalActors = await req.db.collection('actors').countDocuments();
-      const activeActors = await req.db.collection('actors').countDocuments({ isActive: true });
-
-      // Get breakdown by type
-      const typeBreakdown = await req.db.collection('actors').aggregate([
-        { $match: { isActive: true } },
-        { $group: { _id: '$type', count: { $sum: 1 } } }
-      ]).toArray();
+      // Delegate to service
+      const stats = await req.quarkIdActorService.getActorStatistics();
 
       res.json({
         success: true,
-        data: {
-          total: totalActors,
-          active: activeActors,
-          inactive: totalActors - activeActors,
-          typeBreakdown: typeBreakdown.reduce((acc, item) => {
-            acc[item._id] = item.count;
-            return acc;
-          }, {})
-        }
-      });
+        data: stats
+      } as ActorStatsResponse);
 
     } catch (error) {
       console.error('[ActorRoutes] Error retrieving actor stats:', error);
       res.status(500).json({
+        success: false,
         error: 'Failed to retrieve statistics',
         details: error.message
-      });
+      } as ApiError);
     }
   });
 
   return router;
 }
+
+/**
+ * Validation middleware for actor routes
+ */
+export const validateActorRoutes = (router: Router): Router => {
+  // Add validation middleware here if needed
+  return router;
+};
+
+/**
+ * Error handling middleware for actor routes
+ */
+export const handleActorRouteErrors = (router: Router): Router => {
+  // Add error handling middleware here if needed
+  return router;
+};

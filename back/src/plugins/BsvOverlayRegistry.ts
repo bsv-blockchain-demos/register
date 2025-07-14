@@ -22,7 +22,7 @@ import {
 import { Services, Setup, SetupWallet, StorageClient, wait, Wallet, WalletStorageManager } from '@bsv/wallet-toolbox';
 import { IJWK } from '@quarkid/kms-core';
 import { BsvWalletKMS } from './BsvWalletKMS';
-import { env } from 'process';
+import { appConfig } from '../config/AppConfig';
 import { Db } from 'mongodb';
 
 // TOP-LEVEL DEBUG: Verify file is being loaded fresh
@@ -71,7 +71,7 @@ export class BsvOverlayRegistry {
 
 
   async createWalletClient(): Promise<WalletClient> {
-    const rootKey = PrivateKey.fromHex(env.PLATFORM_FUNDING_KEY!)
+    const rootKey = PrivateKey.fromHex(appConfig.platformFundingKey)
     const keyDeriver = new KeyDeriver(rootKey)
     const storage = new WalletStorageManager(keyDeriver.identityKey)
     const chain = 'main'
@@ -82,7 +82,7 @@ export class BsvOverlayRegistry {
         storage,
         services,
     })
-    const client = new StorageClient(wallet, env.WALLET_STORAGE_URL!)
+    const client = new StorageClient(wallet, appConfig.walletStorageUrl)
     await storage.addWalletStorageProvider(client)
     await storage.makeAvailable()
     return new WalletClient(wallet)

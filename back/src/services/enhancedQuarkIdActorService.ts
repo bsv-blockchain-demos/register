@@ -1,5 +1,6 @@
 import { Db } from 'mongodb';
 import crypto from 'crypto';
+import { appConfig } from '../config/AppConfig';
 
 // Simplified types for now - we'll replace with real ones later
 interface QuarkIdActor {
@@ -318,7 +319,7 @@ export class EnhancedQuarkIdActorService {
     const { QuarkIdAgentService } = require('./quarkIdAgentService');
     return new QuarkIdAgentService({
       mongodb: {
-        uri: process.env.MONGODB_URI || 'mongodb://localhost:27017',
+        uri: appConfig.mongodbUri,
         dbName: this.db.databaseName
       },
       walletClient: this.walletClient,

@@ -15,6 +15,7 @@ import { BsvWalletKMS } from '../plugins/BsvWalletKMS';
 import { ES256kVCSuite } from '../../../../Paquetes-NPMjs/packages/kms/suite/vc/es256k/src/ES256kVCSuite';
 import { Suite } from '@quarkid/kms-core';
 import { BbsBls2020Suite } from '@quarkid/kms-suite-bbsbls2020';
+import { appConfig } from '../config/AppConfig';
 
 /**
  * Configuration interface for QuarkID Agent with BSV overlay integration
@@ -105,8 +106,8 @@ export class QuarkIdAgentService {
       // Create BSV overlay registry with our custom KMS
       const bsvRegistry = new BsvOverlayRegistry(
         bsvKMS,
-        process.env.DID_TOPIC || 'tm_did',
-        this.config.overlayProvider || process.env.OVERLAY_PROVIDER_URL || 'http://localhost:8080',
+        appConfig.didTopic,
+        this.config.overlayProvider || appConfig.overlayProviderUrl,
         this.db
       );
       console.log('[QuarkIdAgentService] Created BsvOverlayRegistry with shared KMS');
@@ -116,7 +117,7 @@ export class QuarkIdAgentService {
       
       // Use real resolver now that we have the overlay running locally
       const didResolver = new BsvOverlayResolver(bsvRegistry);
-      console.log('[QuarkIdAgentService] Using BsvOverlayResolver with overlay at:', this.config.overlayProvider || process.env.OVERLAY_PROVIDER_URL);
+      console.log('[QuarkIdAgentService] Using BsvOverlayResolver with overlay at:', this.config.overlayProvider || appConfig.overlayProviderUrl);
       
       // Initialize the registry adapter with the same KMS instance
       didRegistry.initialize({ kms: bsvKMS, resolver: didResolver });

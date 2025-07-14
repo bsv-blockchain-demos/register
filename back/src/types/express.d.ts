@@ -1,19 +1,7 @@
-import { Db } from 'mongodb';
-import { WalletClient } from '@bsv/sdk';
-import { QuarkIdActorService } from '../services/quarkIdActorService';
-import { QuarkIdAgentService } from '../services/quarkIdAgentService';
-import { PrescriptionTokenService } from '../services/prescriptionTokenService';
-import { VCTokenService } from '../services/vcTokenService';
+import { QuarkIdRequest } from './common';
 
 declare global {
   namespace Express {
-    interface Request {
-      db: Db;
-      walletClient: WalletClient;
-      quarkIdActorService: QuarkIdActorService;
-      quarkIdAgentService: QuarkIdAgentService;
-      prescriptionTokenService: PrescriptionTokenService;
-      vcTokenService: VCTokenService;
-    }
+    interface Request extends QuarkIdRequest {}
   }
 }

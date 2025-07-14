@@ -5,7 +5,7 @@ import { MongoClient, Db } from "mongodb";
 import { PrivateKey, WalletClient, KeyDeriver } from '@bsv/sdk';
 import { WalletStorageManager, Services, StorageClient, Wallet } from '@bsv/wallet-toolbox-client';
 import { createAuthMiddleware } from '@bsv/auth-express-middleware';
-import { QuarkIdActorService } from './services/quarkIdActorService';
+import { ActorService } from './services/ActorService';
 import { QuarkIdAgentService } from './services/quarkIdAgentService';
 import { PrescriptionTokenService } from './services/prescriptionTokenService';
 import { VCTokenService } from './services/vcTokenService';
@@ -22,31 +22,7 @@ import { createVCTokenRoutes } from './routes/vcTokenRoutes';
 import enhancedActorRoutes from './routes/enhancedActorRoutes';
 import enhancedPrescriptionRoutes from './routes/enhancedPrescriptionRoutes';
 
-// Environment variables
-const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017"
-const PORT = process.env.PORT || 3000
-const PLATFORM_FUNDING_KEY = process.env.PLATFORM_FUNDING_KEY
-const DB_NAME = process.env.APP_DB_NAME || "quarkid_prescriptions_db";
-const EXPRESS_LIMIT = process.env.EXPRESS_LIMIT || "50mb";
-const requiredEnvVars = {
-  DID_TOPIC: process.env.DID_TOPIC || 'tm_did',
-  VC_TOPIC: process.env.VC_TOPIC || 'tm_did',
-  OVERLAY_PROVIDER_URL: process.env.OVERLAY_PROVIDER_URL || 'https://overlay.test.com',
-  DEFAULT_FUNDING_PUBLIC_KEY_HEX: process.env.DEFAULT_FUNDING_PUBLIC_KEY_HEX,
-  FEE_PER_KB: process.env.FEE_PER_KB,
-};
-
-if (requiredEnvVars.DEFAULT_FUNDING_PUBLIC_KEY_HEX && !/^[0-9a-fA-F]{64}$/.test(requiredEnvVars.DEFAULT_FUNDING_PUBLIC_KEY_HEX)) {
-  console.error('DEFAULT_FUNDING_PUBLIC_KEY_HEX must be a 64-character hexadecimal string');
-  process.exit(1);
-}
-
-if (requiredEnvVars.FEE_PER_KB && isNaN(parseInt(requiredEnvVars.FEE_PER_KB, 10))) {
-  console.error('FEE_PER_KB must be a valid integer');
-  process.exit(1);
-}
-
-const walletStorageUrl = 'https://storage.babbage.systems'
+import { appConfig } from './config/AppConfig';
 
 // Simple identity record interface
 interface IdentityRecord {
@@ -76,25 +52,25 @@ export const createWalletClient = async (key: string): Promise<{ wallet: Wallet;
         storage,
         services,
     })
-    const client = new StorageClient(wallet, walletStorageUrl)
+    const client = new StorageClient(wallet, appConfig.walletStorageUrl)
     await storage.addWalletStorageProvider(client)
     await storage.makeAvailable()
     return { wallet, walletClient: new WalletClient(wallet) }
 }
 
 let db: Db
-let quarkIdActorService: QuarkIdActorService
+let actorService: ActorService
 let quarkIdAgentService: QuarkIdAgentService
 let prescriptionTokenService: PrescriptionTokenService
 let vcTokenService: VCTokenService
 
 async function startServer() {
     const app = express();
-    const port = PORT;
+    const port = appConfig.port;
     app.use(bodyParser.json())
     app.use(cors())
     
-    const { wallet, walletClient }: { wallet: Wallet; walletClient: WalletClient } = await createWalletClient(PLATFORM_FUNDING_KEY) // Explicitly type wallet
+    const { wallet, walletClient }: { wallet: Wallet; walletClient: WalletClient } = await createWalletClient(appConfig.platformFundingKey) // Explicitly type wallet
     const auth = createAuthMiddleware({ 
       wallet: walletClient,
       allowUnauthenticated: true // Allow requests without auth for testing
@@ -102,37 +78,35 @@ async function startServer() {
 
     // Initialize database connection
     console.log('Connecting to MongoDB...');
-    const client = new MongoClient(mongoUri);
+    const client = new MongoClient(appConfig.mongoUri);
     await client.connect();
-    db = client.db(DB_NAME);
+    db = client.db(appConfig.dbName);
     console.log('Connected to MongoDB successfully');
-
-    // Initialize QuarkIdActorService
-    quarkIdActorService = new QuarkIdActorService(
-      db,
-      walletClient
-      // Agent and DidRegistry will be added later when properly configured
-    );
 
     // Initialize QuarkIdAgentService
     quarkIdAgentService = new QuarkIdAgentService({
-      mongodb: {
-        uri: process.env.MONGODB_URI || 'mongodb://localhost:27017',
-        dbName: DB_NAME
-      },
+      mongodb: appConfig.mongoConfig,
       wallet: wallet,
       walletClient: walletClient,
-      overlayProvider: process.env.OVERLAY_PROVIDER_URL || 'https://overlay.test.com',
-      dwnUrl: process.env.DWN_URL
+      overlayProvider: appConfig.overlayProviderUrl,
+      dwnUrl: appConfig.dwnUrl
     });
+
+    // Initialize ActorService
+    actorService = new ActorService(
+      db,
+      walletClient,
+      quarkIdAgentService,
+      appConfig.overlayConfig
+    );
 
     // Initialize Prescription Token Service
     prescriptionTokenService = new PrescriptionTokenService(
       db,
       walletClient,
       {
-        endpoint: process.env.OVERLAY_PROVIDER_URL || 'https://overlay.test.com',
-        topic: process.env.PRESCRIPTION_TOPIC || 'prescriptions'
+        endpoint: appConfig.overlayProviderUrl,
+        topic: appConfig.prescriptionTopic
       },
       quarkIdAgentService
     );
@@ -168,7 +142,7 @@ async function startServer() {
     app.use((req, res, next) => {
         req.db = db;
         req.walletClient = walletClient
-        req.quarkIdActorService = quarkIdActorService
+        req.quarkIdActorService = actorService
         req.quarkIdAgentService = quarkIdAgentService
         req.prescriptionTokenService = prescriptionTokenService
         req.vcTokenService = vcTokenService
@@ -183,6 +157,7 @@ async function startServer() {
         status: 'running',
         mongodb: !!db ? 'connected' : 'not connected',
         walletClient: !!walletClient ? 'connected' : 'not connected',
+        actorService: !!actorService ? 'connected' : 'not connected',
         quarkIdAgentService: !!quarkIdAgentService ? 'connected' : 'not connected',
         prescriptionTokenService: !!prescriptionTokenService ? 'connected' : 'not connected',
         vcTokenService: !!vcTokenService ? 'connected' : 'not connected',
@@ -257,6 +232,7 @@ async function startServer() {
         status: 'ok',
         mongodb: !!db ? 'connected' : 'not connected',
         walletClient: !!walletClient ? 'connected' : 'not connected',
+        actorService: !!actorService ? 'connected' : 'not connected',
         quarkIdAgentService: !!quarkIdAgentService ? 'connected' : 'not connected',
         prescriptionTokenService: !!prescriptionTokenService ? 'connected' : 'not connected',
         vcTokenService: !!vcTokenService ? 'connected' : 'not connected'
