@@ -185,6 +185,422 @@
   line-height: 1.4;
 }
 
+/* Fraud Prevention Styles */
+.fraud-prevention-workflow {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.fraud-score {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-align: center;
+  min-width: 60px;
+  display: inline-block;
+}
+
+.fraud-score.low {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.fraud-score.medium {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.fraud-score.high {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.fraud-score.critical {
+  background-color: #f5c6cb;
+  color: #721c24;
+  animation: pulse 2s infinite;
+}
+
+.fraud-score.unknown {
+  background-color: #e2e3e5;
+  color: #6c757d;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.selective-disclosure {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.selective-disclosure h5 {
+  color: #61dafb;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.selective-disclosure pre {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.8rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  overflow-x: auto;
+  max-height: 200px;
+  overflow-y: auto;
+  color: #e2e8f0;
+}
+
+.alerts-section {
+  padding: 1rem;
+}
+
+.alerts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.alert-card {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 1rem;
+  border-left: 4px solid;
+}
+
+.alert-card.severity-low {
+  border-left-color: #28a745;
+}
+
+.alert-card.severity-medium {
+  border-left-color: #ffc107;
+}
+
+.alert-card.severity-high {
+  border-left-color: #dc3545;
+}
+
+.alert-card.severity-critical {
+  border-left-color: #dc3545;
+  animation: pulse 2s infinite;
+}
+
+.alert-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.alert-header h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: white;
+}
+
+.severity-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.severity-badge.low {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.severity-badge.medium {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.severity-badge.high {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.severity-badge.critical {
+  background-color: #f5c6cb;
+  color: #721c24;
+}
+
+.alert-details p {
+  margin: 0 0 0.5rem 0;
+  color: #e2e8f0;
+}
+
+.alert-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.alert-meta span {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.prescription-card,
+.prescriptions-grid > div {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.prescription-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.prescription-header h4 {
+  margin: 0;
+  color: white;
+  font-size: 1.1rem;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-badge.status-created {
+  background-color: #cce5ff;
+  color: #004085;
+}
+
+.status-badge.status-verified {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status-badge.status-dispensed {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.status-badge.status-confirmed {
+  background-color: #d1ecf1;
+  color: #0c5460;
+}
+
+.prescription-details {
+  margin-bottom: 1rem;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.detail-row .label {
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.detail-row .value {
+  color: #e2e8f0;
+}
+
+.prescription-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.action-button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: white;
+}
+
+.action-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.action-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.action-button.verify {
+  background-color: #007bff;
+}
+
+.action-button.verify:hover {
+  background-color: #0056b3;
+}
+
+.action-button.dispense {
+  background-color: #28a745;
+}
+
+.action-button.dispense:hover {
+  background-color: #1e7e34;
+}
+
+.action-button.disclosure {
+  background-color: #6f42c1;
+}
+
+.action-button.disclosure:hover {
+  background-color: #5a359e;
+}
+
+.prescription-form {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.prescription-form h4 {
+  margin-bottom: 1rem;
+  color: white;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  margin-bottom: 0.5rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group select {
+  padding: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 0.9rem;
+}
+
+.form-group input::placeholder {
+  color: #94a3b8;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #61dafb;
+  box-shadow: 0 0 0 2px rgba(97, 218, 251, 0.2);
+}
+
+.primary-button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.primary-button:hover {
+  background-color: #0056b3;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.primary-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.secondary-button {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.secondary-button:hover {
+  background-color: #545b62;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  color: #94a3b8;
+}
+
+.empty-state .empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.empty-state h4 {
+  margin-bottom: 0.5rem;
+  color: #e2e8f0;
+}
+
+.empty-state p {
+  margin: 0;
+  color: #94a3b8;
+}
+
+.prescriptions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 1rem;
+}
+
 @media (max-width: 768px) {
   .app-header {
     padding: 1rem;
@@ -205,5 +621,26 @@
   
   .stats-grid {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+  
+  .fraud-prevention-workflow {
+    padding: 1rem;
+  }
+  
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .prescriptions-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .prescription-actions {
+    flex-direction: column;
+  }
+  
+  .alert-meta {
+    flex-direction: column;
+    gap: 0.5rem;
   }
 }

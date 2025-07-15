@@ -8,7 +8,10 @@ import type {
   DispensationCredential,
   ConfirmationCredential,
   BSVToken,
-  PrescriptionFlow
+  PrescriptionFlow,
+  FraudPreventionPrescription,
+  SelectiveDisclosure,
+  FraudAlert
 } from '../types';
 
 // Actions
@@ -25,6 +28,13 @@ type AppAction =
   | { type: 'ADD_CONFIRMATION'; payload: ConfirmationCredential }
   | { type: 'ADD_TOKEN'; payload: BSVToken }
   | { type: 'UPDATE_TOKEN'; payload: BSVToken }
+  // Fraud Prevention Actions
+  | { type: 'SET_FRAUD_PREVENTION_PRESCRIPTIONS'; payload: FraudPreventionPrescription[] }
+  | { type: 'ADD_FRAUD_PREVENTION_PRESCRIPTION'; payload: FraudPreventionPrescription }
+  | { type: 'UPDATE_FRAUD_PREVENTION_PRESCRIPTION'; payload: FraudPreventionPrescription }
+  | { type: 'ADD_SELECTIVE_DISCLOSURE'; payload: SelectiveDisclosure }
+  | { type: 'ADD_FRAUD_ALERT'; payload: FraudAlert }
+  | { type: 'CLEAR_FRAUD_ALERTS' }
   | { type: 'RESET_STATE' };
 
 // Initial state
@@ -34,7 +44,11 @@ const initialState: AppState = {
   prescriptions: [],
   dispensations: [],
   confirmations: [],
-  tokens: []
+  tokens: [],
+  // Fraud Prevention State
+  fraudPreventionPrescriptions: [],
+  selectiveDisclosures: [],
+  fraudAlerts: []
 };
 
 // Reducer
@@ -142,6 +156,55 @@ function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
+    // Fraud Prevention Cases
+    case 'SET_FRAUD_PREVENTION_PRESCRIPTIONS': {
+      return {
+        ...state,
+        fraudPreventionPrescriptions: action.payload
+      };
+    }
+
+    case 'ADD_FRAUD_PREVENTION_PRESCRIPTION': {
+      const exists = state.fraudPreventionPrescriptions.some(p => p.id === action.payload.id);
+      if (exists) {
+        return state;
+      }
+      return {
+        ...state,
+        fraudPreventionPrescriptions: [...state.fraudPreventionPrescriptions, action.payload]
+      };
+    }
+
+    case 'UPDATE_FRAUD_PREVENTION_PRESCRIPTION': {
+      return {
+        ...state,
+        fraudPreventionPrescriptions: state.fraudPreventionPrescriptions.map(prescription =>
+          prescription.id === action.payload.id ? action.payload : prescription
+        )
+      };
+    }
+
+    case 'ADD_SELECTIVE_DISCLOSURE': {
+      return {
+        ...state,
+        selectiveDisclosures: [...state.selectiveDisclosures, action.payload]
+      };
+    }
+
+    case 'ADD_FRAUD_ALERT': {
+      return {
+        ...state,
+        fraudAlerts: [...state.fraudAlerts, action.payload]
+      };
+    }
+
+    case 'CLEAR_FRAUD_ALERTS': {
+      return {
+        ...state,
+        fraudAlerts: []
+      };
+    }
+
     case 'RESET_STATE': {
       return initialState;
     }
@@ -162,6 +225,11 @@ interface AppContextType {
   getCurrentTokens: () => BSVToken[];
   getActorByDid: (did: string) => Actor | undefined;
   getPrescriptionFlows: () => PrescriptionFlow[];
+  // Fraud Prevention helpers
+  getCurrentFraudPreventionPrescriptions: () => FraudPreventionPrescription[];
+  getFraudAlertsByPrescription: (prescriptionId: string) => FraudAlert[];
+  getSelectiveDisclosuresByActor: (actorType: 'insurance' | 'pharmacy' | 'audit') => SelectiveDisclosure[];
+  getHighRiskPrescriptions: () => FraudPreventionPrescription[];
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -273,6 +341,46 @@ export function AppProvider({ children }: AppProviderProps) {
     return flows;
   };
 
+  // Fraud Prevention Helper Functions
+  const getCurrentFraudPreventionPrescriptions = (): FraudPreventionPrescription[] => {
+    if (!state.currentActor?.did) return [];
+    
+    return state.fraudPreventionPrescriptions.filter(prescription => {
+      if (state.currentActor?.type === 'patient') {
+        return prescription.patientDid === state.currentActor.did;
+      } else if (state.currentActor?.type === 'doctor') {
+        return prescription.doctorDid === state.currentActor.did;
+      } else if (state.currentActor?.type === 'insurance') {
+        return prescription.patientInfo.insuranceProvider === state.currentActor.name;
+      } else if (state.currentActor?.type === 'pharmacy') {
+        // Pharmacies see prescriptions they can verify/dispense
+        return prescription.status === 'created' || prescription.status === 'verified';
+      } else if (state.currentActor?.type === 'auditor') {
+        // Auditors see all prescriptions
+        return true;
+      }
+      return false;
+    });
+  };
+
+  const getFraudAlertsByPrescription = (prescriptionId: string): FraudAlert[] => {
+    return state.fraudAlerts.filter(alert => alert.prescriptionId === prescriptionId);
+  };
+
+  const getSelectiveDisclosuresByActor = (actorType: 'insurance' | 'pharmacy' | 'audit'): SelectiveDisclosure[] => {
+    if (!state.currentActor?.did) return [];
+    
+    return state.selectiveDisclosures.filter(disclosure => 
+      disclosure.actorType === actorType && disclosure.requestorDid === state.currentActor?.did
+    );
+  };
+
+  const getHighRiskPrescriptions = (): FraudPreventionPrescription[] => {
+    return state.fraudPreventionPrescriptions.filter(prescription => 
+      prescription.fraudScore !== undefined && prescription.fraudScore >= 50
+    );
+  };
+
   const contextValue: AppContextType = {
     state,
     dispatch,
@@ -280,7 +388,12 @@ export function AppProvider({ children }: AppProviderProps) {
     getCurrentDispensations,
     getCurrentTokens,
     getActorByDid,
-    getPrescriptionFlows
+    getPrescriptionFlows,
+    // Fraud Prevention helpers
+    getCurrentFraudPreventionPrescriptions,
+    getFraudAlertsByPrescription,
+    getSelectiveDisclosuresByActor,
+    getHighRiskPrescriptions
   };
 
   return (

@@ -4,6 +4,7 @@ import { useAuth } from './context/AuthContext';
 import { ActorManagement } from './components/ActorManagement';
 import PrescriptionWorkflow from './components/PrescriptionWorkflow';
 import PrescriptionDashboard from './components/PrescriptionDashboard';
+import FraudPreventionWorkflow from './components/FraudPreventionWorkflow';
 import QRScanner from './components/QRScanner';
 import DIDResolver from './components/DidResolver';
 import Login from './components/Login';
@@ -58,6 +59,34 @@ function App() {
                 </Link>
               </li>
               
+              {/* Prescription workflows - Available to relevant actors */}
+              {(currentUser?.type === 'doctor' || currentUser?.type === 'pharmacy' || currentUser?.type === 'patient' || currentUser?.type === 'admin') && (
+                <li>
+                  <Link 
+                    to="/prescription" 
+                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors hover:bg-gray-700 ${
+                      location.pathname === '/prescription' ? 'bg-blue-600 text-white' : 'text-gray-300'
+                    }`}
+                  >
+                    💊 Prescriptions
+                  </Link>
+                </li>
+              )}
+              
+              {/* Fraud Prevention - Available to relevant actors */}
+              {(currentUser?.type === 'doctor' || currentUser?.type === 'pharmacy' || currentUser?.type === 'insurance' || currentUser?.type === 'auditor' || currentUser?.type === 'admin') && (
+                <li>
+                  <Link 
+                    to="/fraud-prevention" 
+                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors hover:bg-gray-700 ${
+                      location.pathname === '/fraud-prevention' ? 'bg-blue-600 text-white' : 'text-gray-300'
+                    }`}
+                  >
+                    🔒 Fraud Prevention
+                  </Link>
+                </li>
+              )}
+
               {/* Admin-only pages */}
               {currentUser?.type === 'admin' && (
                 <>
@@ -146,8 +175,14 @@ function App() {
           } />
           
           <Route path="/prescription" element={
-            <ProtectedRoute allowedRoles={['doctor', 'admin']}>
+            <ProtectedRoute allowedRoles={['doctor', 'pharmacy', 'patient', 'admin']}>
               <PrescriptionWorkflow />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/fraud-prevention" element={
+            <ProtectedRoute allowedRoles={['doctor', 'pharmacy', 'insurance', 'auditor', 'admin']}>
+              <FraudPreventionWorkflow />
             </ProtectedRoute>
           } />
           

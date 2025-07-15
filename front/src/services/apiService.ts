@@ -628,6 +628,117 @@ class ApiService {
     return this.request('PUT', `/v1/dids/${encodeURIComponent(did)}`, updateData);
   }
 
+  // Fraud Prevention API
+
+  /**
+   * Create fraud prevention prescription with BBS+ signature
+   */
+  async createFraudPreventionPrescription(params: {
+    doctorDid: string;
+    patientDid: string;
+    prescriptionData: {
+      medicationName: string;
+      dosage: string;
+      frequency: string;
+      duration: string;
+      quantity: number;
+      refills: number;
+      validUntil: string;
+    };
+    patientInfo: {
+      name: string;
+      birthDate?: string;
+      insuranceProvider?: string;
+    };
+    doctorInfo: {
+      name: string;
+      licenseNumber: string;
+      specialization?: string;
+    };
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/fraud-prevention/prescription/create', params);
+  }
+
+  /**
+   * Verify prescription for pharmacy using selective disclosure
+   */
+  async verifyFraudPreventionPrescription(params: {
+    pharmacyDid: string;
+    prescriptionCredentialId: string;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/fraud-prevention/prescription/verify', params);
+  }
+
+  /**
+   * Create dispensing proof with fraud scoring
+   */
+  async createDispensingProof(params: {
+    pharmacyDid: string;
+    prescriptionCredentialId: string;
+    dispensingData: {
+      batchNumber: string;
+      expirationDate: string;
+      quantityDispensed: number;
+      pharmacyName: string;
+      pharmacistLicense: string;
+    };
+    patientConfirmation: boolean;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/fraud-prevention/dispensing/create', params);
+  }
+
+  /**
+   * Verify insurance claim using selective disclosure ZKP
+   */
+  async verifyInsuranceClaim(params: {
+    insurerDid: string;
+    prescriptionCredentialId: string;
+    dispensingCredentialId: string;
+    claimAmount?: number;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/fraud-prevention/insurance/verify', params);
+  }
+
+  /**
+   * Get selective disclosure for different actor types
+   */
+  async getSelectiveDisclosure(params: {
+    prescriptionId: string;
+    actorType: 'insurance' | 'pharmacy' | 'audit';
+    requestorDid: string;
+  }): Promise<ApiResponse> {
+    const { prescriptionId, actorType, requestorDid } = params;
+    return this.request('GET', `/v1/fraud-prevention/prescription/${prescriptionId}/disclosure?actorType=${actorType}&requestorDid=${encodeURIComponent(requestorDid)}`);
+  }
+
+  /**
+   * Request full audit disclosure
+   */
+  async requestAuditFullDisclosure(params: {
+    auditorDid: string;
+    prescriptionCredentialId: string;
+    auditReason: string;
+    authorizationToken: string;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/fraud-prevention/audit/full-disclosure', params);
+  }
+
+  /**
+   * Get fraud prevention statistics
+   */
+  async getFraudPreventionStats(): Promise<ApiResponse> {
+    return this.request('GET', '/v1/fraud-prevention/statistics');
+  }
+
+  /**
+   * Run complete fraud prevention workflow demonstration
+   */
+  async runFraudPreventionDemo(params: {
+    demoScenario: 'normal' | 'fraud';
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/fraud-prevention/demo/complete-workflow', params);
+  }
+
   // Health Check
 
   /**

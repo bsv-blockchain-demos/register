@@ -35,7 +35,7 @@ export interface CreateDidResponse {
 }
 
 // ==== Actor Types ====
-export type ActorType = 'patient' | 'doctor' | 'pharmacy' | 'insurance' | 'admin';
+export type ActorType = 'patient' | 'doctor' | 'pharmacy' | 'insurance' | 'admin' | 'auditor';
 
 export interface Actor {
   id: string;
@@ -141,6 +141,55 @@ export interface BSVToken {
   };
 }
 
+// ==== Fraud Prevention Types ====
+export interface FraudPreventionPrescription {
+  id: string;
+  doctorDid: string;
+  patientDid: string;
+  prescriptionData: {
+    medicationName: string;
+    dosage: string;
+    frequency: string;
+    duration: string;
+    quantity: number;
+    refills: number;
+    validUntil: string;
+  };
+  patientInfo: {
+    name: string;
+    birthDate?: string;
+    insuranceProvider?: string;
+  };
+  doctorInfo: {
+    name: string;
+    licenseNumber: string;
+    specialization?: string;
+  };
+  fraudScore?: number;
+  credentialId?: string;
+  bbsSignature?: string;
+  createdAt: Date;
+  status: 'created' | 'verified' | 'dispensed' | 'confirmed';
+}
+
+export interface SelectiveDisclosure {
+  prescriptionId: string;
+  actorType: 'insurance' | 'pharmacy' | 'audit';
+  disclosedData: Record<string, any>;
+  requestorDid: string;
+  requestTime: Date;
+}
+
+export interface FraudAlert {
+  id: string;
+  type: 'HIGH_FRAUD_SCORE' | 'SUSPICIOUS_PATTERN' | 'DUPLICATE_PRESCRIPTION';
+  prescriptionId: string;
+  fraudScore: number;
+  message: string;
+  timestamp: Date;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+}
+
 // ==== UI State Types ====
 export interface AppState {
   currentActor: Actor | null;
@@ -149,6 +198,10 @@ export interface AppState {
   dispensations: DispensationCredential[];
   confirmations: ConfirmationCredential[];
   tokens: BSVToken[];
+  // Fraud Prevention State
+  fraudPreventionPrescriptions: FraudPreventionPrescription[];
+  selectiveDisclosures: SelectiveDisclosure[];
+  fraudAlerts: FraudAlert[];
 }
 
 // ==== QR Code Types ====
