@@ -1,10 +1,10 @@
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { InsuranceFraudPreventionService } from '../services/InsuranceFraudPreventionService';
 import { ValidationMiddleware, ErrorMiddleware } from '../middleware/validation';
 import { 
   ApiError, 
-  ApiResponse, 
-  QuarkIdRequest 
+  ApiResponse
 } from '../types/common';
 
 /**
@@ -21,13 +21,30 @@ import {
 export function createFraudPreventionRoutes(): Router {
   const router = Router();
 
+  // Rate limiting for fraud prevention endpoints
+  const fraudPreventionLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per window
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      success: false,
+      error: 'Too many fraud prevention requests from this IP, please try again after 15 minutes'
+    } as ApiError,
+    skipSuccessfulRequests: false
+  });
+
+  // Apply rate limiting to all routes in this router
+  router.use(fraudPreventionLimiter);
+
   /**
    * POST /fraud-prevention/prescription/create
    * Doctor creates a prescription credential with BBS+ selective disclosure capabilities
    */
   router.post('/prescription/create', 
+    requireActorRole(['doctor']),
     ValidationMiddleware.requireFields(['doctorDid', 'patientDid', 'prescriptionData', 'patientInfo', 'doctorInfo']),
-    ErrorMiddleware.asyncHandler(async (req: QuarkIdRequest, res: Response) => {
+    ErrorMiddleware.asyncHandler(async (req: Request, res: Response) => {
       try {
         console.log('[FraudPreventionRoutes] Creating prescription credential');
 
@@ -88,8 +105,9 @@ export function createFraudPreventionRoutes(): Router {
    * Pharmacy verifies prescription credential using selective disclosure
    */
   router.post('/prescription/verify',
+    requireActorRole(['pharmacy']),
     ValidationMiddleware.requireFields(['pharmacyDid', 'prescriptionCredentialId']),
-    ErrorMiddleware.asyncHandler(async (req: QuarkIdRequest, res: Response) => {
+    ErrorMiddleware.asyncHandler(async (req: Request, res: Response) => {
       try {
         console.log('[FraudPreventionRoutes] Verifying prescription for pharmacy');
 
@@ -155,8 +173,9 @@ export function createFraudPreventionRoutes(): Router {
    * Pharmacy generates dispensing proof after medication is dispensed
    */
   router.post('/dispensing/create',
+    requireActorRole(['pharmacy']),
     ValidationMiddleware.requireFields(['pharmacyDid', 'prescriptionCredentialId', 'dispensingData', 'patientConfirmation']),
-    ErrorMiddleware.asyncHandler(async (req: QuarkIdRequest, res: Response) => {
+    ErrorMiddleware.asyncHandler(async (req: Request, res: Response) => {
       try {
         console.log('[FraudPreventionRoutes] Creating dispensing proof');
 
@@ -187,6 +206,17 @@ export function createFraudPreventionRoutes(): Router {
           patientConfirmation: Boolean(patientConfirmation)
         });
 
+        // Real-time fraud monitoring - alert on high fraud scores
+        if (result.fraudScore >= 50) {
+          console.warn(`[FRAUD ALERT] High fraud score detected: ${result.fraudScore}`, {
+            pharmacyDid,
+            prescriptionCredentialId,
+            fraudScore: result.fraudScore,
+            timestamp: new Date().toISOString(),
+            alert: 'HIGH_FRAUD_SCORE'
+          });
+        }
+
         console.log('[FraudPreventionRoutes] Dispensing proof created successfully');
 
         res.status(201).json({
@@ -215,8 +245,9 @@ export function createFraudPreventionRoutes(): Router {
    * Insurance company verifies claim using minimal selective disclosure
    */
   router.post('/insurance/verify',
+    requireActorRole(['insurance']),
     ValidationMiddleware.requireFields(['insurerDid', 'prescriptionCredentialId', 'dispensingCredentialId']),
-    ErrorMiddleware.asyncHandler(async (req: QuarkIdRequest, res: Response) => {
+    ErrorMiddleware.asyncHandler(async (req: Request, res: Response) => {
       try {
         console.log('[FraudPreventionRoutes] Verifying insurance claim');
 
@@ -242,6 +273,19 @@ export function createFraudPreventionRoutes(): Router {
                         verificationProof.prescriptionExists && 
                         verificationProof.medicationDispensed &&
                         verificationProof.patientConfirmed;
+
+        // Real-time fraud monitoring for insurance claims
+        if (verificationProof.fraudScore >= 50) {
+          console.warn(`[FRAUD ALERT] High fraud score in insurance claim: ${verificationProof.fraudScore}`, {
+            insurerDid,
+            prescriptionCredentialId,
+            dispensingCredentialId,
+            fraudScore: verificationProof.fraudScore,
+            claimApproved: approved,
+            timestamp: new Date().toISOString(),
+            alert: 'INSURANCE_FRAUD_DETECTED'
+          });
+        }
 
         console.log(`[FraudPreventionRoutes] Insurance verification completed: ${approved ? 'APPROVED' : 'DENIED'}`);
 
@@ -281,7 +325,7 @@ export function createFraudPreventionRoutes(): Router {
    */
   router.get('/prescription/:id/disclosure',
     ValidationMiddleware.requireParams(['id']),
-    ErrorMiddleware.asyncHandler(async (req: QuarkIdRequest, res: Response) => {
+    ErrorMiddleware.asyncHandler(async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
         const { actorType, requestorDid } = req.query;
@@ -354,11 +398,235 @@ export function createFraudPreventionRoutes(): Router {
   );
 
   /**
+   * POST /fraud-prevention/demo/complete-workflow
+   * Comprehensive demonstration of the entire fraud prevention workflow
+   * Shows end-to-end process from prescription creation to insurance verification
+   */
+  router.post('/demo/complete-workflow',
+    ValidationMiddleware.requireFields(['demoScenario']),
+    ErrorMiddleware.asyncHandler(async (req: Request, res: Response) => {
+      try {
+        console.log('[FraudPreventionRoutes] Starting complete workflow demonstration');
+
+        const { demoScenario } = req.body;
+        const workflowResults: any = {
+          scenario: demoScenario,
+          steps: [],
+          summary: {},
+          timestamps: {
+            started: new Date().toISOString()
+          }
+        };
+
+        const fraudPreventionService = req.fraudPreventionService;
+        if (!fraudPreventionService) {
+          return res.status(503).json({
+            success: false,
+            error: 'Fraud prevention service not available'
+          } as ApiError);
+        }
+
+        // Demo data - real-world would come from authenticated users
+        const demoData = {
+          doctorDid: 'did:quark:demo-doctor-123',
+          patientDid: 'did:quark:demo-patient-456',
+          pharmacyDid: 'did:quark:demo-pharmacy-789',
+          insurerDid: 'did:quark:demo-insurance-012',
+          auditorDid: 'did:quark:demo-auditor-345',
+          prescriptionData: {
+            medicationName: 'Amoxicillin 500mg',
+            dosage: '500mg',
+            frequency: 'Three times daily',
+            duration: '7 days',
+            quantity: 21,
+            refills: 0,
+            validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
+          },
+          patientInfo: {
+            name: 'Demo Patient',
+            birthDate: '1985-03-15',
+            insuranceProvider: 'Demo Insurance Corp'
+          },
+          doctorInfo: {
+            name: 'Dr. Demo Physician',
+            licenseNumber: 'MD123456',
+            specialization: 'Internal Medicine'
+          },
+          dispensingData: {
+            batchNumber: 'BATCH-2024-001',
+            expirationDate: '2025-12-31',
+            quantityDispensed: demoScenario === 'fraud' ? 30 : 21, // Overprescribing for fraud scenario
+            pharmacyName: 'Demo Pharmacy',
+            pharmacistLicense: 'RPH789012'
+          },
+          patientConfirmation: demoScenario !== 'fraud' // Patient doesn't confirm in fraud scenario
+        };
+
+        // Step 1: Doctor creates prescription
+        console.log('[Demo] Step 1: Doctor creating prescription...');
+        const prescriptionResult = await fraudPreventionService.createPrescriptionCredential({
+          doctorDid: demoData.doctorDid,
+          patientDid: demoData.patientDid,
+          prescriptionData: demoData.prescriptionData,
+          patientInfo: demoData.patientInfo,
+          doctorInfo: demoData.doctorInfo
+        });
+
+        workflowResults.steps.push({
+          step: 1,
+          action: 'Prescription Creation',
+          actor: 'Doctor',
+          result: {
+            prescriptionId: prescriptionResult.prescriptionCredential.credentialSubject.prescription.id,
+            credentialId: prescriptionResult.prescriptionCredential.id,
+            blockchainAnchor: prescriptionResult.blockchainAnchor,
+            selectiveDisclosureEnabled: true
+          },
+          timestamp: new Date().toISOString()
+        });
+
+        // Step 2: Pharmacy generates dispensing proof
+        console.log('[Demo] Step 2: Pharmacy creating dispensing proof...');
+        const dispensingResult = await fraudPreventionService.generateDispensingProof({
+          pharmacyDid: demoData.pharmacyDid,
+          prescriptionCredentialId: prescriptionResult.vcToken.vcId,
+          dispensingData: demoData.dispensingData,
+          patientConfirmation: demoData.patientConfirmation
+        });
+
+        workflowResults.steps.push({
+          step: 2,
+          action: 'Dispensing Proof Creation',
+          actor: 'Pharmacy',
+          result: {
+            dispensingCredentialId: dispensingResult.dispensingCredential.id,
+            fraudScore: dispensingResult.fraudScore,
+            fraudRisk: dispensingResult.fraudScore >= 50 ? 'high' : dispensingResult.fraudScore >= 25 ? 'medium' : 'low'
+          },
+          timestamp: new Date().toISOString()
+        });
+
+        // Step 3: Insurance verification
+        console.log('[Demo] Step 3: Insurance verifying claim...');
+        const insuranceResult = await fraudPreventionService.verifyInsuranceClaim({
+          insurerDid: demoData.insurerDid,
+          prescriptionCredentialId: prescriptionResult.vcToken.vcId,
+          dispensingCredentialId: dispensingResult.dispensingCredential.id,
+          claimAmount: 45.99
+        });
+
+        const claimApproved = insuranceResult.fraudScore < 50 && 
+                            insuranceResult.prescriptionExists && 
+                            insuranceResult.medicationDispensed &&
+                            insuranceResult.patientConfirmed;
+
+        workflowResults.steps.push({
+          step: 3,
+          action: 'Insurance Claim Verification',
+          actor: 'Insurance Company',
+          result: {
+            claimApproved,
+            fraudScore: insuranceResult.fraudScore,
+            fraudRisk: insuranceResult.fraudScore >= 50 ? 'high' : insuranceResult.fraudScore >= 25 ? 'medium' : 'low',
+            verification: {
+              prescriptionExists: insuranceResult.prescriptionExists,
+              medicationDispensed: insuranceResult.medicationDispensed,
+              doctorAuthorized: insuranceResult.doctorAuthorized,
+              pharmacyAuthorized: insuranceResult.pharmacyAuthorized,
+              patientConfirmed: insuranceResult.patientConfirmed
+            },
+            proofHash: insuranceResult.proofHash
+          },
+          timestamp: new Date().toISOString()
+        });
+
+        // Step 4: Demonstrate selective disclosure for different actors
+        console.log('[Demo] Step 4: Demonstrating selective disclosure...');
+        const kmsClient = req.kmsClient;
+        const vcTokenService = req.vcTokenService;
+        
+        if (kmsClient && vcTokenService) {
+          const { DISCLOSURE_FRAMES } = await import('../services/InsuranceFraudPreventionService');
+          
+          // Show what each actor can see
+          const disclosures: any = {};
+          
+          // Insurance disclosure (minimal info)
+          disclosures.insurance = await kmsClient.deriveVC({
+            vc: prescriptionResult.prescriptionCredential,
+            frame: DISCLOSURE_FRAMES.insurance
+          });
+          
+          // Pharmacy disclosure (medication details)
+          disclosures.pharmacy = await kmsClient.deriveVC({
+            vc: prescriptionResult.prescriptionCredential,
+            frame: DISCLOSURE_FRAMES.pharmacy
+          });
+          
+          // Audit disclosure (full information)
+          disclosures.audit = await kmsClient.deriveVC({
+            vc: prescriptionResult.prescriptionCredential,
+            frame: DISCLOSURE_FRAMES.audit
+          });
+
+          workflowResults.steps.push({
+            step: 4,
+            action: 'Selective Disclosure Demonstration',
+            actor: 'System',
+            result: {
+              availableDisclosures: ['insurance', 'pharmacy', 'audit'],
+              note: 'Each actor sees only the information they need for their role'
+            },
+            timestamp: new Date().toISOString()
+          });
+        }
+
+        // Workflow summary
+        workflowResults.timestamps.completed = new Date().toISOString();
+        workflowResults.summary = {
+          scenario: demoScenario,
+          finalFraudScore: insuranceResult.fraudScore,
+          claimApproved,
+          totalSteps: workflowResults.steps.length,
+          privacyFeatures: {
+            bbsPlusSignatures: true,
+            selectiveDisclosure: true,
+            blockchainAnchoring: true,
+            zeroKnowledgeProofs: true
+          },
+          securityFeatures: {
+            roleBasedAccess: true,
+            rateLimiting: true,
+            fraudMonitoring: true,
+            auditTrail: true
+          }
+        };
+
+        console.log(`[Demo] Complete workflow demonstration finished - Scenario: ${demoScenario}, Fraud Score: ${insuranceResult.fraudScore}`);
+
+        res.status(200).json({
+          success: true,
+          data: workflowResults,
+          message: `Complete fraud prevention workflow demonstration completed for scenario: ${demoScenario}`
+        } as ApiResponse);
+
+      } catch (error) {
+        console.error('[FraudPreventionRoutes] Error in complete workflow demo:', error);
+        res.status(500).json({
+          success: false,
+          error: 'Failed to execute complete workflow demonstration',
+          details: error.message
+        } as ApiError);
+      }
+    })
+  );
+
+  /**
    * GET /fraud-prevention/statistics
    * Get fraud prevention system statistics (for system administrators)
    */
   router.get('/statistics',
-    ErrorMiddleware.asyncHandler(async (req: QuarkIdRequest, res: Response) => {
+    ErrorMiddleware.asyncHandler(async (req: Request, res: Response) => {
       try {
         console.log('[FraudPreventionRoutes] Getting fraud prevention statistics');
 
@@ -394,8 +662,9 @@ export function createFraudPreventionRoutes(): Router {
    * Auditor requests full disclosure with proper authorization
    */
   router.post('/audit/full-disclosure',
+    requireActorRole(['auditor']),
     ValidationMiddleware.requireFields(['auditorDid', 'prescriptionCredentialId', 'auditReason', 'authorizationToken']),
-    ErrorMiddleware.asyncHandler(async (req: QuarkIdRequest, res: Response) => {
+    ErrorMiddleware.asyncHandler(async (req: Request, res: Response) => {
       try {
         console.log('[FraudPreventionRoutes] Processing audit full disclosure request');
 
@@ -464,7 +733,7 @@ export function createFraudPreventionRoutes(): Router {
  * Middleware to add fraud prevention service to request object
  */
 export const addFraudPreventionService = (fraudPreventionService: InsuranceFraudPreventionService) => {
-  return (req: QuarkIdRequest, res: Response, next: Function) => {
+  return (req: Request, res: Response, next: Function) => {
     req.fraudPreventionService = fraudPreventionService;
     next();
   };
@@ -474,7 +743,7 @@ export const addFraudPreventionService = (fraudPreventionService: InsuranceFraud
  * Role-based access control middleware for different actor types
  */
 export const requireActorRole = (allowedRoles: string[]) => {
-  return (req: QuarkIdRequest, res: Response, next: Function) => {
+  return (req: Request, res: Response, next: Function) => {
     const { actorRole, actorDid } = req.headers;
     
     if (!actorRole || !allowedRoles.includes(actorRole as string)) {

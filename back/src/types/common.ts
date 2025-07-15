@@ -12,7 +12,7 @@ import { KMSClient } from '@quarkid/kms-client';
 /**
  * Extended Express Request interface with QuarkID services
  */
-export interface QuarkIdRequest extends Express.Request {
+export interface QuarkIdRequest {
   db?: Db;
   walletClient?: WalletClient;
   quarkIdActorService?: ActorService;
