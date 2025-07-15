@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 import { WalletClient } from '@bsv/sdk';
 import { Db } from 'mongodb';
 import { PrescriptionTokenService } from '../services/prescriptionTokenService.js';
+import { VCTokenService } from '../services/vcTokenService.js';
 
 const router = express.Router();
 
@@ -12,6 +13,9 @@ interface CustomRequest extends Request {
   db?: Db;
   prescriptionTokenService?: PrescriptionTokenService;
   quarkIdAgentService?: any;
+  kmsClient?: any;
+  fraudPreventionService?: any;
+  vcTokenService?: VCTokenService;
   body: any;
   params: any;
   query: any;
@@ -39,6 +43,14 @@ router.post('/', async (req: CustomRequest, res) => {
       return res.status(500).json({ error: 'QuarkID Agent service not available' });
     }
 
+    if (!req.kmsClient) {
+      return res.status(500).json({ error: 'KMS Client not available' });
+    }
+
+    if (!req.vcTokenService) {
+      return res.status(500).json({ error: 'VCTokenService not available' });
+    }
+
     const {
       patientDid,
       doctorDid,
@@ -48,7 +60,10 @@ router.post('/', async (req: CustomRequest, res) => {
       instructions,
       diagnosisCode,
       insuranceDid,
-      expiryHours
+      expiryHours,
+      // Additional fraud prevention fields
+      patientInfo,
+      doctorInfo
     } = req.body;
 
     // Validate required fields
@@ -58,7 +73,7 @@ router.post('/', async (req: CustomRequest, res) => {
       });
     }
 
-    // Create prescription token service
+    // Create prescription token service with fraud prevention support
     const tokenService = new PrescriptionTokenService(
       req.db,
       req.walletClient,
@@ -66,7 +81,10 @@ router.post('/', async (req: CustomRequest, res) => {
         endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
         topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
       },
-      req.quarkIdAgentService
+      req.quarkIdAgentService,
+      req.kmsClient,
+      req.fraudPreventionService,
+      req.vcTokenService
     );
 
     const prescriptionData = {
@@ -78,15 +96,29 @@ router.post('/', async (req: CustomRequest, res) => {
       instructions,
       diagnosisCode,
       insuranceDid,
-      expiryHours: expiryHours ? parseInt(expiryHours) : 720 // 30 days default
+      expiryHours: expiryHours ? parseInt(expiryHours) : 720, // 30 days default
+      // Include fraud prevention data
+      patientInfo,
+      doctorInfo
     };
 
     const token = await tokenService.createPrescriptionToken(prescriptionData);
 
     res.status(201).json({
       success: true,
-      message: 'Prescription token created successfully with BSV overlay and VCs',
-      data: token
+      message: 'Prescription token created successfully with BSV overlay, VCs, and fraud prevention',
+      data: {
+        ...token,
+        // Include fraud prevention summary in response
+        fraudPreventionSummary: {
+          enabled: true,
+          fraudScore: token.fraudPrevention.fraudScore,
+          fraudRisk: token.fraudPrevention.fraudRisk,
+          bbsPlusSignature: token.fraudPrevention.bbsPlusSignatureUsed,
+          selectiveDisclosure: token.fraudPrevention.selectiveDisclosureEnabled,
+          insuranceNotified: token.fraudPrevention.insuranceNotified
+        }
+      }
     });
 
   } catch (error) {
@@ -120,7 +152,7 @@ router.get('/:tokenId', async (req: CustomRequest, res) => {
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
       endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
       topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-    }, req.quarkIdAgentService);
+    }, req.quarkIdAgentService, req.kmsClient, req.fraudPreventionService, req.vcTokenService);
 
     const token = await tokenService.getToken(tokenId);
 
@@ -166,7 +198,7 @@ router.get('/patient/:patientDid', async (req: CustomRequest, res) => {
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
       endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
       topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-    }, req.quarkIdAgentService);
+    }, req.quarkIdAgentService, req.kmsClient, req.fraudPreventionService, req.vcTokenService);
 
     const tokens = await tokenService.getTokensByPatient(decodedDid);
 
@@ -209,7 +241,7 @@ router.get('/doctor/:doctorDid', async (req: CustomRequest, res) => {
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
       endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
       topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-    }, req.quarkIdAgentService);
+    }, req.quarkIdAgentService, req.kmsClient, req.fraudPreventionService, req.vcTokenService);
 
     const tokens = await tokenService.getTokensByDoctor(decodedDid);
 
@@ -252,7 +284,7 @@ router.get('/pharmacy/:pharmacyDid', async (req: CustomRequest, res) => {
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
       endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
       topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-    }, req.quarkIdAgentService);
+    }, req.quarkIdAgentService, req.kmsClient, req.fraudPreventionService, req.vcTokenService);
 
     const tokens = await tokenService.getTokensByPharmacy(decodedDid);
 
@@ -293,7 +325,7 @@ router.get('/insurance/:insuranceDid', async (req: CustomRequest, res) => {
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
       endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
       topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-    }, req.quarkIdAgentService);
+    }, req.quarkIdAgentService, req.kmsClient, req.fraudPreventionService, req.vcTokenService);
 
     const tokens = await tokenService.getTokensByInsurance(insuranceDid);
 
@@ -342,7 +374,7 @@ router.post('/share', async (req: CustomRequest, res) => {
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
       endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
       topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-    }, req.quarkIdAgentService);
+    }, req.quarkIdAgentService, req.kmsClient, req.fraudPreventionService, req.vcTokenService);
 
     const updatedToken = await tokenService.sharePrescriptionToken(
       prescriptionId,
@@ -402,7 +434,7 @@ router.post('/:tokenId/dispense', async (req: CustomRequest, res) => {
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
       endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
       topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-    }, req.quarkIdAgentService);
+    }, req.quarkIdAgentService, req.kmsClient, req.fraudPreventionService, req.vcTokenService);
 
     const dispensationData = {
       batchNumber,
@@ -460,7 +492,7 @@ router.post('/:tokenId/confirm', async (req: CustomRequest, res) => {
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {
       endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
       topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
-    }, req.quarkIdAgentService);
+    }, req.quarkIdAgentService, req.kmsClient, req.fraudPreventionService, req.vcTokenService);
 
     const updatedToken = await tokenService.confirmPrescriptionReceipt(tokenId, patientSignature);
 
@@ -508,6 +540,71 @@ router.get('/status/:status', async (req: CustomRequest, res) => {
     console.error('Error fetching prescriptions by status:', error);
     res.status(500).json({
       error: 'Failed to fetch prescriptions by status',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * @route GET /api/prescriptions/:tokenId/disclosure/:actorType
+ * @desc Get selective disclosure for specific actor type
+ */
+router.get('/:tokenId/disclosure/:actorType', async (req: CustomRequest, res) => {
+  try {
+    if (!req.db) {
+      return res.status(500).json({ error: 'Database connection not available' });
+    }
+
+    if (!req.walletClient) {
+      return res.status(500).json({ error: 'Wallet client not available' });
+    }
+
+    if (!req.quarkIdAgentService) {
+      return res.status(500).json({ error: 'QuarkID Agent service not available' });
+    }
+
+    if (!req.kmsClient) {
+      return res.status(500).json({ error: 'KMS Client not available' });
+    }
+
+    const { tokenId, actorType } = req.params;
+    
+    // Validate actor type
+    if (!['insurance', 'pharmacy', 'audit'].includes(actorType)) {
+      return res.status(400).json({ 
+        error: 'Invalid actor type. Must be: insurance, pharmacy, or audit' 
+      });
+    }
+
+    const tokenService = new PrescriptionTokenService(
+      req.db, 
+      req.walletClient, 
+      {
+        endpoint: process.env.BSV_OVERLAY_ENDPOINT || 'https://overlay.quarkid.org',
+        topic: process.env.BSV_OVERLAY_TOPIC || 'prescription-tokens'
+      }, 
+      req.quarkIdAgentService,
+      req.kmsClient,
+      req.fraudPreventionService
+    );
+
+    const disclosure = await tokenService.getSelectiveDisclosure(tokenId, actorType as 'insurance' | 'pharmacy' | 'audit');
+
+    res.json({
+      success: true,
+      data: {
+        disclosure,
+        actorType,
+        tokenId,
+        requestTimestamp: new Date().toISOString()
+      },
+      message: `Selective disclosure created for ${actorType}`
+    });
+
+  } catch (error) {
+    console.error('Error creating selective disclosure:', error);
+    res.status(500).json({
+      error: 'Failed to create selective disclosure',
       details: error.message
     });
   }

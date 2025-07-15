@@ -106,18 +106,7 @@ async function startServer() {
       appConfig.overlayConfig
     );
 
-    // Initialize Prescription Token Service
-    prescriptionTokenService = new PrescriptionTokenService(
-      db,
-      walletClient,
-      {
-        endpoint: appConfig.overlayProviderUrl,
-        topic: appConfig.prescriptionTopic
-      },
-      quarkIdAgentService
-    );
-
-    // Initialize consolidated VC Token Service
+    // Initialize consolidated VC Token Service first
     vcTokenService = new VCTokenService(
       db,
       walletClient,
@@ -201,6 +190,20 @@ async function startServer() {
       vcTokenService,
       quarkIdAgentService,
       fraudPreventionDIDResolver as any
+    );
+
+    // Initialize Prescription Token Service after all dependencies are ready
+    prescriptionTokenService = new PrescriptionTokenService(
+      db,
+      walletClient,
+      {
+        endpoint: appConfig.overlayProviderUrl,
+        topic: appConfig.prescriptionTopic
+      },
+      quarkIdAgentService,
+      kmsClient,
+      fraudPreventionService,
+      vcTokenService
     );
 
     // Logging middleware to print request path and body

@@ -296,6 +296,111 @@ class ApiService {
   }
 
   /**
+   * Create enhanced prescription with fraud prevention (NEW UNIFIED FLOW)
+   */
+  async createEnhancedPrescription(requestData: {
+    doctorDid: string;
+    patientDid: string;
+    medicationName: string;
+    dosage: string;
+    quantity: number;
+    instructions: string;
+    diagnosisCode?: string;
+    insuranceDid?: string;
+    expiryHours?: number;
+    // Additional fraud prevention fields
+    patientInfo?: {
+      name: string;
+      birthDate: string;
+      insuranceNumber?: string;
+      contactInfo?: string;
+    };
+    doctorInfo?: {
+      name: string;
+      licenseNumber: string;
+      specialization: string;
+      contactInfo?: string;
+    };
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/enhanced/prescriptions', requestData);
+  }
+
+  /**
+   * Get enhanced prescription by token ID
+   */
+  async getEnhancedPrescription(tokenId: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/enhanced/prescriptions/${tokenId}`);
+  }
+
+  /**
+   * Get enhanced prescriptions by patient DID
+   */
+  async getEnhancedPrescriptionsByPatient(patientDid: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/enhanced/prescriptions/patient/${encodeURIComponent(patientDid)}`);
+  }
+
+  /**
+   * Get enhanced prescriptions by doctor DID
+   */
+  async getEnhancedPrescriptionsByDoctor(doctorDid: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/enhanced/prescriptions/doctor/${encodeURIComponent(doctorDid)}`);
+  }
+
+  /**
+   * Get enhanced prescriptions by pharmacy DID
+   */
+  async getEnhancedPrescriptionsByPharmacy(pharmacyDid: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/enhanced/prescriptions/pharmacy/${encodeURIComponent(pharmacyDid)}`);
+  }
+
+  /**
+   * Get enhanced prescriptions by insurance DID
+   */
+  async getEnhancedPrescriptionsByInsurance(insuranceDid: string): Promise<ApiResponse> {
+    return this.request('GET', `/v1/enhanced/prescriptions/insurance/${encodeURIComponent(insuranceDid)}`);
+  }
+
+  /**
+   * Share enhanced prescription with pharmacy
+   */
+  async shareEnhancedPrescription(params: {
+    prescriptionId: string;
+    patientDid: string;
+    pharmacyDid: string;
+  }): Promise<ApiResponse> {
+    return this.request('POST', '/v1/enhanced/prescriptions/share', params);
+  }
+
+  /**
+   * Dispense enhanced prescription
+   */
+  async dispenseEnhancedPrescription(tokenId: string, params: {
+    pharmacyDid: string;
+    batchNumber: string;
+    manufacturerInfo: string;
+    dispensedQuantity: number;
+    pharmacistSignature: string;
+  }): Promise<ApiResponse> {
+    return this.request('POST', `/v1/enhanced/prescriptions/${tokenId}/dispense`, params);
+  }
+
+  /**
+   * Confirm enhanced prescription receipt
+   */
+  async confirmEnhancedPrescription(tokenId: string, params: {
+    patientSignature: string;
+  }): Promise<ApiResponse> {
+    return this.request('POST', `/v1/enhanced/prescriptions/${tokenId}/confirm`, params);
+  }
+
+  /**
+   * Get selective disclosure for enhanced prescription
+   */
+  async getSelectiveDisclosure(tokenId: string, actorType: 'insurance' | 'pharmacy' | 'audit'): Promise<ApiResponse> {
+    return this.request('GET', `/v1/enhanced/prescriptions/${tokenId}/disclosure/${actorType}`);
+  }
+
+  /**
    * Dispense a prescription
    */
   async dispensePrescription(prescriptionId: string, pharmacyDid: string): Promise<ApiResponse> {

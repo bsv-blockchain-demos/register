@@ -348,7 +348,7 @@ export class VCTokenService {
     ];
     
     // Protocol ID for VC tokens
-    const protocolID: WalletProtocol = [0, 'vc_token'];
+    const protocolID: WalletProtocol = [0, 'vc token'];
     const keyID: string = serialNumber;
     const counterparty: string = 'self';
     
