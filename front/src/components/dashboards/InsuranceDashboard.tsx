@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { Link } from 'react-router-dom';
+import { apiService } from '../../services/apiService';
 import type { PrescriptionCredential, Actor } from '../../types';
-import { FiFileText, FiClock, FiCheckCircle, FiAlertCircle, FiTrendingUp } from 'react-icons/fi';
+import { FiFileText, FiClock, FiCheckCircle, FiAlertCircle, FiTrendingUp, FiShield, FiEye, FiAlertTriangle } from 'react-icons/fi';
 
 interface Dispensation {
   id: string;
@@ -40,12 +41,38 @@ interface InsuranceStats {
   monthlyBreakdown: Record<string, number>;
 }
 
+interface FraudVerificationResult {
+  claimApproved: boolean;
+  fraudScore: number;
+  fraudRisk: 'low' | 'medium' | 'high';
+  verification: {
+    prescriptionExists: boolean;
+    medicationDispensed: boolean;
+    doctorAuthorized: boolean;
+    pharmacyAuthorized: boolean;
+    patientConfirmed: boolean;
+  };
+  proofHash: string;
+  verificationTimestamp: string;
+}
+
+interface FraudPreventionStats {
+  totalClaims: number;
+  claimsVerified: number;
+  fraudDetected: number;
+  averageFraudScore: number;
+  highRiskClaims: number;
+}
+
 const InsuranceDashboard: React.FC = () => {
   const { currentUser } = useAuth();
   const { state } = useApp();
   const [prescriptions, setPrescriptions] = useState<EnhancedPrescription[]>([]);
   const [statistics, setStatistics] = useState<InsuranceStats | null>(null);
+  const [fraudStats, setFraudStats] = useState<FraudPreventionStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [verifyingClaims, setVerifyingClaims] = useState<Set<string>>(new Set());
+  const [verificationResults, setVerificationResults] = useState<Map<string, FraudVerificationResult>>(new Map());
   const [doctors, setDoctors] = useState<Actor[]>([]);
   const [patients, setPatients] = useState<Actor[]>([]);
   const [pharmacies, setPharmacies] = useState<Actor[]>([]);
@@ -101,6 +128,22 @@ const InsuranceDashboard: React.FC = () => {
             setStatistics(statsData.statistics);
           }
         }
+        
+        // Fetch fraud prevention statistics
+        try {
+          const fraudStatsResponse = await apiService.getFraudPreventionStats();
+          if (fraudStatsResponse.success && fraudStatsResponse.data) {
+            setFraudStats({
+              totalClaims: fraudStatsResponse.data.totalVerifications || 0,
+              claimsVerified: fraudStatsResponse.data.totalApproved || 0,
+              fraudDetected: fraudStatsResponse.data.totalRejected || 0,
+              averageFraudScore: fraudStatsResponse.data.averageFraudScore || 0,
+              highRiskClaims: fraudStatsResponse.data.highRiskClaims || 0
+            });
+          }
+        } catch (error) {
+          console.error('Failed to load fraud prevention stats:', error);
+        }
       } catch (error) {
         console.error('Failed to load insurance data:', error);
       } finally {
@@ -119,6 +162,56 @@ const InsuranceDashboard: React.FC = () => {
 
   const totalClaimAmount = confirmedPrescriptions.length * 50; // $50 per confirmed prescription
 
+  // Fraud prevention functions
+  const verifyClaim = async (prescription: EnhancedPrescription) => {
+    if (!currentUser?.did) return;
+    
+    try {
+      setVerifyingClaims(prev => new Set(prev).add(prescription.id));
+      
+      const response = await apiService.verifyInsuranceClaim({
+        insurerDid: currentUser.did,
+        prescriptionCredentialId: prescription.id,
+        dispensingCredentialId: prescription.dispensation?.id || '',
+        claimAmount: 50
+      });
+      
+      if (response.success && response.data) {
+        setVerificationResults(prev => {
+          const newResults = new Map(prev);
+          newResults.set(prescription.id, response.data);
+          return newResults;
+        });
+      }
+    } catch (error) {
+      console.error('Failed to verify claim:', error);
+    } finally {
+      setVerifyingClaims(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(prescription.id);
+        return newSet;
+      });
+    }
+  };
+
+  const getRiskColor = (fraudScore: number) => {
+    if (fraudScore < 25) return 'text-green-500';
+    if (fraudScore < 50) return 'text-yellow-500';
+    return 'text-red-500';
+  };
+
+  const getRiskBadge = (fraudScore: number) => {
+    if (fraudScore < 25) return 'bg-green-500/20 text-green-500';
+    if (fraudScore < 50) return 'bg-yellow-500/20 text-yellow-500';
+    return 'bg-red-500/20 text-red-500';
+  };
+
+  const getRiskText = (fraudScore: number) => {
+    if (fraudScore < 25) return 'Low Risk';
+    if (fraudScore < 50) return 'Medium Risk';
+    return 'High Risk';
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -136,8 +229,21 @@ const InsuranceDashboard: React.FC = () => {
           </Link>
         </div>
 
+        {/* Fraud Prevention Alert */}
+        {fraudStats && fraudStats.highRiskClaims > 0 && (
+          <div className="bg-red-900/50 border border-red-500 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-2">
+              <FiAlertTriangle className="text-red-500 text-xl" />
+              <h3 className="text-red-500 font-semibold">High Risk Claims Alert</h3>
+            </div>
+            <p className="text-red-300 mt-2">
+              {fraudStats.highRiskClaims} claims require immediate attention due to high fraud risk scores.
+            </p>
+          </div>
+        )}
+
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-6 mb-8">
           <div className="bg-gray-800 rounded-lg p-6">
             <div className="flex justify-between items-start">
               <h3 className="text-gray-400">Total Prescriptions</h3>
@@ -149,11 +255,11 @@ const InsuranceDashboard: React.FC = () => {
           
           <div className="bg-gray-800 rounded-lg p-6">
             <div className="flex justify-between items-start">
-              <h3 className="text-gray-400">Active</h3>
-              <FiClock className="text-yellow-500 text-2xl" />
+              <h3 className="text-gray-400">Claims Verified</h3>
+              <FiShield className="text-blue-500 text-2xl" />
             </div>
-            <p className="text-3xl font-bold text-white">{activePrescriptions.length}</p>
-            <p className="text-sm text-gray-500 mt-2">Not dispensed</p>
+            <p className="text-3xl font-bold text-white">{fraudStats?.claimsVerified || 0}</p>
+            <p className="text-sm text-gray-500 mt-2">Fraud prevention</p>
           </div>
           
           <div className="bg-gray-800 rounded-lg p-6">
@@ -162,7 +268,16 @@ const InsuranceDashboard: React.FC = () => {
               <FiAlertCircle className="text-orange-500 text-2xl" />
             </div>
             <p className="text-3xl font-bold text-white">{dispensedPrescriptions.length}</p>
-            <p className="text-sm text-gray-500 mt-2">Awaiting confirmation</p>
+            <p className="text-sm text-gray-500 mt-2">Awaiting verification</p>
+          </div>
+          
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex justify-between items-start">
+              <h3 className="text-gray-400">Fraud Detected</h3>
+              <FiAlertTriangle className="text-red-500 text-2xl" />
+            </div>
+            <p className="text-3xl font-bold text-white">{fraudStats?.fraudDetected || 0}</p>
+            <p className="text-sm text-gray-500 mt-2">Prevented claims</p>
           </div>
           
           <div className="bg-gray-800 rounded-lg p-6">
@@ -229,22 +344,24 @@ const InsuranceDashboard: React.FC = () => {
             )}
           </div>
 
-          {/* Recent Confirmed Claims */}
+          {/* Claims Verification */}
           <div className="bg-gray-800 rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4 flex items-center">
-              <FiCheckCircle className="mr-2 text-green-500" />
-              Recent Confirmed Claims
+              <FiShield className="mr-2 text-blue-500" />
+              Claims Verification
             </h2>
             {loading ? (
               <p className="text-gray-400">Loading...</p>
-            ) : confirmedPrescriptions.length === 0 ? (
-              <p className="text-gray-400 text-center py-8">No confirmed claims yet</p>
+            ) : dispensedPrescriptions.length === 0 ? (
+              <p className="text-gray-400 text-center py-8">No claims requiring verification</p>
             ) : (
               <div className="space-y-3 max-h-96 overflow-y-auto">
-                {confirmedPrescriptions.slice(0, 5).map((prescription) => {
+                {dispensedPrescriptions.slice(0, 5).map((prescription) => {
                   const patient = patients.find(p => p.did === prescription.credentialSubject.id);
                   const prescriptionData = prescription.credentialSubject.prescription;
                   const pharmacy = pharmacies.find(p => p.did === prescription.sharedWithPharmacy);
+                  const isVerifying = verifyingClaims.has(prescription.id);
+                  const verificationResult = verificationResults.get(prescription.id);
                   
                   return (
                     <div key={prescription.id} className="bg-gray-700 rounded-lg p-4">
@@ -258,17 +375,41 @@ const InsuranceDashboard: React.FC = () => {
                             Pharmacy: {pharmacy?.name || 'Unknown'}
                           </p>
                           <p className="text-sm text-gray-400">
-                            Confirmed: {prescription.confirmation ? 
-                              new Date(prescription.confirmation.confirmedAt).toLocaleDateString() : 
+                            Dispensed: {prescription.dispensation ? 
+                              new Date(prescription.dispensation.dispensedAt).toLocaleDateString() : 
                               'N/A'
                             }
                           </p>
+                          {verificationResult && (
+                            <div className="mt-2">
+                              <p className={`text-sm font-medium ${getRiskColor(verificationResult.fraudScore)}`}>
+                                Fraud Score: {verificationResult.fraudScore}
+                              </p>
+                              <p className={`text-xs px-2 py-1 rounded mt-1 inline-block ${getRiskBadge(verificationResult.fraudScore)}`}>
+                                {getRiskText(verificationResult.fraudScore)}
+                              </p>
+                            </div>
+                          )}
                         </div>
                         <div className="text-right">
-                          <span className="text-green-500 font-medium">$50</span>
-                          <span className="block px-2 py-1 bg-green-500/20 text-green-500 rounded text-xs mt-1">
-                            Paid
-                          </span>
+                          {verificationResult ? (
+                            <div>
+                              <span className={`text-sm font-medium ${
+                                verificationResult.claimApproved ? 'text-green-500' : 'text-red-500'
+                              }`}>
+                                {verificationResult.claimApproved ? 'Approved' : 'Denied'}
+                              </span>
+                              <span className="block text-gray-400 text-xs mt-1">$50</span>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => verifyClaim(prescription)}
+                              disabled={isVerifying}
+                              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-3 py-1 rounded text-sm transition-colors"
+                            >
+                              {isVerifying ? 'Verifying...' : 'Verify Claim'}
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -280,9 +421,9 @@ const InsuranceDashboard: React.FC = () => {
         </div>
 
         {/* Statistics Section */}
-        {statistics && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Medication Breakdown */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Medication Breakdown */}
+          {statistics && (
             <div className="bg-gray-800 rounded-lg p-6">
               <h2 className="text-xl font-semibold mb-4">Medication Breakdown</h2>
               <div className="space-y-3">
@@ -300,8 +441,10 @@ const InsuranceDashboard: React.FC = () => {
                   ))}
               </div>
             </div>
+          )}
 
-            {/* Monthly Trend */}
+          {/* Monthly Trend */}
+          {statistics && (
             <div className="bg-gray-800 rounded-lg p-6">
               <h2 className="text-xl font-semibold mb-4">Monthly Prescriptions</h2>
               <div className="space-y-3">
@@ -324,8 +467,49 @@ const InsuranceDashboard: React.FC = () => {
                   })}
               </div>
             </div>
+          )}
+          
+          {/* Fraud Prevention Stats */}
+          <div className="bg-gray-800 rounded-lg p-6">
+            <h2 className="text-xl font-semibold mb-4 flex items-center">
+              <FiShield className="mr-2 text-blue-500" />
+              Fraud Prevention
+            </h2>
+            {fraudStats ? (
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">Total Claims</span>
+                  <span className="text-white font-medium">{fraudStats.totalClaims}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">Verified</span>
+                  <span className="text-green-500 font-medium">{fraudStats.claimsVerified}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">Fraud Detected</span>
+                  <span className="text-red-500 font-medium">{fraudStats.fraudDetected}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">Avg. Fraud Score</span>
+                  <span className={`font-medium ${getRiskColor(fraudStats.averageFraudScore)}`}>
+                    {fraudStats.averageFraudScore.toFixed(1)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">Prevention Rate</span>
+                  <span className="text-blue-500 font-medium">
+                    {fraudStats.totalClaims > 0 ? 
+                      ((fraudStats.fraudDetected / fraudStats.totalClaims) * 100).toFixed(1) : 
+                      0
+                    }%
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-gray-400">No fraud prevention data available</p>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
