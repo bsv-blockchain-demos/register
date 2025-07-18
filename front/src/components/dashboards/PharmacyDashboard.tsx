@@ -87,11 +87,12 @@ function PharmacyDashboard() {
             };
           };
         }) => {
-          // Extract medication data from prescriptionVC.credentialSubject
+          // Extract medication data from prescriptionVC.credentialSubject.prescription
           const credentialSubject = token.prescriptionVC?.credentialSubject || {};
-          const medicationName = credentialSubject.medicationName || 'Unknown Medication';
-          const dosage = credentialSubject.dosage || 'No dosage specified';
-          const instructions = credentialSubject.instructions || '';
+          const prescriptionData = credentialSubject.prescription || {};
+          const medicationName = prescriptionData.medicationName || 'Unknown Medication';
+          const dosage = prescriptionData.dosage || 'No dosage specified';
+          const instructions = prescriptionData.instructions || credentialSubject.instructions || '';
           // Note: quantity is extracted but not used in the current implementation
           
           // Find patient name from actors
@@ -111,7 +112,7 @@ function PharmacyDashboard() {
                 prescription: {
                   id: token.id,
                   patientName: patientName,
-                  diagnosis: credentialSubject.diagnosis || 'No diagnosis',
+                  diagnosis: prescriptionData.diagnosisCode || credentialSubject.diagnosis || 'No diagnosis',
                   medicationName: medicationName,
                   dosage: dosage,
                   frequency: instructions,

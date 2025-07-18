@@ -98,11 +98,12 @@ const PatientDashboard: React.FC = () => {
             };
           };
         }) => {
-          // Extract medication data from prescriptionVC.credentialSubject
+          // Extract medication data from prescriptionVC.credentialSubject.prescription
           const credentialSubject = token.prescriptionVC?.credentialSubject || {};
-          const medicationName = credentialSubject.medicationName || 'Unknown Medication';
-          const dosage = credentialSubject.dosage || 'No dosage specified';
-          const instructions = credentialSubject.instructions || '';
+          const prescriptionData = credentialSubject.prescription || {};
+          const medicationName = prescriptionData.medicationName || 'Unknown Medication';
+          const dosage = prescriptionData.dosage || 'No dosage specified';
+          const instructions = prescriptionData.instructions || credentialSubject.instructions || '';
           
           // Find doctor name from actors
           const doctor = state.actors?.find(a => a.did === token.doctorDid);
@@ -163,12 +164,19 @@ const PatientDashboard: React.FC = () => {
         // Transform the enhanced prescription tokens to match the expected structure
         const transformedPrescriptions = dispensedOrConfirmed.map((token: any) => {
           const prescriptionVC = token.prescriptionVC || {};
+          const credentialSubject = prescriptionVC.credentialSubject || {};
+          const prescriptionData = credentialSubject.prescription || {};
           
           // Create a structure that matches DispensedPrescription interface
           const transformed: DispensedPrescription = {
             ...prescriptionVC, // This spreads the base PrescriptionCredential structure
             id: token.id, // Override with the token ID
             status: token.status as 'dispensed' | 'confirmed',
+            // Override credentialSubject with properly structured data
+            credentialSubject: {
+              ...credentialSubject,
+              prescription: prescriptionData
+            },
             dispensation: token.dispensationVC ? {
               _id: token.id,
               prescriptionId: token.id,
@@ -557,8 +565,8 @@ const PatientDashboard: React.FC = () => {
                       <tr key={prescription.id} className="border-b border-gray-800">
                         <td className="py-3 px-4">
                           <div>
-                            <p className="font-medium text-white">{prescriptionData?.medication?.name || 'Unknown'}</p>
-                            <p className="text-sm text-gray-400">{prescriptionData?.medication?.dosage || 'N/A'}</p>
+                            <p className="font-medium text-white">{prescriptionData?.medicationName || 'Unknown'}</p>
+                            <p className="text-sm text-gray-400">{prescriptionData?.dosage || 'N/A'}</p>
                           </div>
                         </td>
                         <td className="py-3 px-4 text-gray-300">

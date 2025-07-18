@@ -116,6 +116,8 @@ const InsuranceDashboard: React.FC = () => {
       try {
         setLoading(true);
         
+        let foundEnhancedPrescriptions = false;
+        
         // First try to fetch enhanced prescriptions using DID
         if (currentUser.did) {
           try {
@@ -131,9 +133,10 @@ const InsuranceDashboard: React.FC = () => {
             
             if (enhancedResponse.ok) {
               const enhancedData = await enhancedResponse.json();
-              if (enhancedData.success && enhancedData.data) {
+              if (enhancedData.success && enhancedData.data && enhancedData.data.length > 0) {
                 console.log('[InsuranceDashboard] Found enhanced prescriptions:', enhancedData.data);
                 setPrescriptions(enhancedData.data);
+                foundEnhancedPrescriptions = true;
               }
             }
           } catch (error) {
@@ -142,7 +145,7 @@ const InsuranceDashboard: React.FC = () => {
         }
         
         // Fallback to regular prescriptions if no enhanced prescriptions found
-        if (prescriptions.length === 0) {
+        if (!foundEnhancedPrescriptions) {
           const prescriptionsResponse = await fetch(
             `http://localhost:3000/v1/prescriptions/insurance/${encodeURIComponent(currentUser.name)}`,
             {
@@ -373,7 +376,8 @@ const InsuranceDashboard: React.FC = () => {
                     // Enhanced prescription format
                     patient = patients.find(p => p.did === prescription.patientDid);
                     doctor = doctors.find(d => d.did === prescription.doctorDid);
-                    prescriptionData = prescription.prescriptionVC?.credentialSubject?.prescription || {};
+                    const credentialSubject = prescription.prescriptionVC?.credentialSubject || {};
+                    prescriptionData = credentialSubject.prescription || {};
                     prescribedDate = prescription.createdAt || prescription.prescriptionVC?.issuanceDate;
                   } else {
                     // Regular prescription format
@@ -441,7 +445,8 @@ const InsuranceDashboard: React.FC = () => {
                   if (isEnhanced) {
                     // Enhanced prescription format
                     patient = patients.find(p => p.did === prescription.patientDid);
-                    prescriptionData = prescription.prescriptionVC?.credentialSubject?.prescription || {};
+                    const credentialSubject = prescription.prescriptionVC?.credentialSubject || {};
+                    prescriptionData = credentialSubject.prescription || {};
                     pharmacy = pharmacies.find(p => p.did === prescription.pharmacyDid);
                     dispensedDate = prescription.tokenState?.dispensedAt || prescription.dispensationVC?.issuanceDate;
                   } else {
