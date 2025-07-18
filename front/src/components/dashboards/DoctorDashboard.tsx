@@ -67,10 +67,11 @@ const DoctorDashboard: React.FC = () => {
         
         // Transform enhanced prescription tokens to match existing prescription format
         const transformedPrescriptions = response.data.map((token: PrescriptionToken) => {
-          // Extract medication data from prescriptionVC.credentialSubject
+          // Extract medication data from prescriptionVC.credentialSubject.prescription
           const credentialSubject = token.prescriptionVC?.credentialSubject || {};
-          const medicationName = credentialSubject.medicationName || 'Unknown Medication';
-          const dosage = credentialSubject.dosage || 'No dosage specified';
+          const prescriptionData = credentialSubject.prescription || {};
+          const medicationName = prescriptionData.medicationName || 'Unknown Medication';
+          const dosage = prescriptionData.dosage || 'No dosage specified';
           
           return {
             id: token.id,
@@ -131,6 +132,13 @@ const DoctorDashboard: React.FC = () => {
       return;
     }
 
+    // Get HealthFirst Insurance DID from actors
+    const insuranceCompany = state.actors?.find(a => a.type === 'insurance' && a.name === 'HealthFirst Insurance');
+    if (!insuranceCompany) {
+      alert('HealthFirst Insurance not found in system');
+      return;
+    }
+
     setCreatingTestPrescription(true);
     try {
       const prescriptionData = {
@@ -138,11 +146,24 @@ const DoctorDashboard: React.FC = () => {
         patientDid: testPatient.did!,
         medicationName: 'Amoxicillin',
         dosage: '500mg',
-        quantity: '21', // 7 days * 3 times daily
+        quantity: 21, // 7 days * 3 times daily
         instructions: 'Take with food. Complete the full course even if symptoms improve. Three times daily for 7 days.',
         diagnosisCode: 'J00', // ICD-10 code for acute nasopharyngitis (common cold)
-        insuranceDid: testPatient.insuranceProvider || undefined,
-        expiryHours: '720' // 30 days
+        insuranceDid: insuranceCompany.did, // Use the actual insurance company DID
+        expiryHours: 720, // 30 days
+        // Add patient and doctor info for fraud prevention
+        patientInfo: {
+          name: testPatient.name,
+          birthDate: '1985-06-15',
+          insuranceNumber: 'HFI-TEST-12345',
+          contactInfo: testPatient.email || 'test@example.com'
+        },
+        doctorInfo: {
+          name: currentUser.name,
+          licenseNumber: currentUser.licenseNumber || 'MD-TEST-12345',
+          specialization: currentUser.specialization || 'Family Medicine',
+          contactInfo: currentUser.email || 'doctor@example.com'
+        }
       };
 
       const response = await apiService.createEnhancedPrescription(prescriptionData);

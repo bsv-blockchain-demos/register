@@ -19,6 +19,7 @@ interface PrescriptionFormData {
 export const PrescriptionForm: React.FC = () => {
   const { currentUser } = useAuth();
   const [patients, setPatients] = useState<Actor[]>([]);
+  const [insuranceProviders, setInsuranceProviders] = useState<Actor[]>([]);
   const [formData, setFormData] = useState<PrescriptionFormData>({
     patientDid: '',
     patientName: '',
@@ -37,6 +38,7 @@ export const PrescriptionForm: React.FC = () => {
 
   useEffect(() => {
     loadPatients();
+    loadInsuranceProviders();
   }, []);
 
   const loadPatients = async () => {
@@ -54,6 +56,21 @@ export const PrescriptionForm: React.FC = () => {
     }
   };
 
+  const loadInsuranceProviders = async () => {
+    try {
+      const response = await apiService.getActors();
+      if (response.success && response.data) {
+        // Filter for insurance providers who have DIDs
+        const insuranceActors = response.data.filter((actor: Actor) => 
+          actor.type === 'insurance' && actor.did
+        );
+        setInsuranceProviders(insuranceActors);
+      }
+    } catch (error) {
+      console.error('Failed to load insurance providers:', error);
+    }
+  };
+
   const handlePatientSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedPatient = patients.find(p => p.did === e.target.value);
     if (selectedPatient) {
@@ -61,9 +78,17 @@ export const PrescriptionForm: React.FC = () => {
         ...prev,
         patientDid: selectedPatient.did || '',
         patientName: selectedPatient.name,
-        insuranceProvider: selectedPatient.insuranceProvider || ''
+        // Don't auto-populate insurance provider - let user select from dropdown
+        insuranceProvider: ''
       }));
     }
+  };
+
+  const handleInsuranceSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      insuranceProvider: e.target.value
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -78,22 +103,37 @@ export const PrescriptionForm: React.FC = () => {
     setSuccess(null);
 
     try {
+      const selectedPatient = patients.find(p => p.did === formData.patientDid);
+      
       const prescriptionData = {
         doctorDid: currentUser.did,
         patientDid: formData.patientDid,
         medicationName: formData.medicationName,
         dosage: formData.dosage,
-        quantity: 1, // Convert to number
+        quantity: 30, // Default quantity
         instructions: `${formData.frequency} for ${formData.duration}. ${formData.instructions}`,
         diagnosisCode: formData.diagnosis,
         insuranceDid: formData.insuranceProvider || undefined,
-        expiryDays: 30 // 30 days default
+        expiryHours: 720, // 30 days default
+        // Add required fraud prevention fields
+        patientInfo: {
+          name: selectedPatient?.name || formData.patientName,
+          birthDate: '1990-01-01', // Default - in real app, get from patient data
+          insuranceNumber: 'INS-' + Math.random().toString(36).substr(2, 9),
+          contactInfo: selectedPatient?.email || 'patient@example.com'
+        },
+        doctorInfo: {
+          name: currentUser.name,
+          licenseNumber: currentUser.licenseNumber || 'MD-' + Math.random().toString(36).substr(2, 9),
+          specialization: currentUser.specialization || 'General Practice',
+          contactInfo: currentUser.email || 'doctor@example.com'
+        }
       };
 
-      const response = await apiService.createVCTokenPrescription(prescriptionData);
+      const response = await apiService.createEnhancedPrescription(prescriptionData);
       
       if (response.success) {
-        setSuccess(`Prescription VC Token created successfully! Token ID: ${response.data?.id}`);
+        setSuccess(`Enhanced Prescription created successfully with fraud prevention! Token ID: ${response.data?.id}`);
         // Reset form
         setFormData({
           patientDid: '',
@@ -168,13 +208,18 @@ export const PrescriptionForm: React.FC = () => {
           
           <div>
             <label className="block text-sm font-medium mb-2">Insurance Provider</label>
-            <input
-              type="text"
+            <select
               value={formData.insuranceProvider}
-              onChange={(e) => setFormData(prev => ({ ...prev, insuranceProvider: e.target.value }))}
+              onChange={handleInsuranceSelect}
               className="w-full px-4 py-2 bg-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="Optional"
-            />
+            >
+              <option value="">Select insurance provider (optional)</option>
+              {insuranceProviders.map(insurance => (
+                <option key={insurance.id} value={insurance.did}>
+                  {insurance.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

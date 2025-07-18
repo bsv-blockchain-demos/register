@@ -25,11 +25,34 @@ interface Confirmation {
 }
 
 interface EnhancedPrescription extends PrescriptionCredential {
-  status: 'active' | 'dispensed' | 'confirmed';
+  status: 'active' | 'dispensed' | 'confirmed' | 'created' | 'dispensing';
   dispensation?: Dispensation;
   confirmation?: Confirmation;
   sharedWithPharmacy?: string;
   sharedAt?: string;
+  // Enhanced prescription token fields
+  txid?: string;
+  patientDid?: string;
+  doctorDid?: string;
+  pharmacyDid?: string;
+  insuranceDid?: string;
+  dispensationVC?: any;
+  confirmationVC?: any;
+  prescriptionVC?: any;
+  tokenState?: {
+    owner: string;
+    canDispense: boolean;
+    dispensedAt: Date | null;
+    confirmedAt: Date | null;
+  };
+  fraudPrevention?: {
+    fraudScore: number;
+    fraudRisk: 'low' | 'medium' | 'high';
+    fraudAlerts: string[];
+    insuranceNotified: boolean;
+    selectiveDisclosureEnabled: boolean;
+    bbsPlusSignatureUsed: boolean;
+  };
 }
 
 interface InsuranceStats {
@@ -93,21 +116,48 @@ const InsuranceDashboard: React.FC = () => {
       try {
         setLoading(true);
         
-        // Fetch prescriptions for this insurance provider
-        const prescriptionsResponse = await fetch(
-          `http://localhost:3000/v1/prescriptions/insurance/${encodeURIComponent(currentUser.name)}`,
-          {
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
+        // First try to fetch enhanced prescriptions using DID
+        if (currentUser.did) {
+          try {
+            const enhancedResponse = await fetch(
+              `http://localhost:3000/v1/enhanced/prescriptions/insurance/${encodeURIComponent(currentUser.did)}`,
+              {
+                headers: {
+                  'Accept': 'application/json',
+                  'Content-Type': 'application/json'
+                }
+              }
+            );
+            
+            if (enhancedResponse.ok) {
+              const enhancedData = await enhancedResponse.json();
+              if (enhancedData.success && enhancedData.data) {
+                console.log('[InsuranceDashboard] Found enhanced prescriptions:', enhancedData.data);
+                setPrescriptions(enhancedData.data);
+              }
             }
+          } catch (error) {
+            console.error('[InsuranceDashboard] Error fetching enhanced prescriptions:', error);
           }
-        );
+        }
         
-        if (prescriptionsResponse.ok) {
-          const prescriptionsData = await prescriptionsResponse.json();
-          if (prescriptionsData.success) {
-            setPrescriptions(prescriptionsData.data);
+        // Fallback to regular prescriptions if no enhanced prescriptions found
+        if (prescriptions.length === 0) {
+          const prescriptionsResponse = await fetch(
+            `http://localhost:3000/v1/prescriptions/insurance/${encodeURIComponent(currentUser.name)}`,
+            {
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+          
+          if (prescriptionsResponse.ok) {
+            const prescriptionsData = await prescriptionsResponse.json();
+            if (prescriptionsData.success) {
+              setPrescriptions(prescriptionsData.data);
+            }
           }
         }
         
@@ -156,8 +206,8 @@ const InsuranceDashboard: React.FC = () => {
     }
   }, [currentUser]);
 
-  const activePrescriptions = prescriptions.filter(p => p.status === 'active');
-  const dispensedPrescriptions = prescriptions.filter(p => p.status === 'dispensed');
+  const activePrescriptions = prescriptions.filter(p => p.status === 'active' || p.status === 'created');
+  const dispensedPrescriptions = prescriptions.filter(p => p.status === 'dispensed' || p.status === 'dispensing');
   const confirmedPrescriptions = prescriptions.filter(p => p.status === 'confirmed');
 
   const totalClaimAmount = confirmedPrescriptions.length * 50; // $50 per confirmed prescription
@@ -314,27 +364,53 @@ const InsuranceDashboard: React.FC = () => {
             ) : (
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {activePrescriptions.slice(0, 5).map((prescription) => {
-                  const patient = patients.find(p => p.did === prescription.credentialSubject.id);
-                  const doctor = doctors.find(d => d.did === prescription.issuer);
-                  const prescriptionData = prescription.credentialSubject.prescription;
+                  // Handle both regular and enhanced prescription formats
+                  const isEnhanced = prescription.prescriptionVC || prescription.patientDid;
+                  
+                  let patient, doctor, prescriptionData, prescribedDate;
+                  
+                  if (isEnhanced) {
+                    // Enhanced prescription format
+                    patient = patients.find(p => p.did === prescription.patientDid);
+                    doctor = doctors.find(d => d.did === prescription.doctorDid);
+                    prescriptionData = prescription.prescriptionVC?.credentialSubject?.prescription || {};
+                    prescribedDate = prescription.createdAt || prescription.prescriptionVC?.issuanceDate;
+                  } else {
+                    // Regular prescription format
+                    patient = patients.find(p => p.did === prescription.credentialSubject?.id);
+                    doctor = doctors.find(d => d.did === prescription.issuer);
+                    prescriptionData = prescription.credentialSubject?.prescription || {};
+                    prescribedDate = prescription.issuanceDate;
+                  }
+                  
+                  const medicationName = prescriptionData.medicationName || prescriptionData.medication?.name || 'Unknown Medication';
+                  const patientName = patient?.name || prescription.credentialSubject?.patientInfo?.name || 'Unknown Patient';
+                  const doctorName = doctor?.name || 'Unknown Doctor';
                   
                   return (
                     <div key={prescription.id} className="bg-gray-700 rounded-lg p-4">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <h4 className="font-medium text-white">{prescriptionData.medication.name}</h4>
+                          <h4 className="font-medium text-white">{medicationName}</h4>
                           <p className="text-sm text-gray-400">
-                            Patient: {patient?.name || prescription.credentialSubject.patientInfo.name}
+                            Patient: {patientName}
                           </p>
                           <p className="text-sm text-gray-400">
-                            Doctor: {doctor?.name || 'Unknown'}
+                            Doctor: {doctorName}
                           </p>
                           <p className="text-sm text-gray-400">
-                            Prescribed: {new Date(prescription.issuanceDate).toLocaleDateString()}
+                            Prescribed: {prescribedDate ? new Date(prescribedDate).toLocaleDateString() : 'Unknown'}
                           </p>
+                          {isEnhanced && prescription.fraudPrevention && (
+                            <div className="mt-2">
+                              <span className={`text-xs px-2 py-1 rounded ${getRiskBadge(prescription.fraudPrevention.fraudScore)}`}>
+                                {getRiskText(prescription.fraudPrevention.fraudScore)} ({prescription.fraudPrevention.fraudScore})
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <span className="px-2 py-1 bg-yellow-500/20 text-yellow-500 rounded text-xs">
-                          Active
+                          {isEnhanced ? 'Enhanced' : 'Active'}
                         </span>
                       </div>
                     </div>
@@ -357,37 +433,66 @@ const InsuranceDashboard: React.FC = () => {
             ) : (
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {dispensedPrescriptions.slice(0, 5).map((prescription) => {
-                  const patient = patients.find(p => p.did === prescription.credentialSubject.id);
-                  const prescriptionData = prescription.credentialSubject.prescription;
-                  const pharmacy = pharmacies.find(p => p.did === prescription.sharedWithPharmacy);
+                  // Handle both regular and enhanced prescription formats
+                  const isEnhanced = prescription.prescriptionVC || prescription.patientDid;
+                  
+                  let patient, prescriptionData, pharmacy, dispensedDate;
+                  
+                  if (isEnhanced) {
+                    // Enhanced prescription format
+                    patient = patients.find(p => p.did === prescription.patientDid);
+                    prescriptionData = prescription.prescriptionVC?.credentialSubject?.prescription || {};
+                    pharmacy = pharmacies.find(p => p.did === prescription.pharmacyDid);
+                    dispensedDate = prescription.tokenState?.dispensedAt || prescription.dispensationVC?.issuanceDate;
+                  } else {
+                    // Regular prescription format
+                    patient = patients.find(p => p.did === prescription.credentialSubject?.id);
+                    prescriptionData = prescription.credentialSubject?.prescription || {};
+                    pharmacy = pharmacies.find(p => p.did === prescription.sharedWithPharmacy);
+                    dispensedDate = prescription.dispensation?.dispensedAt;
+                  }
+                  
+                  const medicationName = prescriptionData.medicationName || prescriptionData.medication?.name || 'Unknown Medication';
+                  const patientName = patient?.name || prescription.credentialSubject?.patientInfo?.name || 'Unknown Patient';
+                  const pharmacyName = pharmacy?.name || 'Unknown Pharmacy';
+                  
                   const isVerifying = verifyingClaims.has(prescription.id);
                   const verificationResult = verificationResults.get(prescription.id);
+                  
+                  // Show fraud prevention data if available
+                  const fraudScore = prescription.fraudPrevention?.fraudScore || verificationResult?.fraudScore || 0;
+                  const showFraudInfo = prescription.fraudPrevention || verificationResult;
                   
                   return (
                     <div key={prescription.id} className="bg-gray-700 rounded-lg p-4">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <h4 className="font-medium text-white">{prescriptionData.medication.name}</h4>
+                          <h4 className="font-medium text-white">{medicationName}</h4>
                           <p className="text-sm text-gray-400">
-                            Patient: {patient?.name || prescription.credentialSubject.patientInfo.name}
+                            Patient: {patientName}
                           </p>
                           <p className="text-sm text-gray-400">
-                            Pharmacy: {pharmacy?.name || 'Unknown'}
+                            Pharmacy: {pharmacyName}
                           </p>
                           <p className="text-sm text-gray-400">
-                            Dispensed: {prescription.dispensation ? 
-                              new Date(prescription.dispensation.dispensedAt).toLocaleDateString() : 
+                            Dispensed: {dispensedDate ? 
+                              new Date(dispensedDate).toLocaleDateString() : 
                               'N/A'
                             }
                           </p>
-                          {verificationResult && (
+                          {showFraudInfo && (
                             <div className="mt-2">
-                              <p className={`text-sm font-medium ${getRiskColor(verificationResult.fraudScore)}`}>
-                                Fraud Score: {verificationResult.fraudScore}
+                              <p className={`text-sm font-medium ${getRiskColor(fraudScore)}`}>
+                                Fraud Score: {fraudScore}
                               </p>
-                              <p className={`text-xs px-2 py-1 rounded mt-1 inline-block ${getRiskBadge(verificationResult.fraudScore)}`}>
-                                {getRiskText(verificationResult.fraudScore)}
+                              <p className={`text-xs px-2 py-1 rounded mt-1 inline-block ${getRiskBadge(fraudScore)}`}>
+                                {getRiskText(fraudScore)}
                               </p>
+                              {isEnhanced && prescription.fraudPrevention?.bbsPlusSignatureUsed && (
+                                <p className="text-xs text-blue-400 mt-1">
+                                  🔒 BBS+ Signature Verified
+                                </p>
+                              )}
                             </div>
                           )}
                         </div>
