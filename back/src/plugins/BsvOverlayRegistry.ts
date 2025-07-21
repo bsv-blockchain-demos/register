@@ -132,25 +132,21 @@ export class BsvOverlayRegistry {
       };
       const serialNumberBytes = Hash.sha256(JSON.stringify(uniqueData));
       const serialNumber = Utils.toHex(serialNumberBytes); // Convert to hex string for consistent use
-      const binaryDIDDocument: Byte[] = Utils.toArray(JSON.stringify(didDocument), "utf8") as Byte[];
       
       // Create the DID using serialNumber instead of txid:vout
       const did = `did:bsv:${this.topic}:${serialNumber}`;
       
       console.log('[BsvOverlayRegistry] Generated unique DID:', did);
       
-      // Build PushDrop fields - serial number and DID document
-      // The signature will be added automatically by PushDrop when includeSignature=true
-      const fields: Byte[][] = [
-        serialNumberBytes  // Use the raw bytes for the PushDrop field
-      ];
+      // Build PushDrop fields - will be updated after finalDidDocument is created
+      let fields: Byte[][];
       
       // Protocol ID for DID tokens - should match LARS topic
       const protocolID: WalletProtocol = [0, 'tm did'];
       const keyID: string = serialNumber; // Already a string now
       const counterparty: string = 'self';
       
-      // Create the PushDrop locking script
+      // Create the PushDrop locking script args (fields will be set after finalDidDocument)
       const args = {
         fields: fields,
         protocolID: protocolID,
@@ -257,16 +253,27 @@ export class BsvOverlayRegistry {
         console.log('[BsvOverlayRegistry] Added verification method with default key-1');
       }
 
+      // Now that we have the final DID document, create the PushDrop fields
+      const binaryFinalDidDocument: Byte[] = Utils.toArray(JSON.stringify(finalDidDocument), "utf8") as Byte[];
+      fields = [
+        serialNumberBytes,        // Serial number for identification
+        binaryFinalDidDocument   // Complete DID document for LARS indexing
+      ];
+      
+      // Update the args with the final fields
+      args.fields = fields;
+
       // Store the serialNumber -> outpoint mapping in MongoDB if available
+      // NOTE: We're intentionally NOT storing the didDocument to force LARS lookup
       if (this.db) {
-        console.log('[BsvOverlayRegistry] Storing DID lookup in MongoDB...');
+        console.log('[BsvOverlayRegistry] Storing DID lookup in MongoDB (without didDocument)...');
         try {
           const lookupData = {
             serialNumber,
             txid: car.txid,
             vout: 0, // The DID is in output 0
             topic: this.topic,
-            didDocument: finalDidDocument,
+            // didDocument: finalDidDocument, // REMOVED to force LARS lookup
             createdAt: new Date()
           };
           
@@ -283,9 +290,13 @@ export class BsvOverlayRegistry {
 
       console.log('[BsvOverlayRegistry] ============ LARS SUBMISSION SECTION START ============');
       try {
-        console.log('TRY BLOCK ENTERED');
+        console.log('[BsvOverlayRegistry] Submitting transaction to LARS overlay...');
+        // Submit the transaction to LARS for indexing
+        await this.notifyOverlayProvider(this.topic, beef, serialNumber, car.txid, 0);
+        console.log('[BsvOverlayRegistry] Successfully submitted to LARS');
       } catch (error) {
-        console.log('CATCH BLOCK ENTERED', error);
+        console.error('[BsvOverlayRegistry] Error submitting to LARS:', error);
+        // Non-critical error, continue - the DID is still created on-chain
       }
       console.log('[BsvOverlayRegistry] ============ LARS SUBMISSION SECTION END ============');
 
@@ -386,10 +397,11 @@ export class BsvOverlayRegistry {
                 const output = data.outputs[0];
                 console.log('[BsvOverlayRegistry] Found output:', output);
                 
-                // The DID document should be in the fields or script
-                if (output.fields && output.fields.length > 0) {
-                  // Try to parse the DID document from fields
-                  const didDocumentField = output.fields[0];
+                // The DID document should be in the second field (fields[1])
+                // fields[0] contains the serialNumber bytes, fields[1] contains the DID document
+                if (output.fields && output.fields.length > 1) {
+                  // Parse the DID document from the second field
+                  const didDocumentField = output.fields[1];
                   console.log('[BsvOverlayRegistry] DID document field:', didDocumentField);
                   
                   try {
