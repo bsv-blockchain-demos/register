@@ -17,7 +17,9 @@ import {
   AtomicBEEF,
   ATOMIC_BEEF,
   TopicBroadcaster,
-  BeefTx
+  BeefTx,
+  HTTPSOverlayBroadcastFacilitator,
+  TaggedBEEF
 } from '@bsv/sdk';
 import { Services, Setup, SetupWallet, StorageClient, wait, Wallet, WalletStorageManager } from '@bsv/wallet-toolbox';
 import { IJWK } from '@quarkid/kms-core';
@@ -524,7 +526,12 @@ export class BsvOverlayRegistry {
       console.log('[BsvOverlayRegistry] BEEF data length:', beef.length);
       console.log('[BsvOverlayRegistry] First 100 bytes of BEEF:', beef.slice(0, 100));
 
-      const broadcaster = new TopicBroadcaster([topic])
+      // Determine network preset based on overlay URL
+      const isLocalhost = this.overlayProvider.includes('localhost') || this.overlayProvider.includes('127.0.0.1');
+      const networkPreset = isLocalhost ? 'local' : 'mainnet';
+      
+      console.log('[BsvOverlayRegistry] Creating TopicBroadcaster with networkPreset:', networkPreset);
+      const broadcaster = new TopicBroadcaster([topic], { networkPreset })
       const response = await broadcaster.broadcast(Transaction.fromBEEF(beef, txid))
 
       console.log('[BsvOverlayRegistry] Overlay provider response status:', response.status);
