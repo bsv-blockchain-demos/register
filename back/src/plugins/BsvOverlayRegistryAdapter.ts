@@ -71,17 +71,24 @@ export class BsvOverlayRegistryAdapter extends IAgentRegistry {
    * Delegates to BsvOverlayRegistry which uses BRC-100 WalletClient
    */
   async createDID(createRequest: CreateDIDRequest): Promise<CreateDIDResponse> {
+    console.log('[BsvOverlayRegistryAdapter] ===== ENTRY: createDID called =====');
     console.log('[BsvOverlayRegistryAdapter] createDID called with request:', createRequest);
     
     // Check if KMS is available
     if (!this.kms) {
+      console.error('[BsvOverlayRegistryAdapter] ERROR: KMS not initialized!');
       throw new Error('KMS not initialized. Cannot create DID without key management.');
     }
+    
+    console.log('[BsvOverlayRegistryAdapter] KMS check passed, KMS exists:', !!this.kms);
+    console.log('[BsvOverlayRegistryAdapter] KMS type:', this.kms.constructor.name);
     
     // Generate a new key pair using the KMS
     console.log('[BsvOverlayRegistryAdapter] Creating key pair with KMS...');
     const keyResult = await this.kms.create(Suite.ES256k);
+    console.log('[BsvOverlayRegistryAdapter] Key creation completed, keyResult:', !!keyResult);
     const publicKeyJWK = keyResult.publicKeyJWK;
+    console.log('[BsvOverlayRegistryAdapter] Extracted publicKeyJWK:', !!publicKeyJWK);
     
     // Create the keyId that will be used in the verification method
     const keyId = `did:bsv:${publicKeyJWK.x.substring(0, 16)}`;

@@ -68,6 +68,10 @@ export const createDidRoutes = (quarkIdAgentService: QuarkIdAgentService): Route
    * ```
    */
   router.post('/create', async (req: Request, res: Response) => {
+    console.log('[Route /dids/create] ===== ROUTE CALLED =====');
+    console.log('[Route /dids/create] Request body:', req.body);
+    console.log('[Route /dids/create] QuarkIdAgentService exists:', !!quarkIdAgentService);
+    
     if (!quarkIdAgentService) {
       return res.status(500).json({
         status: 'error',
@@ -78,7 +82,9 @@ export const createDidRoutes = (quarkIdAgentService: QuarkIdAgentService): Route
     try {
       const { name } = req.body;
       
+      console.log('[Route /dids/create] About to call quarkIdAgentService.createDID()');
       const did = await quarkIdAgentService.createDID();
+      console.log('[Route /dids/create] DID creation returned:', did);
       
       return res.status(201).json({
         status: 'success',

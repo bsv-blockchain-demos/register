@@ -266,14 +266,28 @@ export class QuarkIdAgentService {
    * The Agent handles BRC-100 createAction() internally
    */
   async createDID(): Promise<string> {
+    console.log('[QuarkIdAgentService] ===== createDID METHOD ENTRY =====');
+    console.log('[QuarkIdAgentService] Method called at:', new Date().toISOString());
+    
     await this.ensureInitialized();
+    console.log('[QuarkIdAgentService] ensureInitialized completed');
     
     try {
       console.log('[QuarkIdAgentService] Creating DID through QuarkID Agent...');
       console.log('[QuarkIdAgentService] Agent initialized:', !!this.agent);
       console.log('[QuarkIdAgentService] Agent registry available:', !!this.agent?.registry);
-      console.log('[QuarkIdAgentService] Agent KMS type:', (this.agent as any).kms.constructor.name);
-      console.log('[QuarkIdAgentService] BsvWalletKMS keyStore size before DID creation:', (this.bsvKms as any).keyStore.size);
+      
+      try {
+        console.log('[QuarkIdAgentService] Agent KMS type:', (this.agent as any)?.kms?.constructor?.name || 'undefined');
+      } catch (e) {
+        console.log('[QuarkIdAgentService] Error getting Agent KMS type:', e.message);
+      }
+      
+      try {
+        console.log('[QuarkIdAgentService] BsvWalletKMS keyStore size before DID creation:', (this.bsvKms as any)?.keyStore?.size || 'undefined');
+      } catch (e) {
+        console.log('[QuarkIdAgentService] Error getting BsvWalletKMS keyStore size:', e.message);
+      }
       
       if (!this.agent || !this.agent.registry) {
         throw new Error('Agent or registry not properly initialized');
@@ -281,6 +295,8 @@ export class QuarkIdAgentService {
       
       // Use the agent's registry to create a DID
       // This will internally use our BsvOverlayRegistryAdapter
+      console.log('[QuarkIdAgentService] About to call agent.registry.createDID...');
+      console.log('[QuarkIdAgentService] Registry type:', this.agent.registry.constructor.name);
       const didResponse = await this.agent.registry.createDID({
         didMethod: 'bsv',
         // For BSV, keys are managed by the wallet, so we provide empty arrays

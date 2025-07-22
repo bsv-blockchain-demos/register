@@ -138,78 +138,10 @@ export class BsvOverlayRegistry {
       
       console.log('[BsvOverlayRegistry] Generated unique DID:', did);
       
-      // Build PushDrop fields - will be updated after finalDidDocument is created
-      let fields: Byte[][];
-      
       // Protocol ID for DID tokens - should match LARS topic
       const protocolID: WalletProtocol = [0, 'tm did'];
       const keyID: string = serialNumber; // Already a string now
       const counterparty: string = 'self';
-      
-      // Create the PushDrop locking script args (fields will be set after finalDidDocument)
-      const args = {
-        fields: fields,
-        protocolID: protocolID,
-        keyID: keyID,
-        counterparty: counterparty,
-        includeSignature: true,  // LARS expects a signature as the second field
-        lockPosition: 'before',
-        forSelf: true
-      };
-
-      console.log('[BsvOverlayRegistry] Creating PushDrop instance...');
-      const pushDropToken = new PushDrop(this.walletClient)
-
-      console.log('[BsvOverlayRegistry] Calling pushDropToken.lock...');
-      const lock = await pushDropToken.lock(
-        args.fields,
-        args.protocolID,
-        args.keyID,
-        args.counterparty,
-        args.forSelf,
-        args.includeSignature,
-        args.lockPosition as "before" | "after"
-      );
-
-      console.log('[BsvOverlayRegistry] Lock created, converting to hex...');
-      const lockingScript = lock.toHex();
-      
-      console.log('[BsvOverlayRegistry] Creating action with wallet client...');
-      // Create the transaction with the PushDrop output
-      const car = await this.walletClient.createAction({
-        description: 'Create DID transaction with BSV overlay',
-        outputs: [
-          {
-            satoshis: 1,
-            lockingScript: lockingScript,
-            outputDescription: 'DID PushDrop Token',
-            basket: 'bsv-did',
-            customInstructions: JSON.stringify({
-              protocolID: args.protocolID,
-              counterparty: args.counterparty,
-              keyID: args.keyID,
-              fields: args.fields,
-              type: 'PushDrop',
-              didDocument: didDocument // Add the DID document for the lookup service
-            })
-          }
-        ],
-        options: {
-          randomizeOutputs: false,
-        },
-        labels: ['bsv-did', 'create']
-      });
-      
-      console.log('[BsvOverlayRegistry] CreateActionResult obtained:', !!car);
-      console.log('[BsvOverlayRegistry] car.txid:', car.txid);
-      console.log('[BsvOverlayRegistry] car.tx exists:', !!car.tx);
-      console.log('[BsvOverlayRegistry] car.tx type:', typeof car.tx);
-      console.log('[BsvOverlayRegistry] car.tx is array:', Array.isArray(car.tx));
-      console.log('[BsvOverlayRegistry] car.tx length:', car.tx ? car.tx.length : 'N/A');
-      
-      const beef: AtomicBEEF = car.tx;
-      const vout = `${car.txid}.0`;
-      console.log(`[BsvOverlayRegistry] DID created: ${did}`);
       
       // Now construct the final DID document with the correct ID and verification method
       const finalDidDocument: DIDDocument = {
@@ -255,13 +187,75 @@ export class BsvOverlayRegistry {
 
       // Now that we have the final DID document, create the PushDrop fields
       const binaryFinalDidDocument: Byte[] = Utils.toArray(JSON.stringify(finalDidDocument), "utf8") as Byte[];
-      fields = [
+      const fields: Byte[][] = [
         serialNumberBytes,        // Serial number for identification
         binaryFinalDidDocument   // Complete DID document for LARS indexing
       ];
+
+      // Create the PushDrop locking script args with properly initialized fields
+      const args = {
+        fields: fields,
+        protocolID: protocolID,
+        keyID: keyID,
+        counterparty: counterparty,
+        includeSignature: true,  // LARS expects a signature as the second field
+        lockPosition: 'before',
+        forSelf: true
+      };
+
+      console.log('[BsvOverlayRegistry] Creating PushDrop instance...');
+      const pushDropToken = new PushDrop(this.walletClient)
+
+      console.log('[BsvOverlayRegistry] Calling pushDropToken.lock...');
+      const lock = await pushDropToken.lock(
+        args.fields,
+        args.protocolID,
+        args.keyID,
+        args.counterparty,
+        args.forSelf,
+        args.includeSignature,
+        args.lockPosition as "before" | "after"
+      );
+
+      console.log('[BsvOverlayRegistry] Lock created, converting to hex...');
+      const lockingScript = lock.toHex();
       
-      // Update the args with the final fields
-      args.fields = fields;
+      console.log('[BsvOverlayRegistry] Creating action with wallet client...');
+      // Create the transaction with the PushDrop output
+      const car = await this.walletClient.createAction({
+        description: 'Create DID transaction with BSV overlay',
+        outputs: [
+          {
+            satoshis: 1,
+            lockingScript: lockingScript,
+            outputDescription: 'DID PushDrop Token',
+            basket: 'bsv-did',
+            customInstructions: JSON.stringify({
+              protocolID: args.protocolID,
+              counterparty: args.counterparty,
+              keyID: args.keyID,
+              fields: args.fields,
+              type: 'PushDrop',
+              didDocument: finalDidDocument // Use finalDidDocument instead of didDocument
+            })
+          }
+        ],
+        options: {
+          randomizeOutputs: false,
+        },
+        labels: ['bsv-did', 'create']
+      });
+      
+      console.log('[BsvOverlayRegistry] CreateActionResult obtained:', !!car);
+      console.log('[BsvOverlayRegistry] car.txid:', car.txid);
+      console.log('[BsvOverlayRegistry] car.tx exists:', !!car.tx);
+      console.log('[BsvOverlayRegistry] car.tx type:', typeof car.tx);
+      console.log('[BsvOverlayRegistry] car.tx is array:', Array.isArray(car.tx));
+      console.log('[BsvOverlayRegistry] car.tx length:', car.tx ? car.tx.length : 'N/A');
+      
+      const beef: AtomicBEEF = car.tx;
+      const vout = `${car.txid}.0`;
+      console.log(`[BsvOverlayRegistry] DID created: ${did}`);
 
       // Store the serialNumber -> outpoint mapping in MongoDB if available
       // NOTE: We're intentionally NOT storing the didDocument to force LARS lookup
