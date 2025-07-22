@@ -6,7 +6,7 @@ import { Suite, LANG } from '@quarkid/kms-core';
 import { DIDDocument } from '@quarkid/did-core';
 import { VCTokenService } from './vcTokenService';
 import { QuarkIdAgentService } from './quarkIdAgentService';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 /**
  * Prescription credential schema for BBS+ selective disclosure

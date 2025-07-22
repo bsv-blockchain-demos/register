@@ -1,7 +1,7 @@
 import { PrivateKey, PublicKey, Transaction, ARC, P2PKH } from '@bsv/sdk';
 import { WalletClient } from '@bsv/sdk';
 import { v4 as uuidv4 } from 'uuid';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 import { Hash } from '@bsv/sdk';
 
 // Import QuarkID Agent components (would be actual imports in production)

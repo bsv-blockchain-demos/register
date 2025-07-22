@@ -1,6 +1,6 @@
 import { Db } from 'mongodb';
 import { WalletClient } from '@bsv/sdk';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 import { 
   Actor, 
   ActorType, 

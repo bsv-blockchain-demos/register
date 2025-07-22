@@ -2,7 +2,7 @@ import { Db } from 'mongodb';
 import { WalletClient, Script, OP, Hash, Utils, PushDrop, WalletProtocol, Byte } from '@bsv/sdk';
 import { QuarkIdAgentService } from './quarkIdAgentService';
 import { VerifiableCredential } from '@quarkid/vc-core';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 /**
  * Unified VC Token that combines Verifiable Credential with BSV token

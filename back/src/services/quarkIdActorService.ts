@@ -2,7 +2,7 @@ import { Agent, DID } from '@quarkid/agent';
 import { Did as DidRegistry } from '@quarkid/did-registry';
 import { WalletClient } from '@bsv/sdk';
 import { Db } from 'mongodb';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 /**
  * Enhanced Actor interface with QuarkID DID integration

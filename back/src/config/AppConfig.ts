@@ -96,7 +96,7 @@ export class AppConfig {
   get defaultFundingPublicKeyHex(): string {
     // Derive public key from private key
     const privateKey = PrivateKey.fromHex(this.config.PLATFORM_FUNDING_KEY);
-    return privateKey.toPublicKey().toHex();
+    return privateKey.toPublicKey().toString();
   }
 
   get feePerKb(): number {

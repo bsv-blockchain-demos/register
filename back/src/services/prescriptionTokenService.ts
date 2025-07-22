@@ -1,5 +1,5 @@
 import { Db } from 'mongodb';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 import { Script, OP, Hash, Utils, PushDrop, WalletProtocol, Byte } from '@bsv/sdk';
 import { KMSClient } from '@quarkid/kms-client';
 

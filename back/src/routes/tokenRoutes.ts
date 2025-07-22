@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { WalletClient } from '@bsv/sdk';
 import { Db } from 'mongodb';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 // Extend Request interface to include our custom properties
 interface CustomRequest extends Request {

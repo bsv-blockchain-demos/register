@@ -1,5 +1,5 @@
 import { Db } from 'mongodb';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 import { appConfig } from '../config/AppConfig';
 
 // Simplified types for now - we'll replace with real ones later
