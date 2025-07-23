@@ -236,9 +236,8 @@ export class BsvOverlayRegistry {
               protocolID: args.protocolID,
               counterparty: args.counterparty,
               keyID: args.keyID,
-              fields: args.fields,
-              type: 'PushDrop',
-              didDocument: finalDidDocument // Use finalDidDocument instead of didDocument
+              type: 'PushDrop'
+              // Removed didDocument and fields to reduce size - they're already in the lockingScript
             })
           }
         ],
