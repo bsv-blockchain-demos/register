@@ -142,7 +142,7 @@ export class BsvOverlayRegistry {
       
       // Protocol ID for DID tokens - should match LARS topic
       const protocolID: WalletProtocol = [0, 'tm did'];
-      const keyID: string = serialNumber; // Already a string now
+      const keyID: string = did; // Use the full DID as keyID since we have complete document on-chain
       const counterparty: string = 'self';
       
       // Now construct the final DID document with the correct ID and verification method
@@ -188,10 +188,10 @@ export class BsvOverlayRegistry {
       }
 
       // Now that we have the final DID document, create the PushDrop fields
+      // DID topic manager now accepts the full DID document as JSON
       const binaryFinalDidDocument: Byte[] = Utils.toArray(JSON.stringify(finalDidDocument), "utf8") as Byte[];
       const fields: Byte[][] = [
-        serialNumberBytes,        // Serial number for identification
-        binaryFinalDidDocument   // Complete DID document for LARS indexing
+        binaryFinalDidDocument   // Full DID document as JSON - overlay now accepts variable length
       ];
 
       // Create the PushDrop locking script args with properly initialized fields
@@ -258,17 +258,17 @@ export class BsvOverlayRegistry {
       const vout = `${car.txid}.0`;
       console.log(`[BsvOverlayRegistry] DID created: ${did}`);
 
-      // Store the serialNumber -> outpoint mapping in MongoDB if available
-      // NOTE: We're intentionally NOT storing the didDocument to force LARS lookup
+      // Store minimal lookup data in MongoDB - DID document is now fully on-chain
+      // NOTE: MongoDB only stores txid/vout mapping since full DID document is in PushDrop fields
       if (this.db) {
-        console.log('[BsvOverlayRegistry] Storing DID lookup in MongoDB (without didDocument)...');
+        console.log('[BsvOverlayRegistry] Storing minimal DID lookup in MongoDB...');
         try {
           const lookupData = {
             serialNumber,
             txid: car.txid,
             vout: 0, // The DID is in output 0
             topic: this.topic,
-            // didDocument: finalDidDocument, // REMOVED to force LARS lookup
+            // didDocument removed - now stored fully on-chain in PushDrop fields
             createdAt: new Date()
           };
           
@@ -394,11 +394,11 @@ export class BsvOverlayRegistry {
                 const output = data.outputs[0];
                 console.log('[BsvOverlayRegistry] Found output:', output);
                 
-                // The DID document should be in the second field (fields[1])
-                // fields[0] contains the serialNumber bytes, fields[1] contains the DID document
-                if (output.fields && output.fields.length > 1) {
-                  // Parse the DID document from the second field
-                  const didDocumentField = output.fields[1];
+                // The DID document is now in the first field (fields[0])
+                // Since we updated the overlay to accept full DID documents instead of 32-byte serial numbers
+                if (output.fields && output.fields.length > 0) {
+                  // Parse the DID document from the first field
+                  const didDocumentField = output.fields[0];
                   console.log('[BsvOverlayRegistry] DID document field:', didDocumentField);
                   
                   try {

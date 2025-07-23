@@ -35,15 +35,21 @@ export default class DIDTopicManager implements TopicManager {
             throw new Error('DID token must have exactly one field + signature')
           }
 
-          const serialNumber = Utils.toUTF8(result.fields[0])
-
-          if (serialNumber === undefined || serialNumber === null) {
-            throw new Error('DID token must contain a valid serialNumber')
+          // Parse and validate DID document from the field
+          let didDocument: any
+          try {
+            const didDocumentString = Utils.toUTF8(result.fields[0])
+            didDocument = JSON.parse(didDocumentString)
+          } catch (parseError) {
+            throw new Error('DID token must contain valid JSON DID document')
           }
 
-          // Check that the field is exactly 32 bytes in length
-          if (result.fields[0].length !== 32) {
-            throw new Error('DID token serial number must be exactly 32 bytes in length')
+          // Validate DID document structure
+          if (!didDocument.id || !didDocument.id.startsWith('did:')) {
+            throw new Error('DID document must have valid DID identifier')
+          }
+          if (!didDocument['@context'] || !Array.isArray(didDocument['@context'])) {
+            throw new Error('DID document must have valid @context array')
           }
 
           outputsToAdmit.push(i)
