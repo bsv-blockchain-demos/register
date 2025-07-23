@@ -2,6 +2,9 @@ import { Db } from 'mongodb';
 import { WalletClient, Script, OP, Hash, Utils, PushDrop, WalletProtocol, Byte } from '@bsv/sdk';
 import { QuarkIdAgentService } from './quarkIdAgentService';
 import { VerifiableCredential } from '@quarkid/vc-core';
+import { KMSClient } from '@quarkid/kms-client';
+import { Suite } from '@quarkid/kms-core';
+import { AssertionMethodPurpose } from '@quarkid/did-core';
 import * as crypto from 'crypto';
 
 /**
@@ -43,16 +46,19 @@ export class VCTokenService {
   private db: Db;
   private walletClient: WalletClient;
   private quarkIdAgentService: QuarkIdAgentService;
+  private kmsClient: KMSClient;
   private vcTokensCollection: any;
 
   constructor(
     db: Db,
     walletClient: WalletClient,
-    quarkIdAgentService: QuarkIdAgentService
+    quarkIdAgentService: QuarkIdAgentService,
+    kmsClient: KMSClient
   ) {
     this.db = db;
     this.walletClient = walletClient;
     this.quarkIdAgentService = quarkIdAgentService;
+    this.kmsClient = kmsClient;
     this.vcTokensCollection = db.collection('vc_tokens');
     
     // Create indexes for efficient querying
@@ -90,15 +96,24 @@ export class VCTokenService {
     try {
       return await session.withTransaction(async () => {
         // Step 1: Issue the Verifiable Credential
-        console.log('[VCTokenService] Issuing VC...');
-        const vc = await this.quarkIdAgentService.issueVC(
-          params.issuerDid,
-          params.subjectDid,
-          params.credentialType,
-          params.claims,
-          params.validFrom,
-          params.validUntil
-        );
+        // Check if BBS+ signature is requested
+        const useBBSSignature = params.metadata?.customData?.useBBSSignature === true;
+        
+        let vc: VerifiableCredential;
+        if (useBBSSignature) {
+          console.log('[VCTokenService] Issuing VC with BBS+ signature...');
+          vc = await this.createBBSSignedVC(params);
+        } else {
+          console.log('[VCTokenService] Issuing VC with ES256k signature...');
+          vc = await this.quarkIdAgentService.issueVC(
+            params.issuerDid,
+            params.subjectDid,
+            params.credentialType,
+            params.claims,
+            params.validFrom,
+            params.validUntil
+          );
+        }
 
         // Step 2: Create BSV token with VC reference
         console.log('[VCTokenService] Creating BSV token...');
@@ -317,6 +332,107 @@ export class VCTokenService {
         tokenValid: false,
         errors: [`Verification error: ${error.message}`]
       };
+    }
+  }
+
+  /**
+   * Create a BBS+ signed VC using KMSClient for selective disclosure
+   */
+  private async createBBSSignedVC(params: {
+    issuerDid: string;
+    subjectDid: string;
+    credentialType: string;
+    claims: any;
+    metadata?: {
+      description?: string;
+      customData?: any;
+    };
+    validFrom?: Date;
+    validUntil?: Date;
+  }): Promise<VerifiableCredential> {
+    console.log('[VCTokenService] Creating BBS+ signed VC...');
+    
+    // Create the unsigned VC structure
+    const issuanceDate = new Date();
+    const expirationDate = params.validUntil || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // 1 year default
+    
+    const unsignedVC: VerifiableCredential = {
+      '@context': [
+        'https://www.w3.org/2018/credentials/v1',
+        {
+          // Medical vocabulary definitions for prescription credentials
+          'patientInfo': 'https://quarkid.org/medical#patientInfo',
+          'prescription': 'https://quarkid.org/medical#prescription',
+          'doctor': 'https://quarkid.org/medical#doctor',
+          'patient': 'https://quarkid.org/medical#patient',
+          'issuanceProof': 'https://quarkid.org/medical#issuanceProof',
+          'medicationName': 'https://quarkid.org/medical#medicationName',
+          'dosage': 'https://quarkid.org/medical#dosage',
+          'quantity': 'https://quarkid.org/medical#quantity',
+          'instructions': 'https://quarkid.org/medical#instructions',
+          'refills': 'https://quarkid.org/medical#refills',
+          'validUntil': 'https://quarkid.org/medical#validUntil',
+          'diagnosisCode': 'https://quarkid.org/medical#diagnosisCode',
+          'prescribedDate': 'https://quarkid.org/medical#prescribedDate',
+          'status': 'https://quarkid.org/medical#status',
+          'cost': 'https://quarkid.org/medical#cost',
+          'insuranceProvider': 'https://quarkid.org/medical#insuranceProvider',
+          'name': 'https://quarkid.org/medical#name',
+          'birthDate': 'https://quarkid.org/medical#birthDate',
+          'insuranceNumber': 'https://quarkid.org/medical#insuranceNumber',
+          'contactInfo': 'https://quarkid.org/medical#contactInfo',
+          'licenseNumber': 'https://quarkid.org/medical#licenseNumber',
+          'specialization': 'https://quarkid.org/medical#specialization',
+          'nonce': 'https://quarkid.org/medical#nonce',
+          'timestamp': 'https://quarkid.org/medical#timestamp',
+          'blockchainAnchor': 'https://quarkid.org/medical#blockchainAnchor'
+        },
+        'https://w3id.org/security/suites/jws-2020/v1',
+        'https://w3id.org/security/bbs/v1'
+      ],
+      id: `urn:uuid:${crypto.randomUUID()}`,
+      type: ['VerifiableCredential', params.credentialType],
+      issuer: params.issuerDid,
+      issuanceDate: issuanceDate.toISOString(),
+      expirationDate: expirationDate.toISOString(),
+      credentialSubject: {
+        id: params.subjectDid,
+        ...params.claims
+      }
+    };
+    
+    // Add validFrom if specified
+    if (params.validFrom) {
+      (unsignedVC as any).validFrom = params.validFrom.toISOString();
+    }
+    
+    try {
+      // First, create or get a BBS+ key pair
+      console.log('[VCTokenService] Creating BBS+ key pair...');
+      const keyPair = await this.kmsClient.create(Suite.Bbsbls2020);
+      console.log('[VCTokenService] BBS+ key pair created:', keyPair.publicKeyJWK);
+      
+      // Create verification method ID 
+      const verificationMethodId = `${params.issuerDid}#bbsKey1`;
+      
+      // Use KMSClient to sign the VC with BBS+ signature
+      console.log('[VCTokenService] Signing VC with BBS+ using KMSClient...');
+      
+      const signedVC = await this.kmsClient.signVC(
+        Suite.Bbsbls2020,
+        keyPair.publicKeyJWK,
+        unsignedVC,
+        params.issuerDid,
+        verificationMethodId,
+        new AssertionMethodPurpose()
+      );
+      
+      console.log('[VCTokenService] BBS+ signed VC created successfully');
+      return signedVC;
+      
+    } catch (error) {
+      console.error('[VCTokenService] Error creating BBS+ signed VC:', error);
+      throw new Error(`Failed to create BBS+ signed VC: ${error.message}`);
     }
   }
 

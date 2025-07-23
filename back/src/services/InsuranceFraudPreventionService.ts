@@ -89,7 +89,34 @@ export const DISCLOSURE_FRAMES = {
   insurance: {
     '@context': [
       'https://www.w3.org/2018/credentials/v1',
-      'https://quarkid.org/medical/v1',
+      {
+        // Medical vocabulary definitions for prescription credentials
+        'patientInfo': 'https://quarkid.org/medical#patientInfo',
+        'prescription': 'https://quarkid.org/medical#prescription',
+        'doctor': 'https://quarkid.org/medical#doctor',
+        'patient': 'https://quarkid.org/medical#patient',
+        'issuanceProof': 'https://quarkid.org/medical#issuanceProof',
+        'medicationName': 'https://quarkid.org/medical#medicationName',
+        'dosage': 'https://quarkid.org/medical#dosage',
+        'quantity': 'https://quarkid.org/medical#quantity',
+        'instructions': 'https://quarkid.org/medical#instructions',
+        'refills': 'https://quarkid.org/medical#refills',
+        'validUntil': 'https://quarkid.org/medical#validUntil',
+        'diagnosisCode': 'https://quarkid.org/medical#diagnosisCode',
+        'prescribedDate': 'https://quarkid.org/medical#prescribedDate',
+        'status': 'https://quarkid.org/medical#status',
+        'cost': 'https://quarkid.org/medical#cost',
+        'insuranceProvider': 'https://quarkid.org/medical#insuranceProvider',
+        'name': 'https://quarkid.org/medical#name',
+        'birthDate': 'https://quarkid.org/medical#birthDate',
+        'insuranceNumber': 'https://quarkid.org/medical#insuranceNumber',
+        'contactInfo': 'https://quarkid.org/medical#contactInfo',
+        'licenseNumber': 'https://quarkid.org/medical#licenseNumber',
+        'specialization': 'https://quarkid.org/medical#specialization',
+        'nonce': 'https://quarkid.org/medical#nonce',
+        'timestamp': 'https://quarkid.org/medical#timestamp',
+        'blockchainAnchor': 'https://quarkid.org/medical#blockchainAnchor'
+      },
       'https://w3id.org/security/bbs/v1'
     ],
     'type': ['VerifiableCredential', 'PrescriptionCredential'],
@@ -121,7 +148,34 @@ export const DISCLOSURE_FRAMES = {
   pharmacy: {
     '@context': [
       'https://www.w3.org/2018/credentials/v1',
-      'https://quarkid.org/medical/v1',
+      {
+        // Medical vocabulary definitions for prescription credentials
+        'patientInfo': 'https://quarkid.org/medical#patientInfo',
+        'prescription': 'https://quarkid.org/medical#prescription',
+        'doctor': 'https://quarkid.org/medical#doctor',
+        'patient': 'https://quarkid.org/medical#patient',
+        'issuanceProof': 'https://quarkid.org/medical#issuanceProof',
+        'medicationName': 'https://quarkid.org/medical#medicationName',
+        'dosage': 'https://quarkid.org/medical#dosage',
+        'quantity': 'https://quarkid.org/medical#quantity',
+        'instructions': 'https://quarkid.org/medical#instructions',
+        'refills': 'https://quarkid.org/medical#refills',
+        'validUntil': 'https://quarkid.org/medical#validUntil',
+        'diagnosisCode': 'https://quarkid.org/medical#diagnosisCode',
+        'prescribedDate': 'https://quarkid.org/medical#prescribedDate',
+        'status': 'https://quarkid.org/medical#status',
+        'cost': 'https://quarkid.org/medical#cost',
+        'insuranceProvider': 'https://quarkid.org/medical#insuranceProvider',
+        'name': 'https://quarkid.org/medical#name',
+        'birthDate': 'https://quarkid.org/medical#birthDate',
+        'insuranceNumber': 'https://quarkid.org/medical#insuranceNumber',
+        'contactInfo': 'https://quarkid.org/medical#contactInfo',
+        'licenseNumber': 'https://quarkid.org/medical#licenseNumber',
+        'specialization': 'https://quarkid.org/medical#specialization',
+        'nonce': 'https://quarkid.org/medical#nonce',
+        'timestamp': 'https://quarkid.org/medical#timestamp',
+        'blockchainAnchor': 'https://quarkid.org/medical#blockchainAnchor'
+      },
       'https://w3id.org/security/bbs/v1'
     ],
     'type': ['VerifiableCredential', 'PrescriptionCredential'],
@@ -155,7 +209,34 @@ export const DISCLOSURE_FRAMES = {
   audit: {
     '@context': [
       'https://www.w3.org/2018/credentials/v1',
-      'https://quarkid.org/medical/v1',
+      {
+        // Medical vocabulary definitions for prescription credentials
+        'patientInfo': 'https://quarkid.org/medical#patientInfo',
+        'prescription': 'https://quarkid.org/medical#prescription',
+        'doctor': 'https://quarkid.org/medical#doctor',
+        'patient': 'https://quarkid.org/medical#patient',
+        'issuanceProof': 'https://quarkid.org/medical#issuanceProof',
+        'medicationName': 'https://quarkid.org/medical#medicationName',
+        'dosage': 'https://quarkid.org/medical#dosage',
+        'quantity': 'https://quarkid.org/medical#quantity',
+        'instructions': 'https://quarkid.org/medical#instructions',
+        'refills': 'https://quarkid.org/medical#refills',
+        'validUntil': 'https://quarkid.org/medical#validUntil',
+        'diagnosisCode': 'https://quarkid.org/medical#diagnosisCode',
+        'prescribedDate': 'https://quarkid.org/medical#prescribedDate',
+        'status': 'https://quarkid.org/medical#status',
+        'cost': 'https://quarkid.org/medical#cost',
+        'insuranceProvider': 'https://quarkid.org/medical#insuranceProvider',
+        'name': 'https://quarkid.org/medical#name',
+        'birthDate': 'https://quarkid.org/medical#birthDate',
+        'insuranceNumber': 'https://quarkid.org/medical#insuranceNumber',
+        'contactInfo': 'https://quarkid.org/medical#contactInfo',
+        'licenseNumber': 'https://quarkid.org/medical#licenseNumber',
+        'specialization': 'https://quarkid.org/medical#specialization',
+        'nonce': 'https://quarkid.org/medical#nonce',
+        'timestamp': 'https://quarkid.org/medical#timestamp',
+        'blockchainAnchor': 'https://quarkid.org/medical#blockchainAnchor'
+      },
       'https://w3id.org/security/bbs/v1'
     ],
     'type': ['VerifiableCredential', 'PrescriptionCredential'],

@@ -118,14 +118,7 @@ async function startServer() {
       appConfig.overlayConfig
     );
 
-    // Initialize consolidated VC Token Service first
-    vcTokenService = new VCTokenService(
-      db,
-      walletClient,
-      quarkIdAgentService
-    );
-
-    // Initialize KMSClient with BBS+ support for fraud prevention
+    // Initialize KMSClient with BBS+ support for fraud prevention BEFORE VCTokenService
     console.log('[App] Initializing KMSClient for fraud prevention...');
     
     // Create a simple storage implementation for KMS
@@ -192,6 +185,15 @@ async function startServer() {
       didResolver: fraudPreventionDIDResolver as any,
       mobile: false // Enable BBS+ suite
     });
+
+    // Initialize consolidated VC Token Service with KMSClient for BBS+ support
+    console.log('[App] Initializing VCTokenService with KMSClient for BBS+ support...');
+    vcTokenService = new VCTokenService(
+      db,
+      walletClient,
+      quarkIdAgentService,
+      kmsClient
+    );
 
     // Initialize Insurance Fraud Prevention Service
     console.log('[App] Initializing Insurance Fraud Prevention Service...');
