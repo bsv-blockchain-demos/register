@@ -323,14 +323,16 @@ export class BsvOverlayRegistry {
     try {
       console.log('[BsvOverlayRegistry] Resolving DID:', did);
       
-      // Parse the DID to extract the serialNumber (format: did:bsv:<topic>:<serialNumber>)
+      // Parse the DID to extract the components (format: did:bsv:<topic>:<txid>:<vout>)
       const didParts = did.split(':');
-      if (didParts.length !== 4 || didParts[0] !== 'did' || didParts[1] !== 'bsv') {
+      if (didParts.length !== 5 || didParts[0] !== 'did' || didParts[1] !== 'bsv') {
         throw new Error('Invalid DID format');
       }
       
       const topic = didParts[2];
-      const serialNumber = didParts[3];
+      const txid = didParts[3];
+      const vout = didParts[4];
+      const serialNumber = `${txid}:${vout}`; // Combine txid and vout as serialNumber
       
       console.log(`[BsvOverlayRegistry] Parsed DID - topic: ${topic}, serialNumber: ${serialNumber}`);
       

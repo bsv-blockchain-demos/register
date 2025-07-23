@@ -208,7 +208,9 @@ async function startServer() {
 
     // Logging middleware to print request path and body
     app.use((req, res, next) => {
+        console.log('=== REQUEST MIDDLEWARE TRIGGERED ===');
         console.log(`[${req.method}] ${req.path} ${JSON.stringify(req?.body || '')}`);
+        console.log('=== END REQUEST LOG ===');
         next();
     });
 
@@ -338,6 +340,7 @@ async function startServer() {
     });
 
     app.get('/health', (req, res) => {
+      console.log('=== HEALTH ROUTE HIT ===');
       res.json({
         status: 'ok',
         mongodb: !!db ? 'connected' : 'not connected',
@@ -353,6 +356,9 @@ async function startServer() {
 
     app.listen(port, () => {
         console.log(`Server started on port ${port}`);
+        console.log('Testing console.log after server start:', new Date());
+        console.log('Console.log function type:', typeof console.log);
+        console.log('Console.log function:', console.log.toString().substring(0, 100));
     });
 }
 
