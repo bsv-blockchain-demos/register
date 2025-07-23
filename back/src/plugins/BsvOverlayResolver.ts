@@ -81,11 +81,10 @@ export class BsvOverlayResolver implements IAgentResolver {
         };
       }
       
-      // Parse DID to extract metadata
+      // Parse DID to extract metadata (new format: did:bsv:<topic>:<serialNumber>)
       const parts = didString.split(':');
       const topic = parts[2];
-      const txid = parts[3];
-      const vout = parts[4];
+      const serialNumber = parts[3];
       
       return {
         "@context": "https://www.w3.org/ns/did/v1",
@@ -96,8 +95,8 @@ export class BsvOverlayResolver implements IAgentResolver {
             recoveryCommitment: [], // BSV overlay doesn't use these
             updateCommitment: []
           },
-          versionId: parseInt(vout, 10), // Use vout as version ID
-          canonicalId: didString.split(':').slice(0, 4).join(':'), // did:bsv:topic:txid
+          versionId: 1, // Use 1 as default version for new format
+          canonicalId: didString, // Full DID is canonical
         }
       };
       

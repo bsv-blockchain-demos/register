@@ -20,23 +20,41 @@ class DIDLookupService implements LookupService {
     const { txid, outputIndex, topic, lockingScript } = payload
     if (topic !== 'tm_did') return
     console.log(`DID lookup service outputAdded called with ${txid}.${outputIndex}`)
-    // Decode the DID token fields from the Bitcoin outputScript
-    const result = PushDrop.decode(lockingScript)
-    const serialNumber = Utils.toUTF8(result.fields[0])
+    
+    try {
+      // Decode the DID token fields from the Bitcoin outputScript
+      const result = PushDrop.decode(lockingScript)
+      
+      // The first field now contains the full DID document as JSON
+      const didDocumentString = Utils.toUTF8(result.fields[0])
+      const didDocument = JSON.parse(didDocumentString)
+      
+      // Extract the serialNumber from the DID document ID
+      // Format: did:bsv:tm_did:serialNumber
+      const didParts = didDocument.id.split(':')
+      const serialNumber = didParts[3] // This is the serialNumber used for lookups
+      
+      console.log(
+        'DID lookup service is storing a record',
+        txid,
+        outputIndex,
+        serialNumber,
+        'DID:', didDocument.id
+      )
 
-    console.log(
-      'DID lookup service is storing a record',
-      txid,
-      outputIndex,
-      serialNumber
-    )
-
-    // Store DID record
-    await this.storageManager.storeRecord(
-      txid,
-      outputIndex,
-      serialNumber
-    )
+      // Store DID record with the extracted serialNumber
+      // Note: atomicBeef parameter is expected but not used in current storage implementation
+      await this.storageManager.storeRecord(
+        txid,
+        outputIndex,
+        serialNumber,
+        [] // Empty atomicBeef array - overlay provides the beef elsewhere
+      )
+    } catch (error) {
+      console.error('Error processing DID token in lookup service:', error)
+      console.error('Raw locking script:', lockingScript)
+      throw error
+    }
   }
 
   async outputSpent(payload: OutputSpent): Promise<void> {

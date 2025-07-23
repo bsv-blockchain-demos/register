@@ -318,20 +318,18 @@ export class BsvOverlayRegistry {
    * Resolve a DID to its DID Document
    * First checks MongoDB for the DID lookup info, then queries LARS if needed
    */
-  async resolveDID(did: string, car: CreateActionResult): Promise<DIDDocument | null> {
+  async resolveDID(did: string, car?: CreateActionResult): Promise<DIDDocument | null> {
     try {
       console.log('[BsvOverlayRegistry] Resolving DID:', did);
       
-      // Parse the DID to extract the components (format: did:bsv:<topic>:<txid>:<vout>)
+      // Parse the DID to extract the components (format: did:bsv:<topic>:<serialNumber>)
       const didParts = did.split(':');
-      if (didParts.length !== 5 || didParts[0] !== 'did' || didParts[1] !== 'bsv') {
+      if (didParts.length !== 4 || didParts[0] !== 'did' || didParts[1] !== 'bsv') {
         throw new Error('Invalid DID format');
       }
       
       const topic = didParts[2];
-      const txid = didParts[3];
-      const vout = didParts[4];
-      const serialNumber = `${txid}:${vout}`; // Combine txid and vout as serialNumber
+      const serialNumber = didParts[3]; // serialNumber is now the full hex string
       
       console.log(`[BsvOverlayRegistry] Parsed DID - topic: ${topic}, serialNumber: ${serialNumber}`);
       
@@ -353,10 +351,11 @@ export class BsvOverlayRegistry {
             return didLookup.didDocument;
           }
           
-          // Otherwise, query LARS with the outpoint
+          // Otherwise, query LARS with the serialNumber
           if (didLookup.txid && didLookup.vout !== undefined) {
             const outpoint = `${didLookup.txid}.${didLookup.vout}`;
-            console.log('[BsvOverlayRegistry] Querying LARS with outpoint:', outpoint);
+            console.log('[BsvOverlayRegistry] Querying LARS with serialNumber:', serialNumber);
+            console.log('[BsvOverlayRegistry] Outpoint for reference:', outpoint);
             
             if (!this.overlayProvider) {
               throw new Error('Overlay provider URL not configured');
@@ -374,8 +373,7 @@ export class BsvOverlayRegistry {
                 body: JSON.stringify({
                   service: 'ls_did',
                   query: {
-                    serialNumber: serialNumber,
-                    outpoint: outpoint  // Use outpoint instead of serialNumber
+                    serialNumber: serialNumber  // Use serialNumber for LARS lookup
                   }
                 })
               });
@@ -386,16 +384,109 @@ export class BsvOverlayRegistry {
               }
               
               const data = await response.json();
-              console.log('[BsvOverlayRegistry] LARS response:', JSON.stringify(data, null, 2));
+              console.log('[BsvOverlayRegistry] LARS response keys:', Object.keys(data));
+              console.log('[BsvOverlayRegistry] LARS response type:', data.type);
+              console.log('[BsvOverlayRegistry] LARS response length:', JSON.stringify(data).length);
               
-              // Check if we got any outputs
+              // Debug: Check if data has outputs or is structured differently
+              if (Array.isArray(data)) {
+                console.log('[BsvOverlayRegistry] LARS returned array with length:', data.length);
+                if (data.length > 0) {
+                  const firstElement = data[0];
+                  console.log('[BsvOverlayRegistry] First array element keys:', Object.keys(firstElement));
+                  console.log('[BsvOverlayRegistry] First array element:', JSON.stringify(firstElement, null, 2));
+                  
+                  // Check if this element has 'beef' or transaction data
+                  if (firstElement.beef) {
+                    console.log('[BsvOverlayRegistry] Found BEEF data in LARS response!');
+                    try {
+                      // Parse the transaction from BEEF
+                      const beefArray = Array.isArray(firstElement.beef) ? firstElement.beef : [firstElement.beef];
+                      const tx = Transaction.fromBEEF(beefArray);
+                      console.log('[BsvOverlayRegistry] Parsed transaction from BEEF:', tx.id('hex'));
+                      
+                      // Get the output at the specified index
+                      const outputIndex = firstElement.outputIndex || 0;
+                      if (!tx.outputs || tx.outputs.length <= outputIndex) {
+                        throw new Error(`Transaction has no output at index ${outputIndex}`);
+                      }
+                      
+                      const output = tx.outputs[outputIndex];
+                      console.log('[BsvOverlayRegistry] Found output at index', outputIndex);
+                      
+                      // Decode the PushDrop to get the DID document
+                      const result = PushDrop.decode(output.lockingScript);
+                      if (!result.fields || result.fields.length === 0) {
+                        throw new Error('PushDrop decode returned no fields');
+                      }
+                      
+                      const didDocumentString = Utils.toUTF8(result.fields[0]);
+                      const didDocument = JSON.parse(didDocumentString);
+                      
+                      // Validate that it's a proper DID document
+                      if (!didDocument.id || !didDocument.id.startsWith('did:')) {
+                        throw new Error('Invalid DID document: missing or invalid id');
+                      }
+                      
+                      console.log('[BsvOverlayRegistry] Successfully parsed DID document from BEEF:', didDocument);
+                      return didDocument;
+                      
+                    } catch (beefError) {
+                      console.error('[BsvOverlayRegistry] Error parsing BEEF data:', beefError);
+                      console.error('[BsvOverlayRegistry] BEEF parsing failed, falling through to other methods');
+                    }
+                  }
+                }
+              }
+              
+              // Check if we got any outputs (original format)
               if (data.type === 'output-list' && data.outputs && data.outputs.length > 0) {
                 // Parse the DID document from the LARS response
                 const output = data.outputs[0];
                 console.log('[BsvOverlayRegistry] Found output:', output);
                 
-                // The DID document is now in the first field (fields[0])
-                // Since we updated the overlay to accept full DID documents instead of 32-byte serial numbers
+                // Check if output has BEEF data (new format)
+                if (output.beef) {
+                  console.log('[BsvOverlayRegistry] Found BEEF data in output-list response!');
+                  try {
+                    // Parse the transaction from BEEF
+                    const beefArray = Array.isArray(output.beef) ? output.beef : [output.beef];
+                    const tx = Transaction.fromBEEF(beefArray);
+                    console.log('[BsvOverlayRegistry] Parsed transaction from BEEF:', tx.id('hex'));
+                    
+                    // Get the output at the specified index
+                    const outputIndex = output.outputIndex || 0;
+                    if (!tx.outputs || tx.outputs.length <= outputIndex) {
+                      throw new Error(`Transaction has no output at index ${outputIndex}`);
+                    }
+                    
+                    const txOutput = tx.outputs[outputIndex];
+                    console.log('[BsvOverlayRegistry] Found output at index', outputIndex);
+                    
+                    // Decode the PushDrop to get the DID document
+                    const result = PushDrop.decode(txOutput.lockingScript);
+                    if (!result.fields || result.fields.length === 0) {
+                      throw new Error('PushDrop decode returned no fields');
+                    }
+                    
+                    const didDocumentString = Utils.toUTF8(result.fields[0]);
+                    const didDocument = JSON.parse(didDocumentString);
+                    
+                    // Validate that it's a proper DID document
+                    if (!didDocument.id || !didDocument.id.startsWith('did:')) {
+                      throw new Error('Invalid DID document: missing or invalid id');
+                    }
+                    
+                    console.log('[BsvOverlayRegistry] Successfully parsed DID document from BEEF:', didDocument);
+                    return didDocument;
+                    
+                  } catch (beefError) {
+                    console.error('[BsvOverlayRegistry] Error parsing BEEF data from output-list:', beefError);
+                    console.error('[BsvOverlayRegistry] BEEF parsing failed, trying fields fallback');
+                  }
+                }
+                
+                // Fallback to old format with fields
                 if (output.fields && output.fields.length > 0) {
                   // Parse the DID document from the first field
                   const didDocumentField = output.fields[0];

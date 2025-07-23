@@ -31,11 +31,12 @@ class VCLookupService implements LookupService {
       serialNumber
     )
 
-    // Store VC record
+    // Store VC record with empty atomicBeef array
     await this.storageManager.storeRecord(
       txid,
       outputIndex,
-      serialNumber
+      serialNumber,
+      [] // Empty atomicBeef array - overlay provides the beef elsewhere
     )
   }
 

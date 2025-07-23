@@ -10,6 +10,8 @@ import { QuarkIdAgentService } from './services/quarkIdAgentService';
 import { PrescriptionTokenService } from './services/prescriptionTokenService';
 import { VCTokenService } from './services/vcTokenService';
 import { InsuranceFraudPreventionService } from './services/InsuranceFraudPreventionService';
+import { DWNStorageService, createDWNStorageService } from './services/DWNStorageService';
+import { PrescriptionDWNService, createPrescriptionDWNService } from './services/PrescriptionDWNService';
 import { KMSClient } from '@quarkid/kms-client';
 import { LANG } from '@quarkid/kms-core';
 import cors from 'cors'
@@ -67,6 +69,8 @@ let actorService: ActorService
 let quarkIdAgentService: QuarkIdAgentService
 let prescriptionTokenService: PrescriptionTokenService
 let vcTokenService: VCTokenService
+let dwnStorageService: DWNStorageService
+let prescriptionDWNService: PrescriptionDWNService
 let kmsClient: KMSClient
 let fraudPreventionService: InsuranceFraudPreventionService
 
@@ -89,6 +93,10 @@ async function startServer() {
     db = client.db(appConfig.dbName);
     console.log('Connected to MongoDB successfully');
 
+    // Initialize DWN Storage Service using the same storage as wallet
+    console.log('[App] Initializing DWN Storage Service with wallet storage...');
+    dwnStorageService = createDWNStorageService(walletClient);
+
     // Initialize QuarkIdAgentService
     quarkIdAgentService = new QuarkIdAgentService({
       mongodb: appConfig.mongoConfig,
@@ -97,6 +105,10 @@ async function startServer() {
       overlayProvider: appConfig.overlayProviderUrl,
       dwnUrl: appConfig.dwnUrl
     });
+
+    // Initialize Prescription DWN Service for secure VC sharing
+    console.log('[App] Initializing Prescription DWN Service...');
+    prescriptionDWNService = createPrescriptionDWNService(dwnStorageService, quarkIdAgentService);
 
     // Initialize ActorService
     actorService = new ActorService(
@@ -232,6 +244,8 @@ async function startServer() {
     app.use((req, res, next) => {
         req.db = db;
         req.walletClient = walletClient
+        req.dwnStorage = dwnStorageService
+        req.prescriptionDWNService = prescriptionDWNService
         req.quarkIdActorService = actorService
         req.quarkIdAgentService = quarkIdAgentService
         req.prescriptionTokenService = prescriptionTokenService

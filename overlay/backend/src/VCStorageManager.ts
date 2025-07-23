@@ -23,12 +23,14 @@ export class VCStorageManager {
    * @param {string} txid transaction id
    * @param {number} outputIndex index of the UTXO
    * @param {Base64String} serialNumber certificate serial number to store
+   * @param {AtomicBEEF} atomicBeef atomic beef data
    */
-  async storeRecord(txid: string, outputIndex: number, serialNumber: Base64String): Promise<void> {
+  async storeRecord(txid: string, outputIndex: number, serialNumber: Base64String, atomicBeef: number[]): Promise<void> {
     await this.records.insertOne({
       txid,
       outputIndex,
       serialNumber,
+      atomicBeef,
       createdAt: new Date()
     })
   }

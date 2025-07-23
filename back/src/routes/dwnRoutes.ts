@@ -2,34 +2,19 @@ import { Router, Request, Response } from 'express';
 import { WalletClient } from '@bsv/sdk';
 import { Db } from 'mongodb';
 import * as crypto from 'crypto';
+import { DWNStorageService, DWNMessage, createDWNStorageService } from '../services/DWNStorageService';
 
 // Extend Request interface to include our custom properties
 interface CustomRequest extends Request {
   walletClient?: WalletClient;
   db?: Db;
+  dwnStorage?: DWNStorageService;
   body: any;
   params: any;
   query: any;
 }
 
-/**
- * DWN Message interface for secure VC transmission
- */
-interface DWNMessage {
-  id: string;
-  type: 'prescription' | 'dispensation' | 'confirmation';
-  from: string; // Sender DID
-  to: string;   // Recipient DID
-  subject: string;
-  encryptedPayload: string;
-  timestamp: Date;
-  threadId?: string; // For grouping related messages
-  metadata: {
-    prescriptionId?: string;
-    vcType?: string;
-    urgent?: boolean;
-  };
-}
+// DWNMessage interface is now imported from DWNStorageService
 
 /**
  * Create DWN messaging routes for secure VC transmission
@@ -70,9 +55,9 @@ export function createDWNRoutes(): Router {
         });
       }
 
-      if (!req.db) {
+      if (!req.dwnStorage) {
         return res.status(503).json({
-          error: 'Database not available'
+          error: 'DWN storage not available'
         });
       }
 
@@ -96,8 +81,8 @@ export function createDWNRoutes(): Router {
         }
       };
 
-      // Store message in database (acting as DWN node)
-      await req.db.collection('dwn_messages').insertOne(message);
+      // Store message in wallet storage
+      await req.dwnStorage.storeMessage(message);
 
       // In a real DWN implementation, this would route the message
       // through the decentralized network to the recipient's DWN node
@@ -141,34 +126,31 @@ export function createDWNRoutes(): Router {
         });
       }
 
-      if (!req.db) {
+      if (!req.dwnStorage) {
         return res.status(503).json({
-          error: 'Database not available'
+          error: 'DWN storage not available'
         });
       }
 
-      // Build query
-      let query: any = { to: did };
+      // Build filters
+      const filters: any = {
+        limit: parseInt(limit as string)
+      };
 
       if (type) {
-        query.type = type;
+        filters.type = type;
       }
 
       if (threadId) {
-        query.threadId = threadId;
+        filters.threadId = threadId;
       }
 
       if (unreadOnly === 'true') {
-        query.read = { $ne: true };
+        filters.unreadOnly = true;
       }
 
-      // Retrieve messages
-      const messages = await req.db
-        .collection('dwn_messages')
-        .find(query)
-        .sort({ timestamp: -1 })
-        .limit(parseInt(limit as string))
-        .toArray();
+      // Retrieve messages from wallet storage
+      const messages = await req.dwnStorage.getMessages(did as string, filters);
 
       // Return messages without decrypting (client should decrypt)
       const publicMessages = messages.map(msg => ({
@@ -215,27 +197,18 @@ export function createDWNRoutes(): Router {
         });
       }
 
-      if (!req.db) {
+      if (!req.dwnStorage) {
         return res.status(503).json({
-          error: 'Database not available'
+          error: 'DWN storage not available'
         });
       }
 
-      // Retrieve message
-      const message = await req.db
-        .collection('dwn_messages')
-        .findOne({ id: messageId });
+      // Retrieve message from wallet storage
+      const message = await req.dwnStorage.getMessage(messageId, recipientDid as string);
 
       if (!message) {
         return res.status(404).json({
-          error: 'Message not found'
-        });
-      }
-
-      // Verify recipient authorization
-      if (message.to !== recipientDid) {
-        return res.status(403).json({
-          error: 'Unauthorized: You can only access messages sent to your DID'
+          error: 'Message not found or unauthorized'
         });
       }
 
@@ -243,12 +216,7 @@ export function createDWNRoutes(): Router {
       const decryptedPayload = await decryptVCData(message.encryptedPayload, recipientDid as string);
 
       // Mark message as read
-      await req.db
-        .collection('dwn_messages')
-        .updateOne(
-          { id: messageId },
-          { $set: { read: true, readAt: new Date() } }
-        );
+      await req.dwnStorage.markMessageAsRead(messageId, recipientDid as string);
 
       res.json({
         success: true,
@@ -282,39 +250,18 @@ export function createDWNRoutes(): Router {
         });
       }
 
-      if (!req.db) {
+      if (!req.dwnStorage) {
         return res.status(503).json({
-          error: 'Database not available'
+          error: 'DWN storage not available'
         });
       }
 
-      // Verify message exists and recipient authorization
-      const message = await req.db
-        .collection('dwn_messages')
-        .findOne({ id: messageId, to: recipientDid });
+      // Mark message as read in wallet storage
+      const success = await req.dwnStorage.markMessageAsRead(messageId, recipientDid);
 
-      if (!message) {
+      if (!success) {
         return res.status(404).json({
           error: 'Message not found or unauthorized'
-        });
-      }
-
-      // Mark as read
-      const result = await req.db
-        .collection('dwn_messages')
-        .updateOne(
-          { id: messageId },
-          { 
-            $set: { 
-              read: true, 
-              readAt: new Date() 
-            } 
-          }
-        );
-
-      if (result.matchedCount === 0) {
-        return res.status(404).json({
-          error: 'Message not found'
         });
       }
 
@@ -346,24 +293,22 @@ export function createDWNRoutes(): Router {
         });
       }
 
-      if (!req.db) {
+      if (!req.dwnStorage) {
         return res.status(503).json({
-          error: 'Database not available'
+          error: 'DWN storage not available'
         });
       }
 
       // Get all messages in thread where user is participant
-      const messages = await req.db
-        .collection('dwn_messages')
-        .find({
-          threadId,
-          $or: [
-            { from: participantDid },
-            { to: participantDid }
-          ]
-        })
-        .sort({ timestamp: 1 })
-        .toArray();
+      // Note: This is a simplified implementation. In a full implementation,
+      // we'd need to query both sent and received messages for the thread
+      const receivedMessages = await req.dwnStorage.getMessages(participantDid as string, {
+        threadId: threadId
+      });
+
+      // For now, we only return received messages. In a full implementation,
+      // we'd also get sent messages and merge them
+      const messages = receivedMessages;
 
       if (messages.length === 0) {
         return res.status(404).json({
@@ -408,36 +353,18 @@ export function createDWNRoutes(): Router {
     try {
       const { did } = req.params;
 
-      if (!req.db) {
+      if (!req.dwnStorage) {
         return res.status(503).json({
-          error: 'Database not available'
+          error: 'DWN storage not available'
         });
       }
 
-      const totalReceived = await req.db.collection('dwn_messages').countDocuments({ to: did });
-      const totalSent = await req.db.collection('dwn_messages').countDocuments({ from: did });
-      const unread = await req.db.collection('dwn_messages').countDocuments({ 
-        to: did, 
-        read: { $ne: true } 
-      });
-
-      // Get message type breakdown
-      const typeBreakdown = await req.db.collection('dwn_messages').aggregate([
-        { $match: { to: did } },
-        { $group: { _id: '$type', count: { $sum: 1 } } }
-      ]).toArray();
+      // Get message statistics from wallet storage
+      const stats = await req.dwnStorage.getMessageStats(did);
 
       res.json({
         success: true,
-        data: {
-          totalReceived,
-          totalSent,
-          unread,
-          typeBreakdown: typeBreakdown.reduce((acc, item) => {
-            acc[item._id] = item.count;
-            return acc;
-          }, {})
-        }
+        data: stats
       });
 
     } catch (error) {
