@@ -1,0 +1,142 @@
+---
+config:
+  layout: dagre
+  theme: default
+---
+flowchart TB
+    %% DOCTOR COLUMN
+    subgraph "👨‍⚕️ DOCTOR WORKFLOW"
+        DocStart([Doctor Login]):::frontend
+        DocDID["Doctor DID"]:::actor
+        DocAuth["BSV Authentication"]:::crypto
+        DocUI["Doctor Dashboard"]:::frontend
+        CreatePrescription["Create Prescription"]:::service
+        DocVC["Issue VC"]:::privacy
+        DocSign["Sign Prescription"]:::crypto
+        DocStore["Store VC"]:::storage
+        DocBlockchain["Anchor on Blockchain"]:::storage
+    end
+
+    %% PATIENT COLUMN
+    subgraph "🧑‍🦱 PATIENT WORKFLOW"
+        PatDID["Patient DID"]:::actor
+        PatAuth["Patient Auth"]:::crypto
+        PatUI["Patient Dashboard"]:::frontend
+        ReceiveNotification["Receive Prescription"]:::service
+        PatPrivacy["Control Sharing"]:::privacy
+        SharePharmacy["Share with Pharmacy"]:::privacy
+        ShareInsurance["Share with Insurance"]:::privacy
+        PatConfirm["Confirm Receipt"]:::service
+        PatEnd([Complete]):::frontend
+    end
+
+    %% PHARMACY COLUMN
+    subgraph "🏥 PHARMACY WORKFLOW"
+        PharmDID["Pharmacy DID"]:::actor
+        PharmAuth["Pharmacy Auth"]:::crypto
+        PharmUI["Pharmacy Dashboard"]:::frontend
+        ReceiveShare["Receive Prescription"]:::privacy
+        PharmVerify["Verify Prescription"]:::quarkid
+        FraudCheck["Fraud Check"]:::fraud
+        FraudResult{"Risk Assessment"}:::fraud
+        ApproveDispense["Approve"]:::service
+        FlagFraud["Flag Review"]:::fraud
+        UpdateToken["Update Token"]:::crypto
+        PharmComplete["Dispense Medication"]:::service
+        PharmEnd([Dispensed]):::frontend
+    end
+
+    %% SHARED INFRASTRUCTURE
+    subgraph "🔧 SHARED INFRASTRUCTURE"
+        API["API Gateway"]:::api
+        QuarkIDCore["QuarkID Core"]:::quarkid
+        BSVBlockchain[("BSV Blockchain")]:::storage
+        DWNStorage[("DWN Storage")]:::storage
+        BSVOverlay[("BSV Overlay")]:::storage
+        AuditTrail["Audit Trail"]:::storage
+    end
+
+    %% INSURANCE PROCESSING
+    subgraph "🏢 INSURANCE"
+        InsDID["Insurance DID"]:::actor
+        InsAuth["Insurance Auth"]:::crypto
+        InsUI["Insurance Dashboard"]:::frontend
+        InsVerify["Verify Claims"]:::privacy
+        InsApprove["Approve Claims"]:::service
+    end
+
+    %% DOCTOR WORKFLOW ARROWS
+    DocStart -->|"Login Process"| DocDID
+    DocDID -->|"ES256k secp256k1 Keys"| DocAuth
+    DocAuth -->|"Private Key Signature"| DocUI
+    DocAuth -->|"BSV Auth Middleware"| API
+    DocUI -->|"Patient + Medication Data"| CreatePrescription
+    CreatePrescription -->|"VC Issuance Request"| DocVC
+    CreatePrescription -->|"QuarkID Agent Service"| QuarkIDCore
+    DocVC -->|"ES256k + BBS+ Signatures"| DocSign
+    DocVC -->|"Store Decentralized VC"| DWNStorage
+    DocSign -->|"Ed25519 Encrypted"| DocStore
+    DocSign -->|"ES256k Proof Hash"| DocBlockchain
+    DocSign -->|"All Actions Logged"| AuditTrail
+    DocBlockchain -->|"Token UTXOs"| BSVBlockchain
+
+    %% PATIENT NOTIFICATION & CONTROL
+    DocBlockchain -->|"BSV Token Notification"| ReceiveNotification
+    ReceiveNotification -->|"View Prescriptions"| PatUI
+    PatDID -->|"ES256k Keys + Insurance"| PatAuth
+    PatAuth -->|"BSV Wallet Integration"| API
+    PatUI -->|"BBS+ Selective Disclosure"| PatPrivacy
+    PatPrivacy -->|"Medication Details Only"| SharePharmacy
+    PatPrivacy -->|"Claims Data Only"| ShareInsurance
+
+    %% PHARMACY VERIFICATION FLOW
+    SharePharmacy -->|"BBS+ Frame"| ReceiveShare
+    ReceiveShare -->|"Selective View"| PharmUI
+    PharmDID -->|"ES256k License + Location"| PharmAuth
+    PharmAuth -->|"Enterprise Auth"| API
+    PharmUI -->|"Multi-Layer Verification"| PharmVerify
+    PharmVerify -->|"DID Registry + VC Core"| QuarkIDCore
+    PharmVerify -->|"BBS+ ZKP + Blockchain Proof"| FraudCheck
+    PharmVerify -->|"Verification Events"| AuditTrail
+    QuarkIDCore -->|"Token State Check"| BSVBlockchain
+    QuarkIDCore -->|"VC Retrieval"| DWNStorage
+    QuarkIDCore -->|"DID Resolution"| BSVOverlay
+    FraudCheck -->|"ML Risk Scoring"| FraudResult
+    FraudCheck -->|"Pattern Analysis"| AuditTrail
+    FraudResult -->|"Low Risk Score"| ApproveDispense
+    FraudResult -->|"High Risk Score"| FlagFraud
+    ApproveDispense -->|"Mark as Dispensed"| UpdateToken
+    UpdateToken -->|"ES256k State Change"| BSVBlockchain
+    UpdateToken -->|"Generate Audit"| PharmComplete
+    UpdateToken -->|"Token Update Logged"| AuditTrail
+    PharmComplete -->|"Medication Dispensed"| PharmEnd
+
+    %% PATIENT CONFIRMATION
+    PharmComplete -->|"Dispensation Notification"| PatConfirm
+    PatConfirm -->|"ES256k Receipt Signature"| BSVBlockchain
+    PatConfirm -->|"Prescription Complete"| PatEnd
+    PatConfirm -->|"Final Confirmation"| AuditTrail
+
+    %% INSURANCE PARALLEL PROCESSING
+    ShareInsurance -->|"BBS+ Claims Frame"| InsVerify
+    InsDID -->|"RSA-2048 Enterprise Keys"| InsAuth
+    InsAuth -->|"Legacy System Integration"| API
+    InsAuth -->|"Enterprise Auth"| QuarkIDCore
+    InsVerify -->|"Claims Processing UI"| InsUI
+    InsUI -->|"Privacy-Preserving Decision"| InsApprove
+    InsApprove -->|"Claims Decision Logged"| AuditTrail
+
+    %% SHARED INFRASTRUCTURE CONNECTIONS
+    API -->|"Route All Actors"| QuarkIDCore
+    AuditTrail -->|"Immutable Record"| BSVBlockchain
+
+    %% Color Definitions
+    classDef frontend fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef api fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef service fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef quarkid fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef crypto fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef privacy fill:#e0f2f1,stroke:#004d40,stroke-width:2px
+    classDef fraud fill:#fff8e1,stroke:#f57f17,stroke-width:2px
+    classDef storage fill:#fce4ec,stroke:#ad1457,stroke-width:2px
+    classDef actor fill:#f1f8e9,stroke:#33691e,stroke-width:2px

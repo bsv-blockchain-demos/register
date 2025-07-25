@@ -1,0 +1,55 @@
+---
+config:
+  layout: dagre
+  theme: default
+---
+flowchart TB
+    %% User-facing start
+    StartUser([Start: Doctor Inputs Prescription]):::frontend
+    subgraph "Frontend"
+        DoctorUI["Doctor Dashboard"]
+        PatientUI["Patient Dashboard"]
+        PharmacyUI["Pharmacy Dashboard"]
+    end
+
+    StartUser --> DoctorUI
+    DoctorUI --> API[Express.js API Gateway]:::api
+    PatientUI --> API
+    PharmacyUI --> API
+
+    %% API layer
+    API --> CoreServices[Core Services]:::service
+
+    %% Core Logic
+    CoreServices -->|Create VC Token| PrescripVC["Create Prescription VC"]:::privacy
+    PrescripVC -->|Tokenize| Token["Create Prescription Token (BSV)"]:::crypto
+    Token -->|Store & Register| Blockchain[(BSV Blockchain)]:::storage
+    PrescripVC -->|Store VC| DWN[(DWN Storage)]:::storage
+
+    %% Sharing
+    Token -->|Notify| PatientUI
+    PatientUI -->|Presents Token| PharmacyUI
+
+    %% Verification at pharmacy
+    PharmacyUI -->|Verify Token & VC| API
+    API -->|Verify| CoreServices
+    CoreServices -->|Verify VC, ZKP| QuarkIDEcosystem["QuarkID Verification"]:::quarkid
+
+    QuarkIDEcosystem -->|ZKP/Fraud Checks| FraudPrevention["Fraud Prevention"]:::fraud
+    FraudPrevention -->|Pass/Fail| PharmacyUI
+
+    PharmacyUI -->|Dispense Medication| EndUser([End: Dispense Registered]):::frontend
+
+    %% Legend (for colors)
+    classDef frontend fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef api fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef service fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef quarkid fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef crypto fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef privacy fill:#e0f2f1,stroke:#004d40,stroke-width:2px
+    classDef fraud fill:#fff8e1,stroke:#f57f17,stroke-width:2px
+    classDef storage fill:#fce4ec,stroke:#ad1457,stroke-width:2px
+
+    %% (Optional for reference: Insurance, Audit, Actors, etc.)
+    %% You can expand each layer as needed for more detail.
+

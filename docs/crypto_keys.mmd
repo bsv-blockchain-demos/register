@@ -1,0 +1,35 @@
+graph TB
+    subgraph "Cryptographic Suites"
+        ES256K[ES256k Suite<br/>BSV Blockchain]
+        BBS[BBS+ Suite<br/>Selective Disclosure]
+        RSA[RSA Suite<br/>Enterprise Auth]
+        ED25519[Ed25519 Suite<br/>Secure Messaging]
+    end
+    
+    subgraph "Use Cases"
+        BLOCKCHAIN[Blockchain Operations]
+        PRIVACY[Privacy & ZKP]
+        ENTERPRISE[Legacy Integration]
+        MESSAGING[Secure Messaging]
+    end
+    
+    subgraph "Operations"
+        SIGN_TX[Sign BSV Transactions]
+        CREATE_DID[Create DID Documents]
+        SELECTIVE[Selective Disclosure]
+        ZKP[Zero-Knowledge Proofs]
+        PKI[PKI Authentication]
+        ENCRYPT[Encrypt Messages]
+    end
+    
+    ES256K --> BLOCKCHAIN
+    BBS --> PRIVACY
+    RSA --> ENTERPRISE
+    ED25519 --> MESSAGING
+    
+    BLOCKCHAIN --> SIGN_TX
+    BLOCKCHAIN --> CREATE_DID
+    PRIVACY --> SELECTIVE
+    PRIVACY --> ZKP
+    ENTERPRISE --> PKI
+    MESSAGING --> ENCRYPT
