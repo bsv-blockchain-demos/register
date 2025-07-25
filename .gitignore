@@ -17,7 +17,6 @@ build/
 .env.test
 .env.production
 */.env
-*/.env.*
 
 # Lock files
 yarn.lock

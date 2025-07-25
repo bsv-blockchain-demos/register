@@ -243,6 +243,7 @@ export class BsvOverlayRegistry {
         ],
         options: {
           randomizeOutputs: false,
+          noSend: true
         },
         labels: ['bsv-did', 'create']
       });

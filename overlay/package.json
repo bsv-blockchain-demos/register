@@ -7,7 +7,7 @@
     "lars": "lars",
     "cars": "cars",
     "lars:config": "lars config",
-    "start": "lars start",
+    "start": "docker compose -f local-data/docker-compose.yml build --no-cache && docker compose -f local-data/docker-compose.yml up",
     "build": "cars build 1",
     "deploy": "cars deploy now 1"
   },
