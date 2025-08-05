@@ -25,9 +25,9 @@ services:
       - mysql
       - mongo
     volumes:
-      - /Users/jake/Desktop/quarkID/Paquetes-NPMjs/register/overlay/backend/src:/app/src
-      - /Users/jake/Desktop/quarkID/Paquetes-NPMjs/register/overlay/local-data/overlay-dev-container/index.ts:/app/index.ts
-      - /Users/jake/Desktop/quarkID/Paquetes-NPMjs/register/overlay/local-data/overlay-dev-container/package.json:/app/package.json
+      - ../backend/src:/app/src
+      - ./overlay-dev-container/index.ts:/app/index.ts
+      - ./overlay-dev-container/package.json:/app/package.json
   mysql:
     image: mysql:8.0
     environment:
