@@ -403,11 +403,12 @@ async function decryptVCData(encryptedPayload: string, recipientDid: string): Pr
   try {
     // Parse the simplified encrypted format
     const parts = encryptedPayload.split(':');
-    if (parts.length !== 3 || parts[0] !== 'encrypted') {
+    if (parts.length !== 6 || parts[0] !== 'encrypted') {
       throw new Error('Invalid encrypted payload format');
     }
 
-    const [, did, encryptedData] = parts;
+    const [, didPrefix, didBsv, didTopic, didId, encryptedData] = parts;
+    const did = `${didPrefix}:${didBsv}:${didTopic}:${didId}`;
     if (did !== recipientDid) {
       throw new Error('Encrypted payload not intended for this recipient');
     }

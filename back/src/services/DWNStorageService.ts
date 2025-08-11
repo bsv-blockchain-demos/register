@@ -48,12 +48,15 @@ export class DWNStorageService {
       const messageData = JSON.stringify(message);
       const messageBytes = Utils.toArray(messageData, 'utf8') as Byte[];
 
+      // Locking script
+      const lockingScript = this.createDWNLockingScript(messageBytes);
+
       // Create a transaction to store the DWN message
       const result = await this.walletClient.createAction({
         description: `Store DWN message: ${message.type}`,
         outputs: [{
           satoshis: 1,
-          lockingScript: this.createDWNLockingScript(messageBytes),
+          lockingScript: lockingScript,
           outputDescription: `DWN Message: ${message.type}`,
           basket: 'dwn-messages',
           customInstructions: JSON.stringify({
@@ -92,17 +95,20 @@ export class DWNStorageService {
       console.log('[DWNStorageService] Retrieving messages for DID:', recipientDid);
 
       // Get all DWN message outputs from wallet storage
-      const outputs = await this.walletClient.getUTXOs({
-        basket: 'dwn-messages'
+      const outputs = await this.walletClient.listOutputs({
+        basket: 'dwn-messages',
+        includeCustomInstructions: true,
+        include: 'locking scripts',
+        limit: 100
       });
 
       const messages: DWNMessage[] = [];
 
-      for (const output of outputs) {
+      for (const output of outputs.outputs) {
         try {
           // Parse custom instructions to check if this message is for the recipient
           const customInstructions = JSON.parse(output.customInstructions || '{}');
-          
+
           if (customInstructions.type !== 'dwn-message') continue;
           if (customInstructions.to !== recipientDid) continue;
 
@@ -113,8 +119,14 @@ export class DWNStorageService {
           // Decode the message from the locking script
           const messageData = this.extractDWNMessage(output.lockingScript);
           if (messageData) {
-            const message = JSON.parse(messageData);
-            
+            let message: any;
+            try {
+              message = JSON.parse(messageData);
+            } catch(e) {
+              console.info('[DWNStorageService] Skipping invalid message data: ', messageData);
+              continue;
+            }
+
             // Apply unread filter
             if (filters.unreadOnly && message.read) continue;
 
@@ -148,11 +160,14 @@ export class DWNStorageService {
     try {
       console.log('[DWNStorageService] Retrieving message:', messageId);
 
-      const outputs = await this.walletClient.getUTXOs({
-        basket: 'dwn-messages'
+      const outputs = await this.walletClient.listOutputs({
+        basket: 'dwn-messages',
+        includeCustomInstructions: true,
+        include: 'locking scripts',
+        limit: 100
       });
 
-      for (const output of outputs) {
+      for (const output of outputs.outputs) {
         try {
           const customInstructions = JSON.parse(output.customInstructions || '{}');
           
@@ -324,6 +339,9 @@ export class DWNStorageService {
       return [data.length, ...data];
     } else if (data.length <= 255) {
       return [76, data.length, ...data]; // OP_PUSHDATA1
+    } else if (data.length <= 65535) {
+      const lengthBytes = [data.length & 0xff, (data.length >> 8) & 0xff];
+      return [77, ...lengthBytes, ...data];
     } else {
       throw new Error('Message too large for single output');
     }
@@ -341,6 +359,9 @@ export class DWNStorageService {
     } else if (length === 76) { // OP_PUSHDATA1
       const dataLength = scriptBytes[1];
       return Array.from(scriptBytes.slice(2, 2 + dataLength));
+    } else if (length === 77) {
+      const dataLength = scriptBytes[1] + (scriptBytes[2] << 8);
+      return Array.from(scriptBytes.slice(3, 3 + dataLength));
     } else {
       throw new Error('Unsupported data encoding');
     }
