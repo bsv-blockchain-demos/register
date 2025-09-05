@@ -1,0 +1,174 @@
+version: '3.8'
+
+services:
+  # MongoDB database shared by backend and overlay services
+  db-mongo:
+    image: mongo:6.0
+    container_name: db-mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data/mongo:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: quarkid_prescriptions_db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - quarkid-network
+
+  # MySQL database for overlay service
+  db-mysql:
+    image: mysql:8.0
+    container_name: db-mysql
+    restart: always
+    environment:
+      MYSQL_DATABASE: overlay
+      MYSQL_USER: overlayAdmin
+      MYSQL_PASSWORD: overlay123
+      MYSQL_ROOT_PASSWORD: rootpassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - quarkid-network
+
+  # Backend API service
+  backend:
+    build:
+      context: .
+      dockerfile: back/Dockerfile
+    container_name: backend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      # Database Configuration
+      MONGODB_URI: mongodb://db-mongo:27017
+      APP_DB_NAME: quarkid_prescriptions_db
+      
+      # Service URLs
+      OVERLAY_PROVIDER_URL: http://overlay:8080
+      WALLET_STORAGE_URL: https://store-us-1.bsvb.tech
+      
+      # Development Configuration
+      NODE_ENV: development
+      PORT: 3000
+      MOCK_UTXOS: "false"
+      
+      # BSV Configuration
+      FEE_PER_KB: 1
+      
+      # DID Configuration
+      DID_TOPIC: tm_did
+      DID_TOPIC_SERVICE: ls_did
+      
+      # VC Configuration
+      VC_TOPIC: tm_vc
+      VC_TOPIC_SERVICE: ls_vc
+    env_file:
+      - .env
+    depends_on:
+      db-mongo:
+        condition: service_healthy
+      overlay:
+        condition: service_started
+    networks:
+      - quarkid-network
+
+  # Frontend React application
+  frontend:
+    build:
+      context: .
+      dockerfile: front/Dockerfile
+    container_name: frontend
+    restart: always
+    ports:
+      - "5174:80"
+    environment:
+      VITE_API_URL: http://localhost:3000
+      VITE_WALLET_STORAGE_URL: https://storage.babbage.systems
+    depends_on:
+      - backend
+    networks:
+      - quarkid-network
+
+  # Overlay service (LARS)
+  overlay:
+    build:
+      context: overlay
+      dockerfile: local-data/overlay-dev-container/Dockerfile
+    container_name: overlay
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      MONGO_URL: mongodb://db-mongo:27017/overlay-db
+      KNEX_URL: mysql://overlayAdmin:overlay123@db-mysql:3306/overlay
+      WALLET_STORAGE_URL: https://store-us-1.bsvb.tech
+      HOSTING_URL: localhost:8080
+      NETWORK: mainnet
+      REQUEST_LOGGING: "true"
+      GASP_SYNC: "false"
+      LOG_TIME: "false"
+      LOG_PREFIX: "[LARS OVERLAY ENGINE] "
+      THROW_ON_BROADCAST_FAIL: "false"
+      SYNC_CONFIG_JSON: "{}"
+    env_file:
+      - .env
+    depends_on:
+      db-mysql:
+        condition: service_healthy
+      db-mongo:
+        condition: service_healthy
+    networks:
+      - quarkid-network
+
+  # Database admin interfaces
+  adminer:
+    image: adminer
+    container_name: adminer
+    restart: always
+    ports:
+      - "8081:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: db-mysql
+    depends_on:
+      - db-mysql
+    networks:
+      - quarkid-network
+
+  mongoexpress:
+    image: mongo-express
+    container_name: mongoexpress
+    restart: always
+    ports:
+      - "8082:8081"
+    environment:
+      ME_CONFIG_MONGODB_SERVER: db-mongo
+      ME_CONFIG_MONGODB_PORT: "27017"
+      ME_CONFIG_BASICAUTH_USERNAME: ""
+      ME_CONFIG_BASICAUTH_PASSWORD: ""
+    depends_on:
+      - db-mongo
+    networks:
+      - quarkid-network
+
+networks:
+  quarkid-network:
+    driver: bridge
+
+volumes:
+  mongo_data:
+  mysql_data:

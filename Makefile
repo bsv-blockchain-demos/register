@@ -200,7 +200,61 @@ test:
 	@cd $(FRONTEND_DIR) && npm test 2>/dev/null || echo "$(YELLOW)⚠️  No frontend tests configured$(NC)"
 	@cd $(OVERLAY_DIR) && npm test 2>/dev/null || echo "$(YELLOW)⚠️  No overlay tests configured$(NC)"
 
-# OverlayDocker helpers
+# Docker commands
+.PHONY: docker-build
+docker-build:
+	@echo "$(BLUE)🐳 Building Docker containers...$(NC)"
+	@docker-compose build
+	@echo "$(GREEN)✅ Docker containers built$(NC)"
+
+.PHONY: docker-up
+docker-up:
+	@echo "$(BLUE)🐳 Starting all services with Docker...$(NC)"
+	@docker-compose up -d
+	@echo "$(GREEN)✅ All services started$(NC)"
+	@echo "$(YELLOW)Services available at:$(NC)"
+	@echo "  - Frontend: http://localhost:5174"
+	@echo "  - Backend:  http://localhost:3000"
+	@echo "  - Overlay:  http://localhost:8080"
+	@echo "  - Adminer:  http://localhost:8081"
+	@echo "  - MongoExpress: http://localhost:8082"
+
+.PHONY: docker-down
+docker-down:
+	@echo "$(YELLOW)🛑 Stopping Docker services...$(NC)"
+	@docker-compose down
+	@echo "$(GREEN)✅ Docker services stopped$(NC)"
+
+.PHONY: docker-logs
+docker-logs:
+	@echo "$(BLUE)📋 Showing Docker logs...$(NC)"
+	@docker-compose logs -f
+
+.PHONY: docker-clean
+docker-clean:
+	@echo "$(YELLOW)🧹 Cleaning Docker resources...$(NC)"
+	@docker-compose down -v --remove-orphans
+	@docker system prune -f
+	@echo "$(GREEN)✅ Docker resources cleaned$(NC)"
+
+.PHONY: docker-single
+docker-single:
+	@echo "$(BLUE)🐳 Building single container...$(NC)"
+	@docker build -t blockmed-single .
+	@echo "$(GREEN)✅ Single container built$(NC)"
+	@echo "$(BLUE)🚀 Starting single container...$(NC)"
+	@docker run -d -p 80:80 -p 3000:3000 --name blockmed blockmed-single
+	@echo "$(GREEN)✅ Single container started$(NC)"
+	@echo "$(YELLOW)Application available at: http://localhost$(NC)"
+
+.PHONY: docker-single-stop
+docker-single-stop:
+	@echo "$(YELLOW)🛑 Stopping single container...$(NC)"
+	@docker stop blockmed || true
+	@docker rm blockmed || true
+	@echo "$(GREEN)✅ Single container stopped$(NC)"
+
+# OverlayDocker helpers (legacy)
 .PHONY: overlay-start
 overlay-start:
 	@echo "$(BLUE)🐳 Starting Overlay (LARS) container...$(NC)"
@@ -236,6 +290,15 @@ help:
 	@echo "  make run-backend   - Run only backend (port 3000)"
 	@echo "  make run-overlay   - Run only overlay service (port 8080)"
 	@echo "  make status        - Check if services are running"
+	@echo ""
+	@echo "$(GREEN)Docker Commands:$(NC)"
+	@echo "  make docker-build    - Build Docker containers"
+	@echo "  make docker-up       - Start all services with Docker"
+	@echo "  make docker-down     - Stop Docker services"
+	@echo "  make docker-logs     - Show Docker logs"
+	@echo "  make docker-clean    - Clean Docker resources"
+	@echo "  make docker-single   - Build and run single container"
+	@echo "  make docker-single-stop - Stop single container"
 	@echo ""
 	@echo "$(GREEN)Overlay (LARS):$(NC)"
 	@echo "  make overlay-start   - Start Overlay (LARS) Docker containers"
