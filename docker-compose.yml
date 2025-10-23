@@ -50,6 +50,8 @@ services:
     image: quarkid-base:latest
     container_name: quarkid-base-builder
     command: /bin/true  # Just build the image, don't run anything
+    networks:
+      - quarkid-network
 
   # Backend API service
   backend:
