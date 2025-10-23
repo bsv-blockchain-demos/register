@@ -35,7 +35,7 @@ function generateKeyPair(): GeneratedKeyPair {
   return {
     privateKeyHex: privateKey.toHex(),
     privateKeyWIF: privateKey.toWif(),
-    publicKeyHex: publicKey.toHex(),
+    publicKeyHex: publicKey.toString(),
     address: address
   };
 }
