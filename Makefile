@@ -240,7 +240,7 @@ docker-clean:
 .PHONY: docker-single
 docker-single:
 	@echo "$(BLUE)🐳 Building single container...$(NC)"
-	@docker build -t blockmed-single .
+	@cd .. && docker build -t blockmed-single -f register/Dockerfile .
 	@echo "$(GREEN)✅ Single container built$(NC)"
 	@echo "$(BLUE)🚀 Starting single container...$(NC)"
 	@docker run -d -p 80:80 -p 3000:3000 --name blockmed blockmed-single

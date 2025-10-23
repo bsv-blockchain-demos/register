@@ -1,0 +1,94 @@
+# Git and version control
+.git
+.gitignore
+*.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Logs and temporary files
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories (exclude all node_modules)
+node_modules
+*/node_modules
+**/node_modules
+
+# Build directories and artifacts
+build
+dist
+*/build
+*/dist
+.tmp
+*.tgz
+
+# Environment files (exclude secrets but keep examples)
+.env
+.env.*
+!.env.example
+!*/env.example
+!*/.env.example
+
+# Docker files (exclude from context to avoid infinite recursion)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Documentation files
+README.md
+CHANGELOG.md
+LICENSE
+docs/
+
+# Testing files
+.coverage
+jest.config.*
+.jest
+
+# Package manager files (keep package.json and yarn.lock, exclude npm lock files)
+package-lock.json
+*/package-lock.json
+**/package-lock.json
+
+# Cache directories
+.cache
+.parcel-cache
+.next
+
+# Development data directories (keep structure but exclude data)
+data/
+*/data/
+overlay/local-data/mysql/
+overlay/local-data/mongo/
+
+# Temporary and backup files
+*.tmp
+*.bak
+*.backup
+.temp

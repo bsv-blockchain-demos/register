@@ -53,15 +53,22 @@ export class ActorService {
         privateKey = keyPair.privateKey;
       }
 
-      // Create DID if QuarkIdAgentService is available
+      // Create DID - MANDATORY for all actors
       let did = '';
-      if (this.quarkIdAgentService) {
-        try {
-          did = await this.quarkIdAgentService.createDID();
-          console.log('[ActorService] Created DID:', did);
-        } catch (error) {
-          console.warn('[ActorService] Failed to create DID, continuing without:', error.message);
+      if (!this.quarkIdAgentService) {
+        throw new Error('QuarkIdAgentService is not available. Cannot create actor without DID capability.');
+      }
+
+      try {
+        did = await this.quarkIdAgentService.createDID();
+        console.log('[ActorService] Created DID:', did);
+
+        if (!did || did.trim() === '') {
+          throw new Error('DID creation returned empty or invalid DID');
         }
+      } catch (error) {
+        console.error('[ActorService] CRITICAL: Failed to create DID for actor:', error);
+        throw new Error(`Failed to create DID for actor: ${error.message}. Actor creation aborted.`);
       }
 
       // Create actor record

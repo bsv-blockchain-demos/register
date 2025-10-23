@@ -35,6 +35,10 @@ export const PrescriptionForm: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [loadingPatients, setLoadingPatients] = useState(true);
+  const [loadingInsurance, setLoadingInsurance] = useState(true);
+  const [patientsError, setPatientsError] = useState<string | null>(null);
+  const [insuranceError, setInsuranceError] = useState<string | null>(null);
 
   useEffect(() => {
     loadPatients();
@@ -43,31 +47,55 @@ export const PrescriptionForm: React.FC = () => {
 
   const loadPatients = async () => {
     try {
+      setLoadingPatients(true);
+      setPatientsError(null);
       const response = await apiService.getActors();
       if (response.success && response.data) {
         // Filter for patients who have DIDs
-        const patientActors = response.data.filter((actor: Actor) => 
+        const patientActors = response.data.filter((actor: Actor) =>
           actor.type === 'patient' && actor.did
         );
+
+        if (patientActors.length === 0) {
+          setPatientsError('No patients with DIDs found. Please ensure actors are properly seeded with DIDs.');
+        }
+
         setPatients(patientActors);
+      } else {
+        setPatientsError(response.error || 'Failed to load patients');
       }
     } catch (error) {
       console.error('Failed to load patients:', error);
+      setPatientsError('Unable to connect to the server. Please check your connection and try again.');
+    } finally {
+      setLoadingPatients(false);
     }
   };
 
   const loadInsuranceProviders = async () => {
     try {
+      setLoadingInsurance(true);
+      setInsuranceError(null);
       const response = await apiService.getActors();
       if (response.success && response.data) {
         // Filter for insurance providers who have DIDs
-        const insuranceActors = response.data.filter((actor: Actor) => 
+        const insuranceActors = response.data.filter((actor: Actor) =>
           actor.type === 'insurance' && actor.did
         );
+
+        if (insuranceActors.length === 0) {
+          setInsuranceError('No insurance providers with DIDs found. Please ensure actors are properly seeded with DIDs.');
+        }
+
         setInsuranceProviders(insuranceActors);
+      } else {
+        setInsuranceError(response.error || 'Failed to load insurance providers');
       }
     } catch (error) {
       console.error('Failed to load insurance providers:', error);
+      setInsuranceError('Unable to connect to the server. Please check your connection and try again.');
+    } finally {
+      setLoadingInsurance(false);
     }
   };
 
@@ -167,10 +195,22 @@ export const PrescriptionForm: React.FC = () => {
           {error}
         </div>
       )}
-      
+
       {success && (
         <div className="bg-green-500/10 border border-green-500 text-green-500 p-4 rounded-lg mb-4">
           {success}
+        </div>
+      )}
+
+      {patientsError && (
+        <div className="bg-yellow-500/10 border border-yellow-500 text-yellow-500 p-4 rounded-lg mb-4">
+          <strong>Patients:</strong> {patientsError}
+        </div>
+      )}
+
+      {insuranceError && (
+        <div className="bg-yellow-500/10 border border-yellow-500 text-yellow-500 p-4 rounded-lg mb-4">
+          <strong>Insurance:</strong> {insuranceError}
         </div>
       )}
 
@@ -182,8 +222,13 @@ export const PrescriptionForm: React.FC = () => {
             onChange={handlePatientSelect}
             className="w-full px-4 py-2 bg-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500"
             required
+            disabled={loadingPatients}
           >
-            <option value="">Select a patient</option>
+            <option value="">
+              {loadingPatients ? 'Loading patients...' :
+               patients.length === 0 ? 'No patients available' :
+               'Select a patient'}
+            </option>
             {patients.map(patient => (
               <option key={patient.id} value={patient.did}>
                 {patient.name} - {patient.did?.substring(0, 20)}...
@@ -212,8 +257,13 @@ export const PrescriptionForm: React.FC = () => {
               value={formData.insuranceProvider}
               onChange={handleInsuranceSelect}
               className="w-full px-4 py-2 bg-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500"
+              disabled={loadingInsurance}
             >
-              <option value="">Select insurance provider (optional)</option>
+              <option value="">
+                {loadingInsurance ? 'Loading insurance providers...' :
+                 insuranceProviders.length === 0 ? 'No insurance providers available' :
+                 'Select insurance provider (optional)'}
+              </option>
               {insuranceProviders.map(insurance => (
                 <option key={insurance.id} value={insurance.did}>
                   {insurance.name}

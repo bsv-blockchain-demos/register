@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import type { Actor } from '../types';
 
 interface AuthContextType {
@@ -39,6 +40,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = (actor: Actor) => {
+    // Validate that actor has a DID before allowing login
+    if (!actor.did || actor.did.trim() === '') {
+      console.error('Login failed: Actor does not have a valid DID', actor);
+      throw new Error('Cannot log in: This actor does not have a valid DID. Please contact support or re-create this actor.');
+    }
+
     setCurrentUser(actor);
     localStorage.setItem('currentUser', JSON.stringify(actor));
   };

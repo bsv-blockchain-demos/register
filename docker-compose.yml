@@ -47,20 +47,25 @@ services:
   # Backend API service
   backend:
     build:
-      context: .
-      dockerfile: back/Dockerfile
+      context: ..
+      dockerfile: register/back/Dockerfile
+      target: development
     container_name: backend
     restart: always
     ports:
       - "3000:3000"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     environment:
       # Database Configuration
+      MONGO_URI: mongodb://db-mongo:27017
       MONGODB_URI: mongodb://db-mongo:27017
       APP_DB_NAME: quarkid_prescriptions_db
       
       # Service URLs
       OVERLAY_PROVIDER_URL: http://overlay:8080
-      WALLET_STORAGE_URL: https://store-us-1.bsvb.tech
+      WALLET_STORAGE_URL: https://storage.babbage.systems
       
       # Development Configuration
       NODE_ENV: development
@@ -78,7 +83,7 @@ services:
       VC_TOPIC: tm_vc
       VC_TOPIC_SERVICE: ls_vc
     env_file:
-      - .env
+      - back/.env.docker
     depends_on:
       db-mongo:
         condition: service_healthy
@@ -90,12 +95,15 @@ services:
   # Frontend React application
   frontend:
     build:
-      context: .
-      dockerfile: front/Dockerfile
+      context: ..
+      dockerfile: register/front/Dockerfile
     container_name: frontend
     restart: always
     ports:
       - "5174:80"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     environment:
       VITE_API_URL: http://localhost:3000
       VITE_WALLET_STORAGE_URL: https://storage.babbage.systems

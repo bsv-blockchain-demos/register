@@ -16,7 +16,9 @@ build/
 .env.development
 .env.test
 .env.production
+.env.docker
 */.env
+*/.env.docker
 
 # Lock files
 yarn.lock
@@ -27,6 +29,9 @@ package-lock.json
 # Database files
 */local-data/mongo/
 */local-data/mysql/
+data/
+data/mongo/
+data/mysql/
 *.lock
 
 # IDE and OS files
