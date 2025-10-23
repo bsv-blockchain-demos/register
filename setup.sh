@@ -60,7 +60,19 @@ echo -e "${GREEN}  ✓ All dependencies installed${NC}"
 
 # Step 5: Setup environment files
 echo ""
-echo -e "${BLUE}⚙️  Step 5/6: Setting up environment files...${NC}"
+echo -e "${BLUE}⚙️  Step 5/7: Setting up environment files...${NC}"
+
+# Root .env for Docker
+if [ ! -f ".env" ]; then
+    if [ -f ".env.example" ]; then
+        cp .env.example .env
+        echo -e "  ${GREEN}✓ Created .env from example (for Docker)${NC}"
+    else
+        echo -e "  ${YELLOW}⚠️  No .env.example found${NC}"
+    fi
+else
+    echo -e "  ${GREEN}✓ Root .env already exists${NC}"
+fi
 
 # Backend .env
 if [ ! -f "back/.env" ]; then
@@ -88,9 +100,34 @@ fi
 
 # Step 6: Generate BSV keys
 echo ""
-echo -e "${BLUE}🔑 Step 6/6: Generating BSV wallet keys...${NC}"
+echo -e "${BLUE}🔑 Step 6/7: Generating BSV wallet keys...${NC}"
 cd back && npx tsx src/scripts/generate-keys.ts && cd ..
-echo -e "${GREEN}  ✓ BSV keys generated and saved to .env${NC}"
+echo -e "${GREEN}  ✓ BSV keys generated and saved to back/.env${NC}"
+
+# Step 7: Update root .env with generated keys
+echo ""
+echo -e "${BLUE}🔄 Step 7/7: Updating root .env with generated keys...${NC}"
+if [ -f "back/.env" ] && [ -f ".env" ]; then
+    # Extract keys from back/.env and update root .env
+    MEDICAL_LICENSE_CERTIFIER=$(grep "^MEDICAL_LICENSE_CERTIFIER=" back/.env | cut -d '=' -f2)
+    PLATFORM_FUNDING_KEY=$(grep "^PLATFORM_FUNDING_KEY=" back/.env | cut -d '=' -f2)
+
+    # Update root .env if keys were found
+    if [ ! -z "$MEDICAL_LICENSE_CERTIFIER" ]; then
+        sed -i.bak "s|^MEDICAL_LICENSE_CERTIFIER=.*|MEDICAL_LICENSE_CERTIFIER=$MEDICAL_LICENSE_CERTIFIER|" .env
+        echo -e "  ${GREEN}✓ Updated MEDICAL_LICENSE_CERTIFIER in root .env${NC}"
+    fi
+
+    if [ ! -z "$PLATFORM_FUNDING_KEY" ]; then
+        sed -i.bak "s|^PLATFORM_FUNDING_KEY=.*|PLATFORM_FUNDING_KEY=$PLATFORM_FUNDING_KEY|" .env
+        echo -e "  ${GREEN}✓ Updated PLATFORM_FUNDING_KEY in root .env${NC}"
+    fi
+
+    # Clean up backup file
+    rm -f .env.bak
+else
+    echo -e "  ${YELLOW}⚠️  Could not update root .env (files missing)${NC}"
+fi
 
 # Success message
 echo ""

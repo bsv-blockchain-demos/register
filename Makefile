@@ -145,19 +145,44 @@ clean:
 .PHONY: setup-env
 setup-env:
 	@echo "$(BLUE)⚙️  Setting up environment files...$(NC)"
+	@# Root .env for Docker
+	@if [ ! -f .env ]; then \
+		if [ -f .env.example ]; then \
+			cp .env.example .env; \
+			echo "$(GREEN)✓ Created .env from example (for Docker)$(NC)"; \
+		else \
+			echo "$(YELLOW)⚠️  No .env.example found$(NC)"; \
+		fi; \
+	else \
+		echo "$(GREEN)✓ Root .env already exists$(NC)"; \
+	fi
+	@# Backend .env
 	@if [ ! -f $(BACKEND_DIR)/.env ]; then \
 		cp $(BACKEND_DIR)/env.example $(BACKEND_DIR)/.env 2>/dev/null || echo "$(YELLOW)⚠️  No .env.example found in backend$(NC)"; \
 	else \
 		echo "$(GREEN)✓ Backend .env already exists$(NC)"; \
 	fi
+	@# Frontend .env
 	@if [ ! -f $(FRONTEND_DIR)/.env ]; then \
 		cp $(FRONTEND_DIR)/env.example $(FRONTEND_DIR)/.env 2>/dev/null || echo "$(YELLOW)⚠️  No .env.example found in frontend$(NC)"; \
 	else \
 		echo "$(GREEN)✓ Frontend .env already exists$(NC)"; \
 	fi
-	@echo "$(BLUE) Generate keys and update .env using TypeScript...$(NC)"
 	@echo "$(BLUE)🔑 Generating BSV keys...$(NC)"
 	@cd $(BACKEND_DIR) && npx tsx src/scripts/generate-keys.ts
+	@# Update root .env with generated keys
+	@if [ -f $(BACKEND_DIR)/.env ] && [ -f .env ]; then \
+		MEDICAL_LICENSE_CERTIFIER=$$(grep "^MEDICAL_LICENSE_CERTIFIER=" $(BACKEND_DIR)/.env | cut -d '=' -f2); \
+		PLATFORM_FUNDING_KEY=$$(grep "^PLATFORM_FUNDING_KEY=" $(BACKEND_DIR)/.env | cut -d '=' -f2); \
+		if [ ! -z "$$MEDICAL_LICENSE_CERTIFIER" ]; then \
+			sed -i.bak "s|^MEDICAL_LICENSE_CERTIFIER=.*|MEDICAL_LICENSE_CERTIFIER=$$MEDICAL_LICENSE_CERTIFIER|" .env; \
+		fi; \
+		if [ ! -z "$$PLATFORM_FUNDING_KEY" ]; then \
+			sed -i.bak "s|^PLATFORM_FUNDING_KEY=.*|PLATFORM_FUNDING_KEY=$$PLATFORM_FUNDING_KEY|" .env; \
+		fi; \
+		rm -f .env.bak; \
+		echo "$(GREEN)✓ Updated root .env with generated keys$(NC)"; \
+	fi
 	@echo "$(BLUE)💰 Funding PLATFORM_FUNDING_KEY...$(NC)"
 	@cd $(BACKEND_DIR) && npx tsx src/scripts/fund-platform.ts
 	@echo "$(GREEN)✅ Environment files setup complete$(NC)"
