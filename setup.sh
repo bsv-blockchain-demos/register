@@ -86,6 +86,18 @@ else
     echo -e "  ${GREEN}✓ Backend .env already exists${NC}"
 fi
 
+# Backend .env.docker for Docker deployment
+if [ ! -f "back/.env.docker" ]; then
+    if [ -f "back/.env.docker.example" ]; then
+        cp back/.env.docker.example back/.env.docker
+        echo -e "  ${GREEN}✓ Created back/.env.docker from example${NC}"
+    else
+        echo -e "  ${YELLOW}⚠️  No .env.docker.example found for backend${NC}"
+    fi
+else
+    echo -e "  ${GREEN}✓ Backend .env.docker already exists${NC}"
+fi
+
 # Frontend .env
 if [ ! -f "front/.env" ]; then
     if [ -f "front/env.example" ]; then
@@ -98,35 +110,68 @@ else
     echo -e "  ${GREEN}✓ Frontend .env already exists${NC}"
 fi
 
-# Step 6: Generate BSV keys
+# Step 6: Check for existing keys or generate new ones
 echo ""
-echo -e "${BLUE}🔑 Step 6/7: Generating BSV wallet keys...${NC}"
-cd back && npx tsx src/scripts/generate-keys.ts && cd ..
-echo -e "${GREEN}  ✓ BSV keys generated and saved to back/.env${NC}"
+echo -e "${BLUE}🔑 Step 6/7: Setting up BSV wallet keys...${NC}"
 
-# Step 7: Update root .env with generated keys
-echo ""
-echo -e "${BLUE}🔄 Step 7/7: Updating root .env with generated keys...${NC}"
-if [ -f "back/.env" ] && [ -f ".env" ]; then
-    # Extract keys from back/.env and update root .env
-    MEDICAL_LICENSE_CERTIFIER=$(grep "^MEDICAL_LICENSE_CERTIFIER=" back/.env | cut -d '=' -f2)
-    PLATFORM_FUNDING_KEY=$(grep "^PLATFORM_FUNDING_KEY=" back/.env | cut -d '=' -f2)
+# Check if keys already exist in back/.env
+MEDICAL_LICENSE_CERTIFIER=""
+PLATFORM_FUNDING_KEY=""
 
-    # Update root .env if keys were found
-    if [ ! -z "$MEDICAL_LICENSE_CERTIFIER" ]; then
-        sed -i.bak "s|^MEDICAL_LICENSE_CERTIFIER=.*|MEDICAL_LICENSE_CERTIFIER=$MEDICAL_LICENSE_CERTIFIER|" .env
-        echo -e "  ${GREEN}✓ Updated MEDICAL_LICENSE_CERTIFIER in root .env${NC}"
+if [ -f "back/.env" ]; then
+    MEDICAL_LICENSE_CERTIFIER=$(grep "^MEDICAL_LICENSE_CERTIFIER=" back/.env | cut -d '=' -f2 | grep -v "your_")
+    PLATFORM_FUNDING_KEY=$(grep "^PLATFORM_FUNDING_KEY=" back/.env | cut -d '=' -f2 | grep -v "your_")
+fi
+
+# Generate new keys only if they don't exist
+if [ -z "$MEDICAL_LICENSE_CERTIFIER" ] || [ -z "$PLATFORM_FUNDING_KEY" ]; then
+    echo -e "  ${YELLOW}Keys not found, generating new keys...${NC}"
+    cd back && npx tsx src/scripts/generate-keys.ts && cd ..
+    echo -e "  ${GREEN}✓ New BSV keys generated and saved to back/.env${NC}"
+
+    # Re-extract the newly generated keys
+    if [ -f "back/.env" ]; then
+        MEDICAL_LICENSE_CERTIFIER=$(grep "^MEDICAL_LICENSE_CERTIFIER=" back/.env | cut -d '=' -f2)
+        PLATFORM_FUNDING_KEY=$(grep "^PLATFORM_FUNDING_KEY=" back/.env | cut -d '=' -f2)
     fi
-
-    if [ ! -z "$PLATFORM_FUNDING_KEY" ]; then
-        sed -i.bak "s|^PLATFORM_FUNDING_KEY=.*|PLATFORM_FUNDING_KEY=$PLATFORM_FUNDING_KEY|" .env
-        echo -e "  ${GREEN}✓ Updated PLATFORM_FUNDING_KEY in root .env${NC}"
-    fi
-
-    # Clean up backup file
-    rm -f .env.bak
 else
-    echo -e "  ${YELLOW}⚠️  Could not update root .env (files missing)${NC}"
+    echo -e "  ${GREEN}✓ Existing BSV keys found in back/.env${NC}"
+fi
+
+# Step 7: Sync keys to all required .env files
+echo ""
+echo -e "${BLUE}🔄 Step 7/7: Syncing keys to all config files...${NC}"
+if [ ! -z "$MEDICAL_LICENSE_CERTIFIER" ] && [ ! -z "$PLATFORM_FUNDING_KEY" ]; then
+
+    # Update root .env if it exists
+    if [ -f ".env" ]; then
+        if [ ! -z "$MEDICAL_LICENSE_CERTIFIER" ]; then
+            sed -i.bak "s|^MEDICAL_LICENSE_CERTIFIER=.*|MEDICAL_LICENSE_CERTIFIER=$MEDICAL_LICENSE_CERTIFIER|" .env
+            echo -e "  ${GREEN}✓ Updated MEDICAL_LICENSE_CERTIFIER in root .env${NC}"
+        fi
+
+        if [ ! -z "$PLATFORM_FUNDING_KEY" ]; then
+            sed -i.bak "s|^PLATFORM_FUNDING_KEY=.*|PLATFORM_FUNDING_KEY=$PLATFORM_FUNDING_KEY|" .env
+            echo -e "  ${GREEN}✓ Updated PLATFORM_FUNDING_KEY in root .env${NC}"
+        fi
+        rm -f .env.bak
+    fi
+
+    # Update back/.env.docker if it exists
+    if [ -f "back/.env.docker" ]; then
+        if [ ! -z "$MEDICAL_LICENSE_CERTIFIER" ]; then
+            sed -i.bak "s|^MEDICAL_LICENSE_CERTIFIER=.*|MEDICAL_LICENSE_CERTIFIER=$MEDICAL_LICENSE_CERTIFIER|" back/.env.docker
+            echo -e "  ${GREEN}✓ Updated MEDICAL_LICENSE_CERTIFIER in back/.env.docker${NC}"
+        fi
+
+        if [ ! -z "$PLATFORM_FUNDING_KEY" ]; then
+            sed -i.bak "s|^PLATFORM_FUNDING_KEY=.*|PLATFORM_FUNDING_KEY=$PLATFORM_FUNDING_KEY|" back/.env.docker
+            echo -e "  ${GREEN}✓ Updated PLATFORM_FUNDING_KEY in back/.env.docker${NC}"
+        fi
+        rm -f back/.env.docker.bak
+    fi
+else
+    echo -e "  ${YELLOW}⚠️  Could not sync keys (back/.env missing)${NC}"
 fi
 
 # Success message
