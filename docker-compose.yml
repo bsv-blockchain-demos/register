@@ -44,6 +44,15 @@ services:
     networks:
       - quarkid-network
 
+  # Shared QuarkID workspace base image (built first to avoid race conditions)
+  quarkid-base:
+    build:
+      context: ..
+      dockerfile: register/docker/Dockerfile.quarkid-base
+    image: quarkid-base:latest
+    container_name: quarkid-base-builder
+    command: /bin/true  # Just build the image, don't run anything
+
   # Backend API service
   backend:
     build:
@@ -62,29 +71,31 @@ services:
       MONGO_URI: mongodb://db-mongo:27017
       MONGODB_URI: mongodb://db-mongo:27017
       APP_DB_NAME: quarkid_prescriptions_db
-      
+
       # Service URLs
       OVERLAY_PROVIDER_URL: http://overlay:8080
       WALLET_STORAGE_URL: https://storage.babbage.systems
-      
+
       # Development Configuration
       NODE_ENV: development
       PORT: 3000
       MOCK_UTXOS: "false"
-      
+
       # BSV Configuration
       FEE_PER_KB: 1
-      
+
       # DID Configuration
       DID_TOPIC: tm_did
       DID_TOPIC_SERVICE: ls_did
-      
+
       # VC Configuration
       VC_TOPIC: tm_vc
       VC_TOPIC_SERVICE: ls_vc
     env_file:
       - back/.env.docker
     depends_on:
+      quarkid-base:
+        condition: service_completed_successfully
       db-mongo:
         condition: service_healthy
       overlay:
@@ -108,7 +119,10 @@ services:
       VITE_API_URL: http://localhost:3000
       VITE_WALLET_STORAGE_URL: https://storage.babbage.systems
     depends_on:
-      - backend
+      quarkid-base:
+        condition: service_completed_successfully
+      backend:
+        condition: service_started
     networks:
       - quarkid-network
 

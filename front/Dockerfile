@@ -1,34 +1,17 @@
-# ---- Base Stage ----
-FROM node:20-alpine AS base
-# Install build dependencies for native modules
-RUN apk add --no-cache python3 make g++
-WORKDIR /app
+# ---- Use Shared QuarkID Base ----
+FROM quarkid-base:latest AS base
 
 # ---- Dependencies Stage ----
 FROM base AS deps
-# Copy QuarkID packages from parent directory build context
-COPY Paquetes-NPMjs ./Paquetes-NPMjs
-# Install QuarkID dependencies first - critical for file: references
-# Configure yarn for better DNS handling in Alpine
-RUN cd Paquetes-NPMjs && \
-    yarn config set network-timeout 300000 && \
-    yarn config set network-concurrency 1 && \
-    yarn install --network-timeout 300000 || \
-    (sleep 10 && yarn install --network-timeout 300000)
-
-# Update QuarkID workspace to include register projects and install all dependencies
+# QuarkID packages already installed in base image
+# Just add frontend-specific dependencies
 COPY register/front/package*.json register/front/yarn.lock* ./register/front/
-RUN cd Paquetes-NPMjs && cp package.json package.json.backup
-RUN cd Paquetes-NPMjs && echo '{"private":true,"name":"extrimian","version":"1.0.0","workspaces":["packages/did/core","packages/did/resolver","packages/core/**","packages/vc/core","packages/kms/core","packages/vc/**","packages/dwn/client","packages/dwn/scheduler","packages/kms/suite/vc/jsonld","packages/kms/suite/**","packages/kms/client","packages/kms/storage/**","packages/kms/storage/vault","packages/modena/sdk","packages/did/registry","packages/waci/core","packages/agent/core","packages/one-click","packages/agent/plugins/one-click","packages/ami/ami-core","packages/ami/ami-sdk","packages/agent/plugins/ami","../register/front"],"scripts":{"build":"yarn workspaces run build","clean":"find . \\\\( -name '\''node_modules'\'' -o -name '\''dist'\'' -o -name '\''lib'\'' \\\\) -type d -prune -exec rm -rf '\''{}'\'' +"}}' > package.json
-# Install all workspace dependencies including frontend project (do this from workspace root)
-# Remove any existing node_modules in register/front to prevent symlink conflicts
-RUN rm -rf /app/register/front/node_modules
+
+# Update workspace to include frontend and install
 RUN cd Paquetes-NPMjs && \
-    yarn config set network-timeout 300000 && \
-    yarn config set network-concurrency 1 && \
-    yarn install --network-timeout 300000 --force || \
-    (echo "Workspace install failed, retrying..." && sleep 10 && \
-    yarn install --network-timeout 300000 --force)
+    cp package.json package.json.backup && \
+    echo '{"private":true,"name":"extrimian","version":"1.0.0","workspaces":["packages/did/core","packages/did/resolver","packages/core/**","packages/vc/core","packages/kms/core","packages/vc/**","packages/dwn/client","packages/dwn/scheduler","packages/kms/suite/vc/jsonld","packages/kms/suite/**","packages/kms/client","packages/kms/storage/**","packages/kms/storage/vault","packages/modena/sdk","packages/did/registry","packages/waci/core","packages/agent/core","packages/one-click","packages/agent/plugins/one-click","packages/ami/ami-core","packages/ami/ami-sdk","packages/agent/plugins/ami","../register/front"],"scripts":{"build":"yarn workspaces run build","clean":"find . \\\\( -name '\''node_modules'\'' -o -name '\''dist'\'' -o -name '\''lib'\'' \\\\) -type d -prune -exec rm -rf '\''{}'\'' +"}}' > package.json && \
+    yarn install --network-timeout 300000
 
 # ---- Build Stage ----
 FROM base AS builder

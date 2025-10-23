@@ -1,0 +1,26 @@
+# Shared QuarkID Workspace Base Image
+# This image is built first to avoid race conditions when multiple services
+# try to build and modify the workspace simultaneously
+
+FROM node:20-alpine AS base
+
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+# Copy QuarkID packages from parent directory
+COPY Paquetes-NPMjs ./Paquetes-NPMjs
+
+# Install QuarkID workspace dependencies
+RUN cd Paquetes-NPMjs && \
+    yarn config set network-timeout 300000 && \
+    yarn config set network-concurrency 1 && \
+    yarn install --frozen-lockfile --network-timeout 300000 || \
+    (sleep 10 && yarn install --frozen-lockfile --network-timeout 300000)
+
+# Build QuarkID packages
+RUN cd Paquetes-NPMjs && yarn workspaces run build
+
+# This image will be used as a base for both frontend and backend builds
+# No CMD needed - this is just a base image

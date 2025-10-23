@@ -15,33 +15,64 @@ The system leverages QuarkID and Bitcoin SV for immutable prescription tracking,
 
 ## Prerequisites
 
-- Node.js (v18 or newer)
-- Docker (v20 or newer)
-- npm (v8 or newer)
-- Git
-- (Optional) [Metanet Desktop](https://metanet.bsvb.tech/) (for funding the PLATFORM_FUNDING_KEY)
+- **Node.js** (v20 or newer)
+- **Yarn** (v1.22 or newer)
+- **Docker & Docker Compose** (v20 or newer) - for containerized deployment
+- **Git**
+- **BRC-100 Wallet** (Optional) - [Metanet Desktop Wallet](https://metanet.bsvb.tech/) for funding platform keys
 
 ## Quick Start
 
-The easiest way to get started is using the included Makefile, Metanet Desktop, Docker:
+### Option 1: Automated Setup (Recommended)
+
+The easiest way to get started:
 
 ```bash
-# Make sure you have Metanet Desktop, Docker, and Node.js installed
-
 # Clone the repository
 git clone git@github.com:sirdeggen/register.git
 cd register
 
-# Complete setup and run all services with one command
+# Run the setup script (handles everything)
+./setup.sh
+```
+
+The setup script will:
+1. Clone and install QuarkID packages (if not present)
+2. Install all project dependencies
+3. Build QuarkID packages
+4. Create environment files from templates
+5. Generate BSV wallet keys
+
+After setup completes:
+```bash
+# Fund your platform wallet (requires BRC-100 wallet running)
+cd back && npx tsx src/scripts/fund-platform.ts
+
+# Start with Docker (recommended)
+make docker-up
+
+# OR start locally without Docker
+make run
+```
+
+### Option 2: Using Make Commands
+
+```bash
+# Clone the repository
+git clone git@github.com:sirdeggen/register.git
+cd register
+
+# Complete setup and run all services
 make quickstart
 ```
 
 This will:
-
-1. Install all dependencies
-2. Build the extended version of QuarkID
-3. Setup the environment (including keys and funding)
-4. Start all services (Frontend, Backend, and Overlay)
+1. Install all dependencies (QuarkID, frontend, backend, overlay)
+2. Build QuarkID packages
+3. Setup environment files
+4. Generate BSV wallet keys
+5. Prompt for wallet funding
+6. Start all services
 
 ## Manual Setup Guide
 
@@ -201,6 +232,42 @@ register/
     └── package.json
 ```
 
+## Docker Deployment
+
+### Starting Services
+
+```bash
+# Build and start all containers (recommended for production)
+make docker-up
+
+# View logs
+make docker-logs
+
+# Stop all containers
+make docker-down
+
+# Clean up Docker resources
+make docker-clean
+```
+
+### Docker Architecture
+
+The project uses a multi-container Docker setup with build ordering to prevent race conditions:
+
+1. **quarkid-base** - Shared base image with QuarkID workspace (built first)
+2. **backend** - Express API server (depends on quarkid-base)
+3. **frontend** - React application (depends on quarkid-base and backend)
+4. **overlay** - LARS overlay service
+5. **db-mongo** - MongoDB database
+6. **db-mysql** - MySQL database for overlay
+7. **adminer** - Database admin interface (port 8081)
+8. **mongoexpress** - MongoDB admin interface (port 8082)
+
+**Key Improvements:**
+- Shared base image prevents parallel build conflicts
+- Proper dependency ordering ensures sequential builds
+- Faster builds by caching QuarkID workspace layer
+
 ## Makefile Commands Reference
 
 ```bash
@@ -208,54 +275,89 @@ make help                    # Show all available commands
 
 # Quick Start
 make quickstart             # Complete setup and run
-make                        # Install, link, and run
+make                        # Install and run services
 
-# Service Control
-make run                    # Run all services
+# Service Control (Local Development)
+make run                    # Run all services locally
 make run-app               # Run frontend and backend only
-make run-frontend          # Run frontend only
-make run-backend           # Run backend only
-make run-overlay           # Run overlay service only
+make run-frontend          # Run frontend only (port 5174)
+make run-backend           # Run backend only (port 3000)
+make run-overlay           # Run overlay service only (port 8080)
 make status                # Check service status
+
+# Docker Commands
+make docker-build          # Build Docker containers
+make docker-up             # Start all services with Docker
+make docker-down           # Stop Docker services
+make docker-logs           # Show Docker logs
+make docker-clean          # Clean Docker resources
 
 # Setup & Build
 make install               # Install all dependencies
-make link-quarkid          # Link QuarkID packages
+make install-quarkid       # Install QuarkID packages
 make build                 # Build all components
-make setup-env             # Setup environment files
+make setup-env             # Setup environment files and generate keys
 
 # Cleanup
 make clean                 # Remove node_modules and builds
-make deep-clean            # Clean and unlink packages
-make unlink-quarkid        # Unlink QuarkID packages
-
-# MongoDB
-make mongo-start           # Start MongoDB container
-make mongo-stop            # Stop MongoDB container
 
 # Development
-make dev                   # Development mode
+make dev                   # Development mode with hot reload
 make lint                  # Run linters
 make test                  # Run tests
 ```
 
 ## Troubleshooting
 
-### Common Issues
+### Docker Issues
 
-1. **"back doesn't start'"**
-   - Run `make setup-env` to setup the environment
+1. **"Docker build fails with QuarkID workspace conflicts"**
+   - The new architecture prevents this by building a shared base image first
+   - If issues persist: `make docker-clean && make docker-build`
+
+2. **"Backend/Frontend build hangs during Docker build"**
+   - Check Docker resources (CPU/Memory) - builds require ~4GB RAM
+   - Try: `docker system prune -a` to clean up disk space
+   - Rebuild one service at a time: `docker-compose build backend`
+
+3. **"Cannot connect to services in Docker"**
+   - Verify all containers are running: `docker ps`
+   - Check logs: `make docker-logs`
+   - Ensure ports aren't already in use: `lsof -i :3000,5174,8080`
+
+### Local Development Issues
+
+1. **"Backend doesn't start"**
+   - Run `make setup-env` to setup environment files
+   - Verify `.env` file exists in `back/` directory
+   - Check that BSV keys are generated: `cd back && npx tsx src/scripts/generate-keys.ts`
 
 2. **"Failed to connect to MongoDB"**
-   - Ensure overlay is running: `make run-overlay`
+   - Ensure MongoDB is running (Docker or local)
+   - Check MONGODB_URI in `.env` file
+   - For local: `mongod --dbpath ./data/db`
 
 3. **"BSV overlay service unavailable"**
-   - Run `make status` to check services
    - Ensure overlay is running: `make run-overlay`
+   - Check overlay logs for errors
+   - Verify OVERLAY_PROVIDER_URL in `.env` matches overlay port (8080)
 
 4. **"Failed to create DID"**
-   - Ensure the DID_TOPIC in .env matches LARS configuration
-   - Check backend console for detailed error messages
+   - Ensure the DID_TOPIC in `.env` matches LARS configuration
+   - Check that PLATFORM_FUNDING_KEY is funded
+   - Run fund script: `cd back && npx tsx src/scripts/fund-platform.ts`
+   - Verify overlay is accessible: `curl http://localhost:8080/health`
+
+### QuarkID Package Issues
+
+1. **"QuarkID packages not found"**
+   - Clone QuarkID: `cd .. && git clone git@github.com:jonesjBSV/Paquetes-NPMjs.git`
+   - Install: `make install-quarkid`
+   - Build: `make build-quarkid`
+
+2. **"Workspace linking errors"**
+   - The Docker setup handles this automatically via shared base image
+   - For local development: ensure QuarkID is built before running services
 
 ### Development Tips
 
