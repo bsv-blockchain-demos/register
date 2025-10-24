@@ -32,7 +32,7 @@ if [ ! -d "../Paquetes-NPMjs" ]; then
 else
     echo -e "${GREEN}  ✓ QuarkID packages already exist${NC}"
     echo -e "  ${BLUE}Pulling latest changes...${NC}"
-    cd ../Paquetes-NPMjs && git pull && cd ../register
+    cd ../Paquetes-NPMjs && git stash && git pull && (git stash pop || true) && cd ../register
     echo -e "${GREEN}  ✓ QuarkID packages updated${NC}"
 fi
 

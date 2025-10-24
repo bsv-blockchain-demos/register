@@ -271,6 +271,8 @@ docker-build:
 
 .PHONY: docker-up
 docker-up:
+	@echo "$(BLUE)🐳 Building base image first...$(NC)"
+	@docker-compose build quarkid-base
 	@echo "$(BLUE)🐳 Starting all services with Docker...$(NC)"
 	@docker-compose up -d
 	@echo "$(GREEN)✅ All services started$(NC)"
