@@ -31,12 +31,16 @@ if [ ! -d "../Paquetes-NPMjs" ]; then
     echo -e "${GREEN}  ✓ QuarkID packages cloned${NC}"
 else
     echo -e "${GREEN}  ✓ QuarkID packages already exist${NC}"
+    echo -e "  ${BLUE}Pulling latest changes...${NC}"
+    cd ../Paquetes-NPMjs && git pull && cd ../register
+    echo -e "${GREEN}  ✓ QuarkID packages updated${NC}"
 fi
 
 # Step 2: Install QuarkID dependencies
 echo ""
 echo -e "${BLUE}📦 Step 2/6: Installing QuarkID dependencies...${NC}"
-cd ../Paquetes-NPMjs && yarn install
+echo -e "  ${BLUE}Cleaning yarn cache to ensure fresh install...${NC}"
+cd ../Paquetes-NPMjs && yarn cache clean && yarn install
 cd ../register
 echo -e "${GREEN}  ✓ QuarkID dependencies installed${NC}"
 
