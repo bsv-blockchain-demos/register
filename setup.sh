@@ -66,65 +66,42 @@ echo -e "${GREEN}  ✓ All dependencies installed${NC}"
 echo ""
 echo -e "${BLUE}⚙️  Step 5/7: Setting up environment files...${NC}"
 
-# Root .env for Docker
+# Create master .env from example if it doesn't exist
 if [ ! -f ".env" ]; then
     if [ -f ".env.example" ]; then
         cp .env.example .env
-        echo -e "  ${GREEN}✓ Created .env from example (for Docker)${NC}"
+        echo -e "  ${GREEN}✓ Created master .env from example${NC}"
     else
         echo -e "  ${YELLOW}⚠️  No .env.example found${NC}"
     fi
 else
-    echo -e "  ${GREEN}✓ Root .env already exists${NC}"
+    echo -e "  ${GREEN}✓ Master .env already exists${NC}"
 fi
 
-# Backend .env
-if [ ! -f "back/.env" ]; then
-    if [ -f "back/env.example" ]; then
-        cp back/env.example back/.env
-        echo -e "  ${GREEN}✓ Created back/.env from example${NC}"
-    else
-        echo -e "  ${YELLOW}⚠️  No env.example found for backend${NC}"
-    fi
+# Create symlinks from component directories to master .env
+echo -e "  ${BLUE}Creating environment symlinks...${NC}"
+(cd back && npx tsx src/scripts/sync-env.ts > /dev/null 2>&1)
+if [ $? -eq 0 ]; then
+    echo -e "  ${GREEN}✓ Environment symlinks created (back, front, overlay)${NC}"
 else
-    echo -e "  ${GREEN}✓ Backend .env already exists${NC}"
-fi
-
-# Backend .env.docker for Docker deployment
-if [ ! -f "back/.env.docker" ]; then
-    if [ -f "back/.env.docker.example" ]; then
-        cp back/.env.docker.example back/.env.docker
-        echo -e "  ${GREEN}✓ Created back/.env.docker from example${NC}"
-    else
-        echo -e "  ${YELLOW}⚠️  No .env.docker.example found for backend${NC}"
-    fi
-else
-    echo -e "  ${GREEN}✓ Backend .env.docker already exists${NC}"
-fi
-
-# Frontend .env
-if [ ! -f "front/.env" ]; then
-    if [ -f "front/env.example" ]; then
-        cp front/env.example front/.env
-        echo -e "  ${GREEN}✓ Created front/.env from example${NC}"
-    else
-        echo -e "  ${YELLOW}⚠️  No env.example found for frontend${NC}"
-    fi
-else
-    echo -e "  ${GREEN}✓ Frontend .env already exists${NC}"
+    echo -e "  ${YELLOW}⚠️  Failed to create symlinks, will use copies instead${NC}"
+    # Fallback: copy .env to each location
+    [ -f ".env" ] && cp .env back/.env && echo -e "  ${GREEN}✓ Copied .env to back/${NC}"
+    [ -f ".env" ] && cp .env front/.env && echo -e "  ${GREEN}✓ Copied .env to front/${NC}"
+    [ -f ".env" ] && cp .env overlay/local-data/.env && echo -e "  ${GREEN}✓ Copied .env to overlay/local-data/${NC}"
 fi
 
 # Step 6: Check for existing keys or generate new ones
 echo ""
 echo -e "${BLUE}🔑 Step 6/7: Setting up BSV wallet keys...${NC}"
 
-# Check if keys already exist in back/.env
+# Check if keys already exist in master .env
 MEDICAL_LICENSE_CERTIFIER=""
 PLATFORM_FUNDING_KEY=""
 
-if [ -f "back/.env" ]; then
-    MEDICAL_LICENSE_CERTIFIER=$(grep "^MEDICAL_LICENSE_CERTIFIER=" back/.env | cut -d '=' -f2 | grep -v "your_")
-    PLATFORM_FUNDING_KEY=$(grep "^PLATFORM_FUNDING_KEY=" back/.env | cut -d '=' -f2 | grep -v "your_")
+if [ -f ".env" ]; then
+    MEDICAL_LICENSE_CERTIFIER=$(grep "^MEDICAL_LICENSE_CERTIFIER=" .env | cut -d '=' -f2 | grep -v "your_")
+    PLATFORM_FUNDING_KEY=$(grep "^PLATFORM_FUNDING_KEY=" .env | cut -d '=' -f2 | grep -v "your_")
 fi
 
 # Generate new keys only if they don't exist
@@ -132,55 +109,23 @@ if [ -z "$MEDICAL_LICENSE_CERTIFIER" ] || [ -z "$PLATFORM_FUNDING_KEY" ]; then
     echo -e "  ${YELLOW}Keys not found, generating new keys...${NC}"
     (cd back && npx tsx src/scripts/generate-keys.ts)
     if [ $? -eq 0 ]; then
-        echo -e "  ${GREEN}✓ New BSV keys generated and saved to back/.env${NC}"
+        echo -e "  ${GREEN}✓ New BSV keys generated and saved to master .env${NC}"
     else
         echo -e "  ${RED}✗ Failed to generate keys${NC}"
         exit 1
     fi
-
-    # Re-extract the newly generated keys
-    if [ -f "back/.env" ]; then
-        MEDICAL_LICENSE_CERTIFIER=$(grep "^MEDICAL_LICENSE_CERTIFIER=" back/.env | cut -d '=' -f2)
-        PLATFORM_FUNDING_KEY=$(grep "^PLATFORM_FUNDING_KEY=" back/.env | cut -d '=' -f2)
-    fi
 else
-    echo -e "  ${GREEN}✓ Existing BSV keys found in back/.env${NC}"
+    echo -e "  ${GREEN}✓ Existing BSV keys found in master .env${NC}"
 fi
 
-# Step 7: Sync keys to all required .env files
+# Step 7: Re-sync environment files after key generation
 echo ""
-echo -e "${BLUE}🔄 Step 7/7: Syncing keys to all config files...${NC}"
-if [ ! -z "$MEDICAL_LICENSE_CERTIFIER" ] && [ ! -z "$PLATFORM_FUNDING_KEY" ]; then
-
-    # Update root .env if it exists
-    if [ -f ".env" ]; then
-        if [ ! -z "$MEDICAL_LICENSE_CERTIFIER" ]; then
-            sed -i.bak "s|^MEDICAL_LICENSE_CERTIFIER=.*|MEDICAL_LICENSE_CERTIFIER=$MEDICAL_LICENSE_CERTIFIER|" .env
-            echo -e "  ${GREEN}✓ Updated MEDICAL_LICENSE_CERTIFIER in root .env${NC}"
-        fi
-
-        if [ ! -z "$PLATFORM_FUNDING_KEY" ]; then
-            sed -i.bak "s|^PLATFORM_FUNDING_KEY=.*|PLATFORM_FUNDING_KEY=$PLATFORM_FUNDING_KEY|" .env
-            echo -e "  ${GREEN}✓ Updated PLATFORM_FUNDING_KEY in root .env${NC}"
-        fi
-        rm -f .env.bak
-    fi
-
-    # Update back/.env.docker if it exists
-    if [ -f "back/.env.docker" ]; then
-        if [ ! -z "$MEDICAL_LICENSE_CERTIFIER" ]; then
-            sed -i.bak "s|^MEDICAL_LICENSE_CERTIFIER=.*|MEDICAL_LICENSE_CERTIFIER=$MEDICAL_LICENSE_CERTIFIER|" back/.env.docker
-            echo -e "  ${GREEN}✓ Updated MEDICAL_LICENSE_CERTIFIER in back/.env.docker${NC}"
-        fi
-
-        if [ ! -z "$PLATFORM_FUNDING_KEY" ]; then
-            sed -i.bak "s|^PLATFORM_FUNDING_KEY=.*|PLATFORM_FUNDING_KEY=$PLATFORM_FUNDING_KEY|" back/.env.docker
-            echo -e "  ${GREEN}✓ Updated PLATFORM_FUNDING_KEY in back/.env.docker${NC}"
-        fi
-        rm -f back/.env.docker.bak
-    fi
+echo -e "${BLUE}🔄 Step 7/7: Syncing environment files...${NC}"
+(cd back && npx tsx src/scripts/sync-env.ts > /dev/null 2>&1)
+if [ $? -eq 0 ]; then
+    echo -e "  ${GREEN}✓ Environment files synced${NC}"
 else
-    echo -e "  ${YELLOW}⚠️  Could not sync keys (back/.env missing)${NC}"
+    echo -e "  ${YELLOW}⚠️  Symlink sync failed, using copies${NC}"
 fi
 
 # Success message

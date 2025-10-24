@@ -80,9 +80,9 @@ async function generateKeys(): Promise<void> {
     console.log(`  Public Key:         ${platformKeyPair.publicKeyHex}`);
     console.log(`  Address:            ${platformKeyPair.address}`);
 
-    // Update .env file
-    console.log('\n\n📝 Updating .env file...');
-    const envPath = path.join(__dirname, '../../.env');
+    // Update master .env file at project root
+    console.log('\n\n📝 Updating master .env file...');
+    const envPath = path.join(__dirname, '../../../.env');
     let envContent = '';
 
     if (fs.existsSync(envPath)) {
@@ -90,7 +90,7 @@ async function generateKeys(): Promise<void> {
       console.log(`  Found existing .env file at: ${envPath}`);
     } else {
       // Try to read from .env.example as template
-      const examplePath = path.join(__dirname, '../../.env.example');
+      const examplePath = path.join(__dirname, '../../../.env.example');
       if (fs.existsSync(examplePath)) {
         envContent = fs.readFileSync(examplePath, 'utf8');
         console.log(`  Created .env from template: ${examplePath}`);
