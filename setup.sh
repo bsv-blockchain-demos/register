@@ -130,8 +130,13 @@ fi
 # Generate new keys only if they don't exist
 if [ -z "$MEDICAL_LICENSE_CERTIFIER" ] || [ -z "$PLATFORM_FUNDING_KEY" ]; then
     echo -e "  ${YELLOW}Keys not found, generating new keys...${NC}"
-    cd back && npx tsx src/scripts/generate-keys.ts && cd ..
-    echo -e "  ${GREEN}✓ New BSV keys generated and saved to back/.env${NC}"
+    (cd back && npx tsx src/scripts/generate-keys.ts)
+    if [ $? -eq 0 ]; then
+        echo -e "  ${GREEN}✓ New BSV keys generated and saved to back/.env${NC}"
+    else
+        echo -e "  ${RED}✗ Failed to generate keys${NC}"
+        exit 1
+    fi
 
     # Re-extract the newly generated keys
     if [ -f "back/.env" ]; then
