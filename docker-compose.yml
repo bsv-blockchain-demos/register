@@ -66,33 +66,13 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
-    environment:
-      # Database Configuration
-      MONGO_URI: mongodb://db-mongo:27017
-      MONGODB_URI: mongodb://db-mongo:27017
-      APP_DB_NAME: quarkid_prescriptions_db
-
-      # Service URLs
-      OVERLAY_PROVIDER_URL: http://overlay:8080
-      WALLET_STORAGE_URL: https://storage.babbage.systems
-
-      # Development Configuration
-      NODE_ENV: development
-      PORT: 3000
-      MOCK_UTXOS: "false"
-
-      # BSV Configuration
-      FEE_PER_KB: 1
-
-      # DID Configuration
-      DID_TOPIC: tm_did
-      DID_TOPIC_SERVICE: ls_did
-
-      # VC Configuration
-      VC_TOPIC: tm_vc
-      VC_TOPIC_SERVICE: ls_vc
     env_file:
       - back/.env.docker
+    environment:
+      # Override Docker-specific network hostnames (must override .env.docker)
+      MONGO_URI: mongodb://db-mongo:27017
+      MONGODB_URI: mongodb://db-mongo:27017
+      OVERLAY_PROVIDER_URL: http://overlay:8080
     depends_on:
       quarkid-base:
         condition: service_completed_successfully
