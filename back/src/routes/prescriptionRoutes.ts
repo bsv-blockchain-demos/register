@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { PrescriptionService } from '../services/prescriptionService';
 import { WalletClient } from '@bsv/sdk';
 import { Db } from 'mongodb';
+import rateLimit from 'express-rate-limit';
+import { sanitizeStringParam } from '../lib/sanitize';
 
 // Extend Request interface to include our custom properties
 interface CustomRequest extends Request {
@@ -19,9 +21,22 @@ interface CustomRequest extends Request {
  */
 export function createPrescriptionRoutes(): Router {
   const router = Router();
-  
+
+  // Rate limiting for prescription endpoints
+  const prescriptionLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      success: false,
+      error: 'Too many requests from this IP, please try again after 15 minutes'
+    }
+  });
+  router.use(prescriptionLimiter);
+
   console.log('[PrescriptionRoutes] Creating prescription routes...');
-  
+
   // Initialize prescription service (in production, this would use dependency injection)
   let prescriptionService: PrescriptionService;
 
@@ -132,11 +147,15 @@ export function createPrescriptionRoutes(): Router {
   });
 
   /**
-   * GET /prescriptions/:id - Get prescription details
+   * POST /prescriptions/lookup - Get prescription details
+   * Uses POST to avoid sensitive prescription ID in URL
    */
-  router.get('/:id', async (req: CustomRequest, res: Response) => {
+  router.post('/lookup', async (req: CustomRequest, res: Response) => {
     try {
-      const prescriptionId = req.params.id;
+      const { prescriptionId } = req.body;
+      if (!prescriptionId) {
+        return res.status(400).json({ error: 'Missing required field: prescriptionId' });
+      }
 
       if (!req.db) {
         return res.status(503).json({
@@ -497,10 +516,14 @@ export function createPrescriptionRoutes(): Router {
       }
 
       // Verify the prescription exists and belongs to the patient
+      const safePrescriptionId = sanitizeStringParam(prescriptionId);
+      const safePatientDid = sanitizeStringParam(patientDid);
+      const safePharmacyDid = sanitizeStringParam(pharmacyDid);
+
       const prescription = await req.db
         .collection('prescriptions')
-        .findOne({ id: prescriptionId,
-          'credentialSubject.id': patientDid
+        .findOne({ id: safePrescriptionId,
+          'credentialSubject.id': safePatientDid
         });
 
       if (!prescription) {
@@ -513,8 +536,8 @@ export function createPrescriptionRoutes(): Router {
       const existingShare = await req.db
         .collection('sharedPrescriptions')
         .findOne({
-          prescriptionId: prescriptionId,
-          pharmacyDid: pharmacyDid
+          prescriptionId: safePrescriptionId,
+          pharmacyDid: safePharmacyDid
         });
 
       if (existingShare) {
@@ -525,10 +548,10 @@ export function createPrescriptionRoutes(): Router {
 
       // Create a shared prescription record
       const sharedPrescription = {
-        prescriptionId: prescriptionId,
+        prescriptionId: safePrescriptionId,
         prescription: prescription,
-        patientDid: patientDid,
-        pharmacyDid: pharmacyDid,
+        patientDid: safePatientDid,
+        pharmacyDid: safePharmacyDid,
         sharedAt: new Date(),
         status: 'shared' // 'shared', 'viewed', 'dispensed'
       };
@@ -594,10 +617,13 @@ export function createPrescriptionRoutes(): Router {
         });
       }
 
+      const safePrescriptionId = sanitizeStringParam(prescriptionId);
+      const safePharmacyDid = sanitizeStringParam(pharmacyDid);
+
       // Verify the prescription exists
       const prescription = await req.db
         .collection('prescriptions')
-        .findOne({ id: prescriptionId });
+        .findOne({ id: safePrescriptionId });
 
       if (!prescription) {
         return res.status(404).json({
@@ -609,8 +635,8 @@ export function createPrescriptionRoutes(): Router {
       const sharedPrescription = await req.db
         .collection('sharedPrescriptions')
         .findOne({
-          prescriptionId: prescriptionId,
-          pharmacyDid: pharmacyDid
+          prescriptionId: safePrescriptionId,
+          pharmacyDid: safePharmacyDid
         });
 
       if (!sharedPrescription) {
@@ -623,8 +649,8 @@ export function createPrescriptionRoutes(): Router {
       const existingDispensation = await req.db
         .collection('dispensations')
         .findOne({
-          prescriptionId: prescriptionId,
-          pharmacyDid: pharmacyDid
+          prescriptionId: safePrescriptionId,
+          pharmacyDid: safePharmacyDid
         });
 
       if (existingDispensation) {
@@ -635,8 +661,8 @@ export function createPrescriptionRoutes(): Router {
 
       // Create dispensation record
       const dispensation = {
-        prescriptionId,
-        pharmacyDid,
+        prescriptionId: safePrescriptionId,
+        pharmacyDid: safePharmacyDid,
         patientDid: prescription.credentialSubject.id,
         medicationProvided,
         batchNumber: batchNumber || '',
@@ -832,11 +858,15 @@ export function createPrescriptionRoutes(): Router {
   });
 
   /**
-   * GET /prescriptions/dispensed/:patientDid - Get dispensed prescriptions for a patient
+   * POST /prescriptions/dispensed - Get dispensed prescriptions for a patient
+   * Uses POST to avoid sensitive patient DID in URL
    */
-  router.get('/dispensed/:patientDid', async (req: CustomRequest, res: Response) => {
+  router.post('/dispensed', async (req: CustomRequest, res: Response) => {
     try {
-      const patientDid = req.params.patientDid;
+      const { patientDid } = req.body;
+      if (!patientDid) {
+        return res.status(400).json({ error: 'Missing required field: patientDid' });
+      }
 
       if (!req.db) {
         return res.status(503).json({

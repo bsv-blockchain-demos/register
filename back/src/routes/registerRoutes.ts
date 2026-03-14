@@ -3,10 +3,20 @@
  */
 
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { Db } from 'mongodb';
 
 export const createRegisterRoutes = (db: Db): Router => {
   const router = Router();
+
+  // Rate limiting
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  router.use(limiter);
 
   router.post('/user', async (req, res) => {
     try {

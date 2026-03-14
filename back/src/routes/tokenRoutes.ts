@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { WalletClient } from '@bsv/sdk';
 import { Db } from 'mongodb';
 import * as crypto from 'crypto';
+import { sanitizeStringParam } from '../lib/sanitize';
 
 // Extend Request interface to include our custom properties
 interface CustomRequest extends Request {
@@ -37,6 +39,15 @@ interface BSVToken {
 export function createTokenRoutes(): Router {
   const router = Router();
 
+  // Rate limiting
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  router.use(limiter);
+
   /**
    * POST /tokens - Create a new BSV token for a prescription
    * Body: {
@@ -69,9 +80,10 @@ export function createTokenRoutes(): Router {
       }
 
       // Check if token already exists for this prescription
+      const safePrescriptionId = sanitizeStringParam(prescriptionId);
       const existingToken = await req.db
         .collection('tokens')
-        .findOne({ 'metadata.prescriptionId': prescriptionId });
+        .findOne({ 'metadata.prescriptionId': safePrescriptionId });
 
       if (existingToken) {
         return res.status(409).json({
@@ -92,7 +104,7 @@ export function createTokenRoutes(): Router {
         status: 'no dispensado',
         unlockableBy: patientDid,
         metadata: {
-          prescriptionId,
+          prescriptionId: safePrescriptionId,
           medicationInfo
         },
         createdAt: new Date(),
@@ -377,11 +389,15 @@ export function createTokenRoutes(): Router {
   });
 
   /**
-   * GET /tokens/prescription/:prescriptionId - Get token by prescription ID
+   * POST /tokens/prescription/lookup - Get token by prescription ID
+   * Uses POST to avoid sensitive prescription ID in URL
    */
-  router.get('/prescription/:prescriptionId', async (req: CustomRequest, res: Response) => {
+  router.post('/prescription/lookup', async (req: CustomRequest, res: Response) => {
     try {
-      const prescriptionId = req.params.prescriptionId;
+      const { prescriptionId } = req.body;
+      if (!prescriptionId) {
+        return res.status(400).json({ error: 'Missing required field: prescriptionId' });
+      }
 
       if (!req.db) {
         return res.status(503).json({

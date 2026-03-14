@@ -336,7 +336,7 @@ class ApiService {
    * Get enhanced prescriptions by patient DID
    */
   async getEnhancedPrescriptionsByPatient(patientDid: string): Promise<ApiResponse> {
-    return this.request('GET', `/v1/enhanced/prescriptions/patient/${encodeURIComponent(patientDid)}`);
+    return this.request('POST', `/v1/enhanced/prescriptions/patient`, { patientDid });
   }
 
   /**
@@ -526,7 +526,7 @@ class ApiService {
    * Get tokens by prescription ID
    */
   async getTokensByPrescription(prescriptionId: string): Promise<ApiResponse> {
-    return this.request('GET', `/v1/tokens/prescription/${prescriptionId}`);
+    return this.request('POST', `/v1/tokens/prescription/lookup`, { prescriptionId });
   }
 
   /**
@@ -573,7 +573,7 @@ class ApiService {
    * Get enhanced prescriptions by patient DID
    */
   async getEnhancedPrescriptionsByPatient(patientDid: string): Promise<ApiResponse> {
-    return this.request('GET', `/v1/enhanced/prescriptions/patient/${encodeURIComponent(patientDid)}`);
+    return this.request('POST', `/v1/enhanced/prescriptions/patient`, { patientDid });
   }
 
   /**

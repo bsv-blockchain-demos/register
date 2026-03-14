@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from "express";
+import rateLimit from 'express-rate-limit';
 import bodyParser from 'body-parser'
 import { MongoClient, Db } from "mongodb";
 import { PrivateKey, WalletClient, KeyDeriver } from '@bsv/sdk';
@@ -340,9 +341,17 @@ async function startServer() {
     app.use('/v1/enhanced/actors', enhancedActorRoutes);
     app.use('/v1/enhanced/prescriptions', enhancedPrescriptionRoutes);
 
+    // Rate limiter for catch-all route
+    const catchAllLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
+
     // This catch-all route MUST come after all other /v1/* routes
     // Otherwise it will intercept requests meant for specific routes
-    app.get("/v1/:subject", async (req, res) => {
+    app.get("/v1/:subject", catchAllLimiter, async (req, res) => {
         if (!db) {
           res.status(503).json({ error: 'MongoDB not available' });
           return;

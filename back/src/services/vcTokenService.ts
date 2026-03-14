@@ -6,6 +6,7 @@ import { KMSClient } from '@quarkid/kms-client';
 import { Suite } from '@quarkid/kms-core';
 import { AssertionMethodPurpose } from '@quarkid/did-core';
 import * as crypto from 'crypto';
+import { sanitizeStringParam } from '../lib/sanitize';
 
 /**
  * Unified VC Token that combines Verifiable Credential with BSV token
@@ -167,16 +168,20 @@ export class VCTokenService {
   ): Promise<VCToken> {
     const session = this.db.client.startSession();
     
+    const safeTokenId = sanitizeStringParam(tokenId);
+    const safeFromDid = sanitizeStringParam(fromDid);
+    const safeToDid = sanitizeStringParam(toDid);
+
     try {
       return await session.withTransaction(async () => {
         // Get current token
-        const token = await this.vcTokensCollection.findOne({ id: tokenId });
+        const token = await this.vcTokensCollection.findOne({ id: safeTokenId });
         if (!token) {
           throw new Error('VC Token not found');
         }
 
         // Verify ownership
-        if (token.currentOwnerDid !== fromDid) {
+        if (token.currentOwnerDid !== safeFromDid) {
           throw new Error('Unauthorized: Token not owned by sender');
         }
 
@@ -185,21 +190,21 @@ export class VCTokenService {
         }
 
         // Create transfer transaction on BSV
-        const transferTx = await this.createTransferTransaction(token, toDid);
+        const transferTx = await this.createTransferTransaction(token, safeToDid);
 
         // Update token record
         const updatedToken = await this.vcTokensCollection.findOneAndUpdate(
-          { id: tokenId },
+          { id: safeTokenId },
           {
             $set: {
-              currentOwnerDid: toDid,
+              currentOwnerDid: safeToDid,
               'tokenState.updatedAt': new Date(),
               txid: transferTx.txid // Update to new UTXO
             },
             $push: {
               'tokenState.transferHistory': {
-                from: fromDid,
-                to: toDid,
+                from: safeFromDid,
+                to: safeToDid,
                 timestamp: new Date(),
                 txid: transferTx.txid,
                 metadata
@@ -209,7 +214,7 @@ export class VCTokenService {
           { returnDocument: 'after' }
         );
 
-        console.log(`[VCTokenService] Transferred token ${tokenId} from ${fromDid} to ${toDid}`);
+        console.log(`[VCTokenService] Transferred token ${safeTokenId} from ${safeFromDid} to ${safeToDid}`);
         return updatedToken.value;
       });
     } catch (error) {
@@ -228,14 +233,16 @@ export class VCTokenService {
     finalizerDid: string,
     finalMetadata?: any
   ): Promise<VCToken> {
-    const token = await this.vcTokensCollection.findOne({ id: tokenId });
+    const safeTokenId = sanitizeStringParam(tokenId);
+    const safeFinalizerDid = sanitizeStringParam(finalizerDid);
+    const token = await this.vcTokensCollection.findOne({ id: safeTokenId });
     if (!token) {
       throw new Error('VC Token not found');
     }
 
     // Only certain roles can finalize (e.g., original subject for prescriptions)
     // This logic can be customized based on credential type
-    const canFinalize = this.checkFinalizationPermission(token, finalizerDid);
+    const canFinalize = this.checkFinalizationPermission(token, safeFinalizerDid);
     if (!canFinalize) {
       throw new Error('Unauthorized: Cannot finalize this token');
     }
@@ -246,7 +253,7 @@ export class VCTokenService {
 
     // Update token status
     const updatedToken = await this.vcTokensCollection.findOneAndUpdate(
-      { id: tokenId },
+      { id: safeTokenId },
       {
         $set: {
           status: 'finalized',
@@ -258,7 +265,7 @@ export class VCTokenService {
       { returnDocument: 'after' }
     );
 
-    console.log(`[VCTokenService] Finalized token ${tokenId}`);
+    console.log(`[VCTokenService] Finalized token ${safeTokenId}`);
     return updatedToken.value;
   }
 
@@ -266,7 +273,7 @@ export class VCTokenService {
    * Get VC Token by ID
    */
   async getVCToken(tokenId: string): Promise<VCToken | null> {
-    return await this.vcTokensCollection.findOne({ id: tokenId });
+    return await this.vcTokensCollection.findOne({ id: sanitizeStringParam(tokenId) });
   }
 
   /**
@@ -280,12 +287,12 @@ export class VCTokenService {
     status?: 'active' | 'transferred' | 'finalized';
   }): Promise<VCToken[]> {
     const query: any = {};
-    
-    if (filter.issuerDid) query.issuerDid = filter.issuerDid;
-    if (filter.subjectDid) query.subjectDid = filter.subjectDid;
-    if (filter.currentOwnerDid) query.currentOwnerDid = filter.currentOwnerDid;
-    if (filter.type) query['metadata.type'] = filter.type;
-    if (filter.status) query.status = filter.status;
+
+    if (filter.issuerDid) query.issuerDid = sanitizeStringParam(filter.issuerDid);
+    if (filter.subjectDid) query.subjectDid = sanitizeStringParam(filter.subjectDid);
+    if (filter.currentOwnerDid) query.currentOwnerDid = sanitizeStringParam(filter.currentOwnerDid);
+    if (filter.type) query['metadata.type'] = sanitizeStringParam(filter.type);
+    if (filter.status) query.status = sanitizeStringParam(filter.status);
 
     return await this.vcTokensCollection
       .find(query)

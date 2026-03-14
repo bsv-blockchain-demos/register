@@ -6,6 +6,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { QuarkIdAgentService } from '../services/quarkIdAgentService';
 
 // Extend Express Request type to include quarkIdAgentService
@@ -25,6 +26,15 @@ declare global {
  */
 export const createVcRoutes = (quarkIdAgentService: QuarkIdAgentService): Router => {
   const router = Router();
+
+  // Rate limiting
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  router.use(limiter);
 
   /**
    * POST /issue - Issue a new Verifiable Credential

@@ -2,6 +2,7 @@ import { Db } from 'mongodb';
 import * as crypto from 'crypto';
 import { Script, OP, Hash, Utils, PushDrop, WalletProtocol, Byte } from '@bsv/sdk';
 import { KMSClient } from '@quarkid/kms-client';
+import { sanitizeStringParam } from '../lib/sanitize';
 
 // Simplified types for now - we'll replace with real BSV overlay types later
 interface UTXO {
@@ -395,7 +396,7 @@ export class PrescriptionTokenService {
    * Get prescription token by ID
    */
   async getToken(tokenId: string): Promise<PrescriptionToken | null> {
-    return await this.tokensCollection.findOne({ id: tokenId });
+    return await this.tokensCollection.findOne({ id: sanitizeStringParam(tokenId) });
   }
 
   /**
@@ -435,15 +436,19 @@ export class PrescriptionTokenService {
     patientDid: string,
     pharmacyDid: string
   ): Promise<PrescriptionToken> {
+    const safeTokenId = sanitizeStringParam(tokenId);
+    const safePatientDid = sanitizeStringParam(patientDid);
+    const safePharmacyDid = sanitizeStringParam(pharmacyDid);
+
     try {
       // 1. Get the token
-      const token = await this.getToken(tokenId);
+      const token = await this.getToken(safeTokenId);
       if (!token) {
         throw new Error('Prescription token not found');
       }
 
       // 2. Verify the patient owns this prescription
-      if (token.patientDid !== patientDid) {
+      if (token.patientDid !== safePatientDid) {
         throw new Error('Unauthorized: Patient does not own this prescription');
       }
 
@@ -460,24 +465,24 @@ export class PrescriptionTokenService {
       // 5. Update token with pharmacy DID
       const updatedToken = {
         ...token,
-        pharmacyDid: pharmacyDid,
+        pharmacyDid: safePharmacyDid,
         status: 'dispensing' as const,
         updatedAt: new Date()
       };
 
       // 6. Update in database
       await this.tokensCollection.updateOne(
-        { id: tokenId },
-        { 
-          $set: { 
-            pharmacyDid: pharmacyDid,
+        { id: safeTokenId },
+        {
+          $set: {
+            pharmacyDid: safePharmacyDid,
             status: 'dispensing',
             updatedAt: new Date()
           } 
         }
       );
 
-      console.log(`[PrescriptionTokenService] Token ${tokenId} shared with pharmacy ${pharmacyDid}`);
+      console.log(`[PrescriptionTokenService] Token ${safeTokenId} shared with pharmacy ${safePharmacyDid}`);
       return updatedToken;
 
     } catch (error) {

@@ -1,11 +1,21 @@
 import express from 'express';
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { WalletClient } from '@bsv/sdk';
 import { Db } from 'mongodb';
 import { PrescriptionTokenService } from '../services/prescriptionTokenService.js';
 import { VCTokenService } from '../services/vcTokenService.js';
 
 const router = express.Router();
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+router.use(limiter);
 
 // Extend Request interface to include our custom properties
 interface CustomRequest extends Request {
@@ -175,10 +185,10 @@ router.get('/:tokenId', async (req: CustomRequest, res) => {
 });
 
 /**
- * @route GET /api/prescriptions/patient/:patientDid
- * @desc Get prescriptions by patient DID
+ * @route POST /api/prescriptions/patient
+ * @desc Get prescriptions by patient DID (POST to avoid sensitive DID in URL)
  */
-router.get('/patient/:patientDid', async (req: CustomRequest, res) => {
+router.post('/patient', async (req: CustomRequest, res) => {
   try {
     if (!req.db) {
       return res.status(500).json({ error: 'Database connection not available' });
@@ -192,7 +202,10 @@ router.get('/patient/:patientDid', async (req: CustomRequest, res) => {
       return res.status(500).json({ error: 'QuarkID Agent service not available' });
     }
 
-    const { patientDid } = req.params;
+    const { patientDid } = req.body;
+    if (!patientDid) {
+      return res.status(400).json({ error: 'patientDid is required' });
+    }
     const decodedDid = decodeURIComponent(patientDid);
     
     const tokenService = new PrescriptionTokenService(req.db, req.walletClient, {

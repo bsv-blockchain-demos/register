@@ -123,7 +123,9 @@ export class ValidationMiddleware {
 
   // Helper methods
   private static isValidEmail(email: string): boolean {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    // Length-limited regex to prevent ReDoS on polynomial backtracking
+    if (email.length > 254) return false;
+    const emailRegex = /^[^\s@]{1,64}@[^\s@]{1,253}\.[^\s@]{2,63}$/;
     return emailRegex.test(email);
   }
 }

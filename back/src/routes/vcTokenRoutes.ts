@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { VCTokenService } from '../services/vcTokenService';
 
 // Extend Express Request type
@@ -16,6 +17,19 @@ declare global {
  */
 export const createVCTokenRoutes = (vcTokenService: VCTokenService): Router => {
   const router = Router();
+
+  // Rate limiting for VC token endpoints
+  const vcTokenLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      success: false,
+      error: 'Too many requests from this IP, please try again after 15 minutes'
+    }
+  });
+  router.use(vcTokenLimiter);
 
   /**
    * POST /create - Create a new VC Token (atomic VC + BSV token creation)
