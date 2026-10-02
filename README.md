@@ -1,425 +1,134 @@
-# BlockMed - Blockchain Prescription Management System
+# BlockMed
 
-A comprehensive blockchain-based prescription management system using Decentralized Identifiers (DIDs) and Verifiable Credentials (VCs) on Bitcoin SV overlay network with extended QuarkID packages.
+BlockMed is a prescription-workflow demo built with React, Express, QuarkID and BSV overlays. It models doctors issuing prescriptions, patients sharing them with pharmacies, pharmacies recording dispensation, and patients confirming receipt. Insurance and credential-status features provide additional examples.
 
-## Overview
+The repository is named `register`. It is a multi-service development project with local dependencies on a separate QuarkID workspace.
 
-BlockMed demonstrates a complete prescription workflow with four main actors:
+## Components
 
-- **Patients**: Receive prescriptions, share with pharmacies, confirm receipt
-- **Doctors**: Create and issue prescriptions as Verifiable Credentials
-- **Pharmacies**: Verify prescriptions, dispense medications, track status
-- **Insurance**: Receive prescription copies for coverage verification
+| Directory | Purpose |
+| --- | --- |
+| [front/](front/README.md) | React and Vite interface, actor selection and role-specific workflows. |
+| [back/](back/README.md) | Express API, MongoDB storage, QuarkID agents and server wallet. |
+| [overlay/](overlay/README.md) | DID and credential-status topic managers and lookup services. |
+| `../Paquetes-NPMjs/` | External QuarkID package checkout required by local `file:` dependencies. |
 
-The system leverages QuarkID and Bitcoin SV for immutable prescription tracking, preventing fraud and double-spending through a token-based system.
+The backend wallet is configured for **BSV mainnet in code**. Actor and credential operations can create transactions. The frontend's selected actor is demonstration state, and the backend's authentication middleware is configured to allow unauthenticated requests. Explore the workflow with fictional actors and sample prescription data.
 
-## Prerequisites
+## Requirements
 
-- **Node.js** (v20 or newer)
-- **Yarn** (v1.22 or newer)
-- **Docker & Docker Compose** (v20 or newer) - for containerized deployment
-- **Git**
-- **BRC-100 Wallet** (Optional) - [Metanet Desktop Wallet](https://metanet.bsvb.tech/) for funding platform keys
+- Node.js 22 and npm 9 or later. The frontend and backend declare Node versions below 24.
+- Yarn Classic for the QuarkID workspace commands in the Makefile.
+- Git access to the required QuarkID fork.
+- MongoDB and a compatible Wallet Toolbox storage service.
+- Docker with Compose for the bundled databases and overlay services.
+- Your own server wallet keys and funding for transaction-based actions.
 
-## Quick Start
+## Prepare the workspace
 
-### Option 1: Automated Setup (Recommended)
+Clone the application and the fork referenced by its Makefile into sibling directories:
 
-The easiest way to get started:
-
-```bash
-# Clone the repository
-git clone git@github.com:sirdeggen/register.git
-cd register
-
-# Run the setup script (handles everything)
-./setup.sh
+```sh
+git clone https://github.com/bsv-blockchain-demos/register.git
+git clone https://github.com/jonesjBSV/Paquetes-NPMjs.git
+cd Paquetes-NPMjs
+yarn install
+yarn workspaces run build
+cd ../register
+npm install --prefix back
+npm install --prefix front
+npm install --prefix overlay
+npm install --prefix overlay/backend
 ```
 
-The setup script will:
-1. Clone and install QuarkID packages (if not present)
-2. Install all project dependencies
-3. Build QuarkID packages
-4. Create environment files from templates
-5. Generate BSV wallet keys
+The external workspace is not pinned to a commit by this repository. Its version must remain compatible with the application's imports. No npm lockfiles are provided for these packages, so installation is less reproducible than a locked dependency setup.
 
-After setup completes:
-```bash
-# Fund your platform wallet (requires BRC-100 wallet running)
-cd back && npx tsx src/scripts/fund-platform.ts
+The frontend's Vite configuration also has two QuarkID aliases pointing to `../../packages/...`, whereas package dependencies point to `../../Paquetes-NPMjs/packages/...`. Align those paths with the intended workspace before relying on the aliases. The [frontend guide](front/README.md) describes further configuration differences.
 
-# Start with Docker (recommended)
-make docker-up
+## Configure the services
 
-# OR start locally without Docker
-make run
+Use [.env.example](.env.example) as a reference, then create component environment files with your own keys. For the local backend, `back/.env` needs settings such as:
+
+```dotenv
+PORT=3000
+MONGO_URI=mongodb://127.0.0.1:27017
+MONGODB_URI=mongodb://127.0.0.1:27017
+APP_DB_NAME=quarkid_prescriptions_db
+PLATFORM_FUNDING_KEY=<your-hex-private-key>
+FEE_PER_KB=1
+WALLET_STORAGE_URL=https://storage.babbage.systems
+OVERLAY_PROVIDER_URL=http://localhost:8080
+DID_TOPIC=tm_did
+VC_TOPIC=tm_vc
+PRESCRIPTION_TOPIC=prescriptions
 ```
 
-### Option 2: Using Make Commands
+Review [AppConfig.ts](back/src/config/AppConfig.ts) and the root example for additional credential and overlay settings. The bundled overlay registers `tm_did` and `tm_vc`; a `prescriptions` topic is not supplied by that deployment configuration, so prescription-specific overlay behaviour needs separate verification.
 
-```bash
-# Clone the repository
-git clone git@github.com:sirdeggen/register.git
-cd register
+Create `front/.env.local`:
 
-# Complete setup and run all services
-make quickstart
+```dotenv
+VITE_API_URL=http://localhost:3000
+VITE_BACKEND_URL=http://localhost:3000
 ```
 
-This will:
-1. Install all dependencies (QuarkID, frontend, backend, overlay)
-2. Build QuarkID packages
-3. Setup environment files
-4. Generate BSV wallet keys
-5. Prompt for wallet funding
-6. Start all services
+These configure the main API client and DID resolver. Some frontend code still contains fixed localhost endpoints or a `REACT_APP_API_URL` setting, so changing these values alone does not redirect every request.
 
-## Manual Setup Guide
+## Start locally
 
-If you prefer to set up components individually:
+Start MongoDB and a suitably configured overlay first. The root Compose file can start just its databases:
 
-
-### 1. Install Dependencies
-
-```bash
-# Install all dependencies for QuarkID, frontend, backend, and overlay
-make install
-
-# Or install individually
-make install-quarkid
-make install-frontend
-make install-backend
-make install-overlay
+```sh
+docker compose up -d db-mongo db-mysql
 ```
 
-### 2. Build QuarkID
+See the [overlay guide](overlay/README.md) before starting its containers. With the dependencies available, run the API and frontend in separate terminals from the repository root:
 
-```bash
-# Build QuarkID
-make build-quarkid
+```sh
+npm run dev --prefix back
 ```
 
-### 3. Environment Setup
-
-```bash
-# Create environment files from examples
-make setup-env
+```sh
+npm run dev --prefix front
 ```
 
-### 4. Run Services
+| Service | Default local address |
+| --- | --- |
+| Frontend development server | URL printed by Vite, normally `http://localhost:5173`. |
+| Backend | `http://localhost:3000` |
+| Overlay | `http://localhost:8080` |
+| Root Compose frontend | `http://localhost:5174` |
 
-```bash
-# Run all services concurrently
-make run
+The root Docker stack also includes database administration tools. Its backend reads `back/.env.docker`, and its overlay reads the root `.env`; those files must be prepared separately for that mode. The Compose configuration uses development credentials and should be reviewed before deployment.
 
-# Or run services individually in separate terminals
-make run-overlay   # Runs on http://localhost:8080
-make run-backend   # Runs on http://localhost:3000
-make run-frontend  # Runs on http://localhost:5174
+## Demonstration workflow
 
-# Run only frontend and backend (no overlay)
-make run-app
+1. Open actor setup and create a doctor, patient, pharmacy and insurance actor as needed.
+2. Select the doctor and create a prescription for the patient.
+3. Select the patient and share the prescription with a pharmacy.
+4. Select that pharmacy and record dispensation.
+5. Return to the patient and confirm receipt.
+
+Actor selection is not a production sign-in flow. DID documents, credentials, token state and database records are separate parts of the example; a successful screen action does not independently establish a real clinical identity or prescription's validity.
+
+## Checks and known setup gaps
+
+```sh
+npm run build --prefix back
+npm run build --prefix front
+npm run build:check --prefix front
+npm run build --prefix overlay/backend
 ```
 
-## Development Workflow
+Backend and frontend installation/builds require the external QuarkID workspace. The backend defines Jest tests using database fixtures; inspect their setup before running them. The overlay backend has a test script but no checked-in test cases.
 
-```bash
-# Start in development mode with hot reload
-make dev
+The convenience scripts need maintenance:
 
-# Check service status
-make status
+- `make build` contains the combined prerequisite `build-quarkidbuild-frontend`, so use the individual package commands above.
+- `make setup-env` references component example files that are absent from the checkout.
+- `setup.sh` updates and stashes an existing sibling checkout, clears the Yarn cache, generates keys and synchronises environment files. Review those effects before using it.
+- The backend's `fund-platform` npm script points to a different location from the checked-in `src/scripts/fund-platform.ts`. Funding scripts request wallet transfers and are not ordinary startup commands.
 
-# Build all components
-make build
+## Licence
 
-# Run linters
-make lint
-
-# Clean project (remove node_modules and build artifacts)
-make clean
-```
-
-## Using the Application
-
-### 1. Initial Setup - Create Actors
-
-```bash
-# From the register root directory
-npx tsx back/src/scripts/seedActors.ts
-```
-
-or manually:
-
-1. Open <http://localhost:5173> in your browser
-2. Click on "Actor Management"
-3. Create at least one actor for each role:
-   - **Patient**: Name (e.g., "John Doe"), Type: patient
-   - **Doctor**: Name (e.g., "Dr. Smith"), Type: doctor  
-   - **Pharmacy**: Name (e.g., "City Pharmacy"), Type: pharmacy
-   - **Insurance**: Name (e.g., "Health Insurance Co"), Type: insurance
-
-Each actor creation generates a DID on the BSV overlay network.
-
-### 2. Login and Test Workflows
-
-1. Go to <http://localhost:5173> in your browser
-2. Select an actor (e.g., the doctor you created)
-3. You'll be redirected to the appropriate dashboard
-
-### 3. Create a Prescription (as Doctor)
-
-1. Go to <http://localhost:5173> in your browser
-2. Select a doctor
-3. You'll be redirected to the appropriate dashboard
-4. If you used the seedActors.ts script, you can select the green "Create Test Prescription" button to automatically create a prescription for John Doe. Otherwise, you can create a prescription manually:
-5. Select a patient from the dropdown
-6. Fill in prescription details:
-   - Medication name
-   - Dosage
-   - Frequency
-   - Duration
-   - Diagnosis
-   - Notes
-7. Submit the prescription
-
-### 4. Share with Pharmacy (as Patient)
-
-1. Go to <http://localhost:5173> in your browser
-2. Select the patient you created the prescription for
-3. You'll be redirected to the appropriate dashboard
-4. Click "Share with Pharmacy" next to the prescription you created in the table at the bottom of the page
-5. Select the pharmacy
-6. Confirm sharing
-
-### 5. Dispense Medication (as Pharmacy)
-
-1. Go to <http://localhost:5173> in your browser
-2. Select the pharmacy you shared the prescription with
-3. You'll be redirected to the appropriate dashboard
-4. Click "Dispense" on the prescription you shared with the pharmacy
-5. Enter batch number (e.g., 1234567890), expiry date (e.g., 2025-01-01), and pharmacy note (e.g., "Dispensed by City Pharmacy")
-6. Confirm dispensation
-
-### 6. Confirm Medication Received (as Patient)
-
-1. Go to <http://localhost:5173> in your browser
-2. Select the patient you created the prescription for
-3. You'll be redirected to the appropriate dashboard
-4. Click "Confirm" beside the prescription the patient received
-5. Confirm the medication received
-
-## Project Structure
-
-```plaintext
-register/
-├── Makefile                 # Automation for setup and running
-├── back/                    # Backend Express server
-│   ├── src/
-│   │   ├── routes/         # API endpoints
-│   │   ├── services/       # Business logic
-│   │   ├── models/         # MongoDB models
-│   │   └── plugins/        # BSV overlay integrations
-│   └── package.json
-├── front/                   # Frontend React application
-│   ├── src/
-│   │   ├── components/     # React components
-│   │   ├── services/       # API client services
-│   │   └── context/        # React context providers
-│   └── package.json
-└── overlay/                 # BSV overlay service (LARS)
-    ├── services/           # Overlay service implementations
-    └── package.json
-```
-
-## Docker Deployment
-
-### Starting Services
-
-```bash
-# Build and start all containers (recommended for production)
-make docker-up
-
-# View logs
-make docker-logs
-
-# Stop all containers
-make docker-down
-
-# Clean up Docker resources
-make docker-clean
-```
-
-### Docker Architecture
-
-The project uses a multi-container Docker setup with build ordering to prevent race conditions:
-
-1. **quarkid-base** - Shared base image with QuarkID workspace (built first)
-2. **backend** - Express API server (depends on quarkid-base)
-3. **frontend** - React application (depends on quarkid-base and backend)
-4. **overlay** - LARS overlay service
-5. **db-mongo** - MongoDB database
-6. **db-mysql** - MySQL database for overlay
-7. **adminer** - Database admin interface (port 8081)
-8. **mongoexpress** - MongoDB admin interface (port 8082)
-
-**Key Improvements:**
-- Shared base image prevents parallel build conflicts
-- Proper dependency ordering ensures sequential builds
-- Faster builds by caching QuarkID workspace layer
-
-## Makefile Commands Reference
-
-```bash
-make help                    # Show all available commands
-
-# Quick Start
-make quickstart             # Complete setup and run
-make                        # Install and run services
-
-# Service Control (Local Development)
-make run                    # Run all services locally
-make run-app               # Run frontend and backend only
-make run-frontend          # Run frontend only (port 5174)
-make run-backend           # Run backend only (port 3000)
-make run-overlay           # Run overlay service only (port 8080)
-make status                # Check service status
-
-# Docker Commands
-make docker-build          # Build Docker containers
-make docker-up             # Start all services with Docker
-make docker-down           # Stop Docker services
-make docker-logs           # Show Docker logs
-make docker-clean          # Clean Docker resources
-
-# Setup & Build
-make install               # Install all dependencies
-make install-quarkid       # Install QuarkID packages
-make build                 # Build all components
-make setup-env             # Setup environment files and generate keys
-
-# Cleanup
-make clean                 # Remove node_modules and builds
-
-# Development
-make dev                   # Development mode with hot reload
-make lint                  # Run linters
-make test                  # Run tests
-```
-
-## Troubleshooting
-
-### Docker Issues
-
-1. **"Docker build fails with QuarkID workspace conflicts"**
-   - The new architecture prevents this by building a shared base image first
-   - If issues persist: `make docker-clean && make docker-build`
-
-2. **"Backend/Frontend build hangs during Docker build"**
-   - Check Docker resources (CPU/Memory) - builds require ~4GB RAM
-   - Try: `docker system prune -a` to clean up disk space
-   - Rebuild one service at a time: `docker-compose build backend`
-
-3. **"Cannot connect to services in Docker"**
-   - Verify all containers are running: `docker ps`
-   - Check logs: `make docker-logs`
-   - Ensure ports aren't already in use: `lsof -i :3000,5174,8080`
-
-### Local Development Issues
-
-1. **"Backend doesn't start"**
-   - Run `make setup-env` to setup environment files
-   - Verify `.env` file exists in `back/` directory
-   - Check that BSV keys are generated: `cd back && npx tsx src/scripts/generate-keys.ts`
-
-2. **"Failed to connect to MongoDB"**
-   - Ensure MongoDB is running (Docker or local)
-   - Check MONGODB_URI in `.env` file
-   - For local: `mongod --dbpath ./data/db`
-
-3. **"BSV overlay service unavailable"**
-   - Ensure overlay is running: `make run-overlay`
-   - Check overlay logs for errors
-   - Verify OVERLAY_PROVIDER_URL in `.env` matches overlay port (8080)
-
-4. **"Failed to create DID"**
-   - Ensure the DID_TOPIC in `.env` matches LARS configuration
-   - Check that PLATFORM_FUNDING_KEY is funded
-   - Run fund script: `cd back && npx tsx src/scripts/fund-platform.ts`
-   - Verify overlay is accessible: `curl http://localhost:8080/health`
-
-### QuarkID Package Issues
-
-1. **"QuarkID packages not found"**
-   - Clone QuarkID: `cd .. && git clone git@github.com:jonesjBSV/Paquetes-NPMjs.git`
-   - Install: `make install-quarkid`
-   - Build: `make build-quarkid`
-
-2. **"Workspace linking errors"**
-   - The Docker setup handles this automatically via shared base image
-   - For local development: ensure QuarkID is built before running services
-
-### Development Tips
-
-- Backend runs with `tsx` for ES module compatibility
-- Frontend uses Vite for fast HMR (Hot Module Replacement)
-- Both support TypeScript with strict mode
-- Services run concurrently with proper signal handling
-
-## API Documentation
-
-The backend exposes RESTful APIs under `/v1/`:
-
-- `/v1/actors` - Actor (DID) management
-- `/v1/prescriptions` - Prescription creation and management
-- `/v1/enhanced/prescriptions` - Token-based prescription workflow
-- `/v1/shared-prescriptions` - Prescription sharing between actors
-
-For detailed API documentation, see the route files in `back/src/routes/`.
-
-## Development Scripts
-
-The backend includes several useful scripts in `back/src/scripts/` for development and testing:
-
-### Database Management
-
-- **`seedActors.ts`** - Populates the database with sample actors (doctor, patient, pharmacy, insurance)
-
-  ```bash
-  npx tsx src/scripts/seedActors.ts
-  ```
-
-- **`clearActors.ts`** - Clears all actors from the database for a fresh start
-
-  ```bash
-  npx tsx src/scripts/clearActors.ts
-  ```
-
-- **`clearPrescriptions.ts`** - Clears all prescriptions from the database for a fresh start
-
-  ```bash
-  npx tsx src/scripts/clearPrescriptions.ts
-  ```
-
-### Testing & Debugging
-
-- **`testDirectDIDCreation.ts`** - Tests DID creation directly using the BSV overlay service
-
-  ```bash
-  npx tsx src/scripts/testDirectDIDCreation.ts
-  ```
-
-- **`testEnhancedPrescription.ts`** - Tests the complete enhanced prescription workflow with BSV token creation
-
-  ```bash
-  npx tsx src/scripts/testEnhancedPrescription.ts
-  ```
-
-### Other Utilities
-
-Additional scripts are available for testing specific features:
-
-- `checkPrescriptions.ts` - Check prescription status
-- `testActorEndpoint.ts` - Test actor API endpoints
-- `testPrescriptionAPI.ts` - Test prescription creation API
-- `testSharePrescription.ts` - Test prescription sharing workflow
+No root licence file is included. Overlay package metadata refers to `LICENSE.txt`, which is also absent from those packages. The intended terms require confirmation.

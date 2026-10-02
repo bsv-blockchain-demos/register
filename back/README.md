@@ -1,81 +1,80 @@
-# QuarkID Backend
+# BlockMed Backend
 
-## Overview
+Express API for the BlockMed prescription demo. It combines QuarkID agents, MongoDB records, a server BSV wallet, DID resolution, verifiable credentials and token-based prescription workflows.
 
-The QuarkID backend provides comprehensive DID (Decentralized Identifier) management services supporting multiple DID methods including ION and Bitcoin SV (BSV) overlay DIDs.
+Start with the [project setup guide](../README.md). This package is not self-contained: its QuarkID dependencies are `file:` references into a sibling `Paquetes-NPMjs` checkout.
 
-## BSV DID Integration
+## Setup
 
-This backend includes full support for Bitcoin SV (BSV) overlay DIDs, enabling creation, updating, and resolution of DIDs stored directly on the BSV blockchain.
+Use Node.js 22 and npm 9 or later. Prepare and build the QuarkID workspace before installing this package:
 
-### Documentation
+```sh
+npm install
+```
 
-- **[BSV DID Integration Guide](BSV_DID_INTEGRATION.md)** - Complete overview, architecture, and usage examples
-- **[API Reference](docs/API_REFERENCE.md)** - Detailed endpoint documentation with examples
-- **[Environment Setup](docs/ENVIRONMENT_SETUP.md)** - Configuration and deployment guide
+Run this command from `back/`. There is no checked-in npm lockfile.
 
-### Quick Start
+Create `back/.env` using the component configuration in the [root guide](../README.md#configure-the-services). The server loads this file through `dotenv/config`.
 
-1. Set required environment variables:
+| Variable | Purpose |
+| --- | --- |
+| `MONGO_URI` | Main MongoDB connection, default `mongodb://localhost:27017`. |
+| `APP_DB_NAME` | Main database name, default `quarkid_prescriptions_db`. |
+| `MONGODB_URI` | Additional MongoDB setting used by other service paths. Keep it aligned with the intended instance. |
+| `PORT` | HTTP port, default `3000`. |
+| `PLATFORM_FUNDING_KEY` | Required 64-character hex private key for the server wallet. |
+| `FEE_PER_KB` | Required positive fee setting. |
+| `WALLET_STORAGE_URL` | Wallet storage, default `https://storage.babbage.systems`. |
+| `OVERLAY_PROVIDER_URL` | Overlay endpoint. Replace the placeholder default. |
+| `DID_TOPIC`, `VC_TOPIC` | DID and credential topics. Match the overlay's `tm_did` and `tm_vc` registrations. |
+| `PRESCRIPTION_TOPIC` | Prescription topic, default `prescriptions`; not registered by the bundled overlay configuration. |
+| `DWN_URL` | Optional decentralised web node endpoint. |
 
-   ```bash
-   DID_TOPIC=your_topic_identifier
-   OVERLAY_PROVIDER_URL=https://your-overlay-node.com
-   ```
+[AppConfig.ts](src/config/AppConfig.ts) validates core settings. [app.ts](src/app.ts) builds the wallet on **mainnet** regardless of the root example's `NETWORK` variable. It waits for remote wallet storage and MongoDB during startup.
 
-2. Start the server:
+```sh
+npm run dev
+```
 
-   ```bash
-   npm start
-   ```
+The development command executes `tsx src/app.ts`; it does not enable file watching. The API normally listens at `http://localhost:3000`. `GET /` returns a service overview and `GET /health` reports service state.
 
-3. Create a DID:
+## API areas
 
-   ```bash
-   curl -X POST http://localhost:3000/v1/dids/create \
-     -H "Content-Type: application/json" \
-     -d '{"didDocument": {...}, "controllerPublicKeyHex": "02abc123..."}'
-   ```
+Routes are registered in [src/app.ts](src/app.ts). Refer to handlers for the current request and response shapes.
 
-### Key Features
+| Prefix | Responsibility |
+| --- | --- |
+| `/v1/actors`, `/v1/enhanced/actors` | Demonstration actors and their DID-related records. |
+| `/v1/dids` | DID creation, updates and resolution. |
+| `/v1/vcs` | Verifiable credential operations. |
+| `/v1/prescriptions`, `/v1/enhanced/prescriptions` | Prescription workflows. |
+| `/v1/tokens`, `/v1/vc-tokens` | Token and credential-status operations. |
+| `/v1/fraud-prevention` | Experimental insurance/fraud-prevention workflows. |
+| `/v1/dwn` | Storage and sharing helpers. |
+| `/v1/status` | Credential-status records. |
+| `/register` | Registration handlers. |
 
-- **BSV Overlay DID Support**: Create, update, and resolve DIDs on Bitcoin SV
-- **Transaction Broadcasting**: Automatic BSV transaction creation and broadcasting
-- **Wallet Integration**: Secure key management with BSV SDK
-- **REST API**: Clean HTTP endpoints for DID operations
-- **Authentication**: Built-in BSV auth middleware
-- **Error Handling**: Comprehensive error responses and logging
+The package also includes a fallback subject lookup. It should not be used as a substitute for checking the concrete route implementations.
 
-### API Endpoints
+## Development boundaries
 
-- `POST /v1/dids/create` - Create new BSV DID
-- `POST /v1/dids/update` - Update existing BSV DID
-- `GET /v1/dids/resolve/:did` - Resolve BSV DID document
+The demo permits unauthenticated requests and logs request bodies. Some identity/fraud-prevention paths include placeholder fallbacks. These are development behaviours, not verified clinical access controls. Use fictional data and review authentication, authorisation and logging before exposing an instance.
 
-For complete documentation and advanced configuration, see the links above.
+The server key and MongoDB records are operational state. Keep them together when preserving a funded demonstration. Scripts under [src/scripts/](src/scripts/) can generate keys, create actors, clear records or request wallet funding; review each script and its target configuration before running it.
 
-## VCSL (Verifiable Credential Status List)
+## Build and tests
 
-VCSL creates the bit array for a particular credential, creates the VC, and it can revoke or unrevoke credentials with status tracking through:
+```sh
+npm run build
+npm start
+```
 
-- Bit array persistence
-- Bit array address (literally just a bit which gets flipped to 1 when revoked and 0 at first)
+The build compiles TypeScript to `dist/`, and `start` runs `dist/app.js`.
 
-## Medical License Use Case
+Jest is configured through [jest.config.js](jest.config.js), with fixtures in [src/tests/](src/tests/). Several suites use MongoDB Memory Server, while the global setup also loads `back/.env`. The complete dependency setup, including the external QuarkID workspace, is required before running:
 
-This project demonstrates a complete medical license issuance workflow using Verifiable Credentials on Bitcoin SV:
+```sh
+npm test -- --runInBand
+```
 
-- Medical License Issuer can create a VC for a doctor
-- Doctor can create a VC for a patient
-- Pharmacy can verify the VC independently
-
-## TODO
-
-- Define the DID document for the medical license issuer, verifier, doctor, pharmacy, and patient
-- Create all the VCs (Verifiable Credentials)
-- Create the agent for the medical license issuer
-- Create the agent for the doctor
-- Create the agent for the pharmacy
-- Create the agent for the patient
-- Add the possibility to revoke the VCs
-- Send notifications if a VC is revoked
+The package's `fund-platform` script currently points outside `src/scripts/` and does not match the checked-in funding helper. It is not part of build or test setup.
