@@ -78,3 +78,7 @@ npm test -- --runInBand
 ```
 
 The package's `fund-platform` script currently points outside `src/scripts/` and does not match the checked-in funding helper. It is not part of build or test setup.
+
+## Licence
+
+**Open BSV Licence v6.** See [LICENSE.txt](../LICENSE.txt) for the full terms. The licence applies to this project's original code and documentation and restricts use to the BSV blockchain defined in the licence. Third-party code, assets and referenced standards retain their respective terms. The [overlay development container](../overlay/local-data/overlay-dev-container/package.json) retains its ISC declaration and is excluded from this grant.

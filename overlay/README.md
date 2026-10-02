@@ -53,4 +53,4 @@ The backend package defines Jest commands that first compile TypeScript, but no 
 
 ## Licence
 
-Both package manifests refer to `LICENSE.txt`, but that file is not included in either package. The intended licence needs confirmation.
+**Open BSV Licence v6.** See [LICENSE.txt](../LICENSE.txt) for the full terms. The licence applies to this project's original code and documentation and restricts use to the BSV blockchain defined in the licence. Third-party code, assets and referenced standards retain their respective terms. The [overlay development container](local-data/overlay-dev-container/package.json) retains its ISC declaration and is excluded from this grant.

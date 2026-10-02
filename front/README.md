@@ -75,3 +75,7 @@ npm run preview -- --host 127.0.0.1
 - [AuthContext.tsx](src/context/AuthContext.tsx): actor selection and persistence.
 - [AppContext.tsx](src/context/AppContext.tsx): application workflow state.
 - [services/](src/services/): API, DID, credential, token and wallet integration.
+
+## Licence
+
+**Open BSV Licence v6.** See [LICENSE.txt](../LICENSE.txt) for the full terms. The licence applies to this project's original code and documentation and restricts use to the BSV blockchain defined in the licence. Third-party code, assets and referenced standards retain their respective terms. The [overlay development container](../overlay/local-data/overlay-dev-container/package.json) retains its ISC declaration and is excluded from this grant.
